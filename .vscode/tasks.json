@@ -1,0 +1,10 @@
+{
+    "tasks": [
+        {
+            "type": "shell",
+            "label": "g++ build active file",
+            "command": "make",
+        }
+    ],
+    "version": "2.0.0"
+}

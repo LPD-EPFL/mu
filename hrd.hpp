@@ -142,17 +142,8 @@ struct hrd_ctrl_blk_t {
   hrd_conn_config_t conn_config;
   struct ibv_qp** conn_qp;
   struct ibv_cq** conn_cq;
-  volatile uint8_t* conn_buf;  // A buffer for RDMA over RC/UC QPs
-  struct ibv_mr* conn_buf_mr;
-
-  // Datagram QPs
-  size_t num_dgram_qps;
-  struct ibv_qp* dgram_qp[kHrdMaxUDQPs];
-  struct ibv_cq *dgram_send_cq[kHrdMaxUDQPs], *dgram_recv_cq[kHrdMaxUDQPs];
-  volatile uint8_t* dgram_buf;  // A buffer for RECVs on dgram QPs
-  size_t dgram_buf_size;
-  int dgram_buf_shm_key;
-  struct ibv_mr* dgram_buf_mr;
+  volatile uint8_t** conn_buf;  // A buffer for RDMA over RC/UC QPs
+  struct ibv_mr** conn_buf_mr;
 
   uint8_t pad[64];
 };
@@ -160,8 +151,7 @@ struct hrd_ctrl_blk_t {
 // Major initialzation functions
 hrd_ctrl_blk_t* hrd_ctrl_blk_init(size_t local_hid, size_t port_index,
                                   size_t numa_node,
-                                  hrd_conn_config_t* conn_config,
-                                  hrd_dgram_config_t* dgram_config);
+                                  hrd_conn_config_t* conn_config);
 
 int hrd_ctrl_blk_destroy(hrd_ctrl_blk_t* cb);
 
