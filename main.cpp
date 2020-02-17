@@ -5,29 +5,112 @@
 static const size_t ib_port_index = 0;
 static constexpr size_t kAppBufSize = (8 * 1024);
 
+static size_t num_nodes = 4;
+static size_t local_gid;
+// TODO-Q(Kristian): do we need this to access the remote addr?
+static struct hrd_qp_attr_t **bcst_qps;
+static struct hrd_qp_attr_t **repl_qps;
+static struct hrd_ctrl_blk_t *cb;
+
+int run_poller() {
+  printf("main: poller thread running\n");
+
+  while (true) {
+    for (int i = 0; i < num_nodes; i++) {
+      if (i == local_gid) {
+        continue;
+      }
+
+      const int offset = 128;
+
+      auto *val = reinterpret_cast<volatile uint64_t *>(cb->conn_buf[i * 2]);
+
+      if (*val != 0) {
+        printf("main: bcast from %d = %zu\n", i, *val);
+        auto *repl_buf =
+            reinterpret_cast<volatile uint64_t *>(cb->conn_buf[i * 2 + 1]);
+        repl_buf[i] = *val;
+
+        printf("main: set replay_buf[%d] = %lu\n", i, repl_buf[i]);
+
+        // read replay slots for origin i
+        for (int j = 0; j < num_nodes; j++) {
+          if (j == local_gid || j == i) {
+            continue;
+          }
+
+          struct ibv_sge sg;
+          struct ibv_send_wr wr;
+          struct ibv_wc wc;
+          struct ibv_send_wr *bad_wr = nullptr;
+
+          memset(&sg, 0, sizeof(sg));
+          sg.addr = reinterpret_cast<uint64_t>(cb->conn_buf[i * 2 + 1]) +
+                    (offset + i * num_nodes + j) * sizeof(uint64_t);
+          sg.length = sizeof(uint64_t);
+          sg.lkey = cb->conn_buf_mr[i * 2 + 1]->lkey;
+
+          memset(&wr, 0, sizeof(wr));
+          // wr.wr_id      = 0;
+          wr.sg_list = &sg;
+          wr.num_sge = 1;
+          wr.opcode = IBV_WR_RDMA_READ;
+          wr.send_flags = IBV_SEND_SIGNALED;
+          wr.wr.rdma.remote_addr = repl_qps[j]->buf_addr + i * sizeof(uint64_t);
+          wr.wr.rdma.rkey = repl_qps[j]->rkey;
+
+          printf("main: Posting replay read for %d at %d\n", i, j);
+
+          if (ibv_post_send(cb->conn_qp[j * 2 + 1], &wr, &bad_wr)) {
+            fprintf(stderr, "Error, ibv_post_send() failed\n");
+            return -1;
+          }
+
+          hrd_poll_cq(cb->conn_cq[j * 2 + 1], 1, &wc);
+
+          if (bad_wr != nullptr) {
+            printf("bad_wr is set!\n");
+          }
+
+          printf("main: replay entry in loop for %d at %d = %zu\n", i, j,
+                 repl_buf[(offset + i * num_nodes + j)]);
+        }
+      }
+    }
+
+    sleep(1);
+  }
+}
+
 /*
- * A dummy main to check if the hrd library files compile
+ * NOTE: we assume IDs starting from 0
  */
 int main(int argc, char *argv[]) {
-  rt_assert(argc == 3);
-  const size_t nodes = atoi(argv[1]);
-  // NOTE: we assume IDs starting from 0
-  const size_t local_gid = atoi(argv[2]);
+  rt_assert(argc > 1);
+
+  num_nodes = atoi(argv[1]);
+  local_gid = atoi(argv[2]);
+
+  bcst_qps = (hrd_qp_attr_t **)malloc(num_nodes * sizeof(hrd_qp_attr_t));
+  repl_qps = (hrd_qp_attr_t **)malloc(num_nodes * sizeof(hrd_qp_attr_t));
+
+  hrd_ibv_devinfo();
 
   printf("main: Begin control path\n");
 
   struct hrd_conn_config_t conn_config;
-  conn_config.num_qps = nodes;
+
+  conn_config.num_qps = num_nodes;
   conn_config.use_uc = 0;
   conn_config.prealloc_buf = nullptr;
   conn_config.buf_size = kAppBufSize;
   conn_config.buf_shm_key = -1;
 
-  auto *cb = hrd_ctrl_blk_init(local_gid, ib_port_index, kHrdInvalidNUMANode,
-                               &conn_config);
+  cb = hrd_ctrl_blk_init(local_gid, ib_port_index, kHrdInvalidNUMANode,
+                         &conn_config);
 
   // Announce the QPs
-  for (int i = 0; i < nodes; i++) {
+  for (int i = 0; i < num_nodes; i++) {
     if (i == local_gid) {
       continue;
     }
@@ -43,12 +126,8 @@ int main(int argc, char *argv[]) {
     hrd_publish_conn_qp(cb, i * 2 + 1, srv_name);
   }
 
-  // TODO-Q(Kristian): do we need this to access the remote addr?
-  struct hrd_qp_attr_t *bcst_qps[nodes];
-  struct hrd_qp_attr_t *repl_qps[nodes];
-
   // Connect to "boradcast-self-x" QP and "replay-x-self" QP published by x
-  for (int i = 0; i < nodes; i++) {
+  for (int i = 0; i < num_nodes; i++) {
     if (i == local_gid) {
       continue;
     }
@@ -91,7 +170,7 @@ int main(int argc, char *argv[]) {
   }
 
   // Wait till qps are ready
-  for (int i = 0; i < nodes; i++) {
+  for (int i = 0; i < num_nodes; i++) {
     if (i == local_gid) {
       continue;
     }
@@ -108,9 +187,10 @@ int main(int argc, char *argv[]) {
   printf("main: Broadcast and replay connections established\n");
   printf("main: Begin data path\n");
 
-  // DATAPATH
+  std::thread poller_thread = std::thread(run_poller);
+
   // Broadcast: write to every "broadcast-self-x" qp
-  for (int i = 0; i < nodes; i++) {
+  for (int i = 0; i < num_nodes; i++) {
     if (i == local_gid) {
       continue;
     }
@@ -155,72 +235,7 @@ int main(int argc, char *argv[]) {
     // hrd_poll_cq(cb->conn_cq[i * 2], 1, &wc);
   }
 
-  // Infinite poll for every "broadcast-x-self" buf
-  while (true) {
-    for (int i = 0; i < nodes; i++) {
-      if (i == local_gid) {
-        continue;
-      }
-
-      const int offset = 128;
-
-      auto *val = reinterpret_cast<volatile uint64_t *>(cb->conn_buf[i * 2]);
-      printf("main: bcast from %d = %zu\n", i, *val);
-
-      if (*val != 0) {
-        auto *repl_buf =
-            reinterpret_cast<volatile uint64_t *>(cb->conn_buf[i * 2 + 1]);
-        repl_buf[i] = *val;
-
-        printf("main: set replay_buf[%d] = %lu\n", i, repl_buf[i]);
-
-        // read replay slots for origin i
-        for (int j = 0; j < nodes; j++) {
-          if (j == local_gid || j == i) {
-            continue;
-          }
-
-          struct ibv_sge sg;
-          struct ibv_send_wr wr;
-          struct ibv_wc wc;
-          struct ibv_send_wr *bad_wr = nullptr;
-
-          memset(&sg, 0, sizeof(sg));
-          sg.addr = reinterpret_cast<uint64_t>(cb->conn_buf[i * 2 + 1]) +
-                    (offset + i * nodes + j) * sizeof(uint64_t);
-          sg.length = sizeof(uint64_t);
-          sg.lkey = cb->conn_buf_mr[i * 2 + 1]->lkey;
-
-          memset(&wr, 0, sizeof(wr));
-          // wr.wr_id      = 0;
-          wr.sg_list = &sg;
-          wr.num_sge = 1;
-          wr.opcode = IBV_WR_RDMA_READ;
-          wr.send_flags = IBV_SEND_SIGNALED;
-          wr.wr.rdma.remote_addr = repl_qps[j]->buf_addr + i * sizeof(uint64_t);
-          wr.wr.rdma.rkey = repl_qps[j]->rkey;
-
-          printf("main: Posting replay read for %d at %d\n", i, j);
-
-          if (ibv_post_send(cb->conn_qp[j * 2 + 1], &wr, &bad_wr)) {
-            fprintf(stderr, "Error, ibv_post_send() failed\n");
-            return -1;
-          }
-
-          hrd_poll_cq(cb->conn_cq[j * 2 + 1], 1, &wc);
-
-          if (bad_wr != nullptr) {
-            printf("bad_wr is set!\n");
-          }
-
-          printf("main: replay entry in loop for %d at %d = %zu\n", i, j,
-                 repl_buf[(offset + i * nodes + j)]);
-        }
-      }
-    }
-
-    sleep(1);
-  }
+  poller_thread.join();
 
   return 0;
 }
