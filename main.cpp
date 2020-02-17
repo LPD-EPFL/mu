@@ -110,7 +110,8 @@ int run_poller() {
 
           neb_msg_t r_msg;
 
-          r_msg.unmarshall((uint8_t *)&repl_buf[(offset + (i * num_nodes + j) * msg.size())]);
+          r_msg.unmarshall((
+              uint8_t *)&repl_buf[(offset + (i * num_nodes + j) * msg.size())]);
           printf("main: replay entry for %d at %d = %s\n", i, j,
                  (char *)r_msg.data);
         }
@@ -146,7 +147,9 @@ int main(int argc, char *argv[]) {
   printf("main: Begin control path\n");
 
   struct hrd_conn_config_t conn_config;
-
+  memset(&conn_config, 0, sizeof(hrd_conn_config_t));
+  conn_config.max_rd_atomic = 16;
+  conn_config.sq_depth = kHrdSQDepth;
   conn_config.num_qps = num_nodes;
   conn_config.use_uc = 0;
   conn_config.prealloc_buf = nullptr;

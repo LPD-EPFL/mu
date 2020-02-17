@@ -57,10 +57,10 @@ struct hrd_ctrl_blk_t *hrd_ctrl_blk_init(size_t local_hid, size_t port_index,
   if (cb->conn_config.num_qps >= 1) {
     cb->conn_qp = new ibv_qp *[2 * cb->conn_config.num_qps];
     cb->conn_cq = new ibv_cq *[2 * cb->conn_config.num_qps];
-    cb->conn_buf = (volatile uint8_t **)malloc(2 * cb->conn_config.num_qps *
-                                               sizeof(uint8_t));
+    cb->conn_buf = (volatile uint8_t **)calloc(2 * cb->conn_config.num_qps,
+                                               sizeof(uint8_t *));
     cb->conn_buf_mr =
-        (ibv_mr **)malloc(2 * cb->conn_config.num_qps * sizeof(struct ibv_mr));
+        (ibv_mr **)calloc(2 * cb->conn_config.num_qps, sizeof(ibv_mr *));
 
     hrd_create_conn_qps(cb);
 
@@ -382,6 +382,8 @@ void hrd_publish_conn_qp(hrd_ctrl_blk_t *cb, size_t n, const char *qp_name) {
   for (size_t i = 0; i < len; i++) assert(qp_name[i] != ' ');
 
   hrd_qp_attr_t qp_attr;
+  memset(&qp_attr, 0, sizeof(hrd_qp_attr_t));
+
   strcpy(qp_attr.name, qp_name);
   qp_attr.lid = cb->resolve.port_lid;
   qp_attr.qpn = cb->conn_qp[n]->qp_num;
