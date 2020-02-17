@@ -3,9 +3,9 @@
 // If @prealloc_conn_buf != nullptr, @conn_buf_size is the size of the
 // preallocated buffer. If @prealloc_conn_buf == nullptr, @conn_buf_size is the
 // size of the new buffer to create.
-struct hrd_ctrl_blk_t* hrd_ctrl_blk_init(size_t local_hid, size_t port_index,
+struct hrd_ctrl_blk_t *hrd_ctrl_blk_init(size_t local_hid, size_t port_index,
                                          size_t numa_node,
-                                         hrd_conn_config_t* conn_config) {
+                                         hrd_conn_config_t *conn_config) {
   if (kHrdMlx5Atomics) {
     rt_assert(!kRoCE, "mlx5 atomics not supported with RoCE");
     hrd_red_printf(
@@ -26,7 +26,7 @@ struct hrd_ctrl_blk_t* hrd_ctrl_blk_init(size_t local_hid, size_t port_index,
   assert(port_index <= 16);
   assert(numa_node <= kHrdInvalidNUMANode);
 
-  auto* cb = new hrd_ctrl_blk_t();
+  auto *cb = new hrd_ctrl_blk_t();
   memset(cb, 0, sizeof(hrd_ctrl_blk_t));
 
   // Fill in the control block
@@ -55,10 +55,12 @@ struct hrd_ctrl_blk_t* hrd_ctrl_blk_init(size_t local_hid, size_t port_index,
   // Create connected QPs and transition them to RTS.
   // Create and register connected QP RDMA buffer.
   if (cb->conn_config.num_qps >= 1) {
-    cb->conn_qp = new ibv_qp*[2 * cb->conn_config.num_qps];
-    cb->conn_cq = new ibv_cq*[2 * cb->conn_config.num_qps];
-    cb->conn_buf = (volatile uint8_t**) malloc(2 * cb->conn_config.num_qps * sizeof(uint8_t));
-    cb->conn_buf_mr = (ibv_mr **) malloc(2 * cb->conn_config.num_qps * sizeof(struct ibv_mr));
+    cb->conn_qp = new ibv_qp *[2 * cb->conn_config.num_qps];
+    cb->conn_cq = new ibv_cq *[2 * cb->conn_config.num_qps];
+    cb->conn_buf = (volatile uint8_t **)malloc(2 * cb->conn_config.num_qps *
+                                               sizeof(uint8_t));
+    cb->conn_buf_mr =
+        (ibv_mr **)malloc(2 * cb->conn_config.num_qps * sizeof(struct ibv_mr));
 
     hrd_create_conn_qps(cb);
 
@@ -68,7 +70,9 @@ struct hrd_ctrl_blk_t* hrd_ctrl_blk_init(size_t local_hid, size_t port_index,
 
       // If numa_node is invalid, use standard heap
       if (numa_node != kHrdInvalidNUMANode) {
-        assert(false && "We don't support neither hugepages, nor numa aware memory allocation");
+        assert(false &&
+               "We don't support neither hugepages, nor numa aware memory "
+               "allocation");
         // // Hugepages
         // while (reg_size < cb->conn_config.buf_size) reg_size += MB(2);
 
@@ -79,42 +83,41 @@ struct hrd_ctrl_blk_t* hrd_ctrl_blk_init(size_t local_hid, size_t port_index,
         reg_size = cb->conn_config.buf_size;
 
         // use one replay buffer for all replay QPs
-        auto* replay_buf = 
-          reinterpret_cast<volatile uint8_t*>(memalign(4096, reg_size));
+        auto *replay_buf =
+            reinterpret_cast<volatile uint8_t *>(memalign(4096, reg_size));
 
         for (int i = 0; i < 2 * cb->conn_config.num_qps; i++) {
-          
-          cb->conn_buf[i] = i % 2 == 0 ?
-            reinterpret_cast<volatile uint8_t*>(memalign(4096, reg_size)) :
-            replay_buf;
+          cb->conn_buf[i] = i % 2 == 0 ? reinterpret_cast<volatile uint8_t *>(
+                                             memalign(4096, reg_size))
+                                       : replay_buf;
 
           assert(cb->conn_buf[i] != nullptr);
         }
       }
 
       for (int i = 0; i < 2 * cb->conn_config.num_qps; i++) {
-        memset(const_cast<uint8_t*>(cb->conn_buf[i]), 0, reg_size);
+        memset(const_cast<uint8_t *>(cb->conn_buf[i]), 0, reg_size);
 
         int ib_flags;
-        if (i % 2 == 0) { // Even ids are used for broadcast-p-q
+        if (i % 2 == 0) {  // Even ids are used for broadcast-p-q
           // TODO-Q(Kristian): Why local write?
           ib_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE;
         } else {
           ib_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ;
         }
 
-        cb->conn_buf_mr[i] = ibv_reg_mr(cb->pd, const_cast<uint8_t*>(cb->conn_buf[i]),
-                                    reg_size, ib_flags);
+        cb->conn_buf_mr[i] = ibv_reg_mr(
+            cb->pd, const_cast<uint8_t *>(cb->conn_buf[i]), reg_size, ib_flags);
         if (cb->conn_buf_mr[i] == nullptr) {
           printf("Buffer reg %d failed with code %s\n", i, strerror(errno));
           exit(-1);
         }
       }
-
     } else {
       assert(false && "We don't support providing the allocated memory");
-      // cb->conn_buf = const_cast<volatile uint8_t*>(conn_config->prealloc_buf);
-      // cb->conn_buf_mr = ibv_reg_mr(cb->pd, const_cast<uint8_t*>(cb->conn_buf),
+      // cb->conn_buf = const_cast<volatile
+      // uint8_t*>(conn_config->prealloc_buf); cb->conn_buf_mr =
+      // ibv_reg_mr(cb->pd, const_cast<uint8_t*>(cb->conn_buf),
       //                              cb->conn_config.buf_size, ib_flags);
       // assert(cb->conn_buf_mr != nullptr);
     }
@@ -124,7 +127,7 @@ struct hrd_ctrl_blk_t* hrd_ctrl_blk_init(size_t local_hid, size_t port_index,
 }
 
 // Free up the resources taken by @cb. Return -1 if something fails, else 0.
-int hrd_ctrl_blk_destroy(hrd_ctrl_blk_t* cb) {
+int hrd_ctrl_blk_destroy(hrd_ctrl_blk_t *cb) {
   hrd_red_printf("HRD: Destroying control block %d\n", cb->local_hid);
 
   // Destroy QPs and CQs. QPs must be destroyed before CQs.
@@ -146,11 +149,11 @@ int hrd_ctrl_blk_destroy(hrd_ctrl_blk_t* cb) {
         return -1;
       }
 
-      free(const_cast<uint8_t*>(cb->conn_buf[i]));
+      free(const_cast<uint8_t *>(cb->conn_buf[i]));
     }
 
-    free(const_cast<ibv_mr**>(cb->conn_buf_mr));
-    free(const_cast<uint8_t**>(cb->conn_buf));
+    free(const_cast<ibv_mr **>(cb->conn_buf_mr));
+    free(const_cast<uint8_t **>(cb->conn_buf));
   }
 
   // Destroy protection domain
@@ -165,7 +168,7 @@ int hrd_ctrl_blk_destroy(hrd_ctrl_blk_t* cb) {
 }
 
 // Create connected QPs and transition them to INIT
-void hrd_create_conn_qps(hrd_ctrl_blk_t* cb) {
+void hrd_create_conn_qps(hrd_ctrl_blk_t *cb) {
   assert(cb->pd != nullptr && cb->resolve.ib_ctx != nullptr);
   assert(cb->conn_config.num_qps >= 1 && cb->resolve.dev_port_id >= 1);
 
@@ -254,8 +257,8 @@ void hrd_create_conn_qps(hrd_ctrl_blk_t* cb) {
 }
 
 // Connects @cb's queue pair index @n to remote QP @remote_qp_attr
-void hrd_connect_qp(hrd_ctrl_blk_t* cb, size_t n,
-                    hrd_qp_attr_t* remote_qp_attr) {
+void hrd_connect_qp(hrd_ctrl_blk_t *cb, size_t n,
+                    hrd_qp_attr_t *remote_qp_attr) {
   assert(n < 2 * cb->conn_config.num_qps);
   assert(cb->conn_qp[n] != nullptr);
   assert(cb->resolve.dev_port_id >= 1);
@@ -275,7 +278,7 @@ void hrd_connect_qp(hrd_ctrl_blk_t* cb, size_t n,
   conn_attr.ah_attr.port_num = cb->resolve.dev_port_id;  // Local port!
 
   if (kRoCE) {
-    auto& grh = conn_attr.ah_attr.grh;
+    auto &grh = conn_attr.ah_attr.grh;
     grh.dgid.global.interface_id = remote_qp_attr->gid.global.interface_id;
     grh.dgid.global.subnet_prefix = remote_qp_attr->gid.global.subnet_prefix;
 
@@ -370,7 +373,7 @@ void hrd_connect_qp(hrd_ctrl_blk_t* cb, size_t n,
   return;
 }
 
-void hrd_publish_conn_qp(hrd_ctrl_blk_t* cb, size_t n, const char* qp_name) {
+void hrd_publish_conn_qp(hrd_ctrl_blk_t *cb, size_t n, const char *qp_name) {
   assert(n < 2 * cb->conn_config.num_qps);
   assert(strlen(qp_name) < kHrdQPNameSize - 1);
   assert(strstr(qp_name, kHrdReservedNamePrefix) == nullptr);
@@ -391,14 +394,14 @@ void hrd_publish_conn_qp(hrd_ctrl_blk_t* cb, size_t n, const char* qp_name) {
   hrd_publish(qp_attr.name, &qp_attr, sizeof(hrd_qp_attr_t));
 }
 
-hrd_qp_attr_t* hrd_get_published_qp(const char* qp_name) {
+hrd_qp_attr_t *hrd_get_published_qp(const char *qp_name) {
   assert(strlen(qp_name) < kHrdQPNameSize - 1);
   assert(strstr(qp_name, kHrdReservedNamePrefix) == nullptr);
 
-  hrd_qp_attr_t* ret;
+  hrd_qp_attr_t *ret;
   for (size_t i = 0; i < strlen(qp_name); i++) assert(qp_name[i] != ' ');
 
-  int ret_len = hrd_get_published(qp_name, reinterpret_cast<void**>(&ret));
+  int ret_len = hrd_get_published(qp_name, reinterpret_cast<void **>(&ret));
 
   // The registry lookup returns only if we get a unique QP for @qp_name, or
   // if the memcached lookup succeeds but we don't have an entry for @qp_name.

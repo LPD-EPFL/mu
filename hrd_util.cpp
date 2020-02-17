@@ -2,7 +2,7 @@
 #include "hrd.hpp"
 
 // Every thread creates a TCP connection to the registry only once.
-__thread memcached_st* memc = nullptr;
+__thread memcached_st *memc = nullptr;
 
 static std::string link_layer_str(uint8_t link_layer) {
   switch (link_layer) {
@@ -20,8 +20,8 @@ static std::string link_layer_str(uint8_t link_layer) {
 // Print information about all IB devices in the system
 void hrd_ibv_devinfo(void) {
   int num_devices = 0, dev_i;
-  struct ibv_device** dev_list;
-  struct ibv_context* ctx;
+  struct ibv_device **dev_list;
+  struct ibv_context *ctx;
   struct ibv_device_attr device_attr;
 
   hrd_red_printf("HRD: printing IB dev info\n");
@@ -62,20 +62,20 @@ void hrd_ibv_devinfo(void) {
 // Finds the port with rank `port_index` (0-based) in the list of ENABLED ports.
 // Fills its device id and device-local port id (1-based) into the supplied
 // control block.
-void hrd_resolve_port_index(struct hrd_ctrl_blk_t* cb, size_t phy_port) {
+void hrd_resolve_port_index(struct hrd_ctrl_blk_t *cb, size_t phy_port) {
   std::ostringstream xmsg;  // The exception message
-  auto& resolve = cb->resolve;
+  auto &resolve = cb->resolve;
 
   // Get the device list
   int num_devices = 0;
-  struct ibv_device** dev_list = ibv_get_device_list(&num_devices);
+  struct ibv_device **dev_list = ibv_get_device_list(&num_devices);
   rt_assert(dev_list != nullptr, "Failed to get InfiniBand device list");
 
   // Traverse the device list
   int ports_to_discover = phy_port;
 
   for (int dev_i = 0; dev_i < num_devices; dev_i++) {
-    struct ibv_context* ib_ctx = ibv_open_device(dev_list[dev_i]);
+    struct ibv_context *ib_ctx = ibv_open_device(dev_list[dev_i]);
     rt_assert(ib_ctx != nullptr, "Failed to open dev " + std::to_string(dev_i));
 
     struct ibv_device_attr device_attr;
@@ -149,7 +149,7 @@ void hrd_resolve_port_index(struct hrd_ctrl_blk_t* cb, size_t phy_port) {
 }
 
 // Allocate SHM with @shm_key, and save the shmid into @shm_id_ret
-uint8_t* hrd_malloc_socket(int shm_key, size_t size, size_t socket_id) {
+uint8_t *hrd_malloc_socket(int shm_key, size_t size, size_t socket_id) {
   int shmid = shmget(shm_key, size, IPC_CREAT | IPC_EXCL | 0666 | SHM_HUGETLB);
   if (shmid == -1) {
     switch (errno) {
@@ -185,7 +185,7 @@ uint8_t* hrd_malloc_socket(int shm_key, size_t size, size_t socket_id) {
     assert(false);
   }
 
-  uint8_t* buf = static_cast<uint8_t*>(shmat(shmid, nullptr, 0));
+  uint8_t *buf = static_cast<uint8_t *>(shmat(shmid, nullptr, 0));
   if (buf == nullptr) {
     printf("HRD: SHM malloc error: shmat() failed for key %d\n", shm_key);
     exit(-1);
@@ -203,7 +203,7 @@ uint8_t* hrd_malloc_socket(int shm_key, size_t size, size_t socket_id) {
 }
 
 // Free shm @shm_key and @shm_buf. Return 0 on success, else -1.
-int hrd_free(int shm_key, void* shm_buf) {
+int hrd_free(int shm_key, void *shm_buf) {
   int ret;
   int shmid = shmget(shm_key, 0, 0);
   if (shmid == -1) {
@@ -241,7 +241,7 @@ int hrd_free(int shm_key, void* shm_buf) {
 }
 
 // Like printf, but red. Limited to 1000 characters.
-void hrd_red_printf(const char* format, ...) {
+void hrd_red_printf(const char *format, ...) {
 #define RED_LIM 1000
   va_list args;
   int i;
@@ -281,7 +281,7 @@ void hrd_nano_sleep(size_t ns) {
 }
 
 // Get the LID of a port on the device specified by @ctx
-uint16_t hrd_get_local_lid(struct ibv_context* ctx, int dev_port_id) {
+uint16_t hrd_get_local_lid(struct ibv_context *ctx, int dev_port_id) {
   assert(ctx != nullptr && dev_port_id >= 1);
 
   struct ibv_port_attr attr;
@@ -295,8 +295,8 @@ uint16_t hrd_get_local_lid(struct ibv_context* ctx, int dev_port_id) {
 }
 
 // Return the environment variable @name if it is set. Exit if not.
-char* hrd_getenv(const char* name) {
-  char* env = getenv(name);
+char *hrd_getenv(const char *name) {
+  char *env = getenv(name);
   if (env == nullptr) {
     fprintf(stderr, "Environment variable %s not set\n", name);
     assert(false);
@@ -306,10 +306,10 @@ char* hrd_getenv(const char* name) {
 }
 
 // Record the current time in @timebuf. @timebuf must have at least 50 bytes.
-void hrd_get_formatted_time(char* timebuf) {
+void hrd_get_formatted_time(char *timebuf) {
   assert(timebuf != nullptr);
   time_t timer;
-  struct tm* tm_info;
+  struct tm *tm_info;
 
   time(&timer);
   tm_info = localtime(&timer);
@@ -317,19 +317,17 @@ void hrd_get_formatted_time(char* timebuf) {
   strftime(timebuf, 26, "%Y:%m:%d %H:%M:%S", tm_info);
 }
 
-memcached_st* hrd_create_memc() {
-  memcached_server_st* servers = nullptr;
-  memcached_st* memc = memcached_create(nullptr);
+memcached_st *hrd_create_memc() {
+  memcached_server_st *servers = nullptr;
+  memcached_st *memc = memcached_create(nullptr);
   memcached_return rc;
 
   memc = memcached_create(nullptr);
-  char* registry_ip = hrd_getenv("HRD_REGISTRY_IP");
-
-
+  char *registry_ip = hrd_getenv("HRD_REGISTRY_IP");
 
   // We run the memcached server on the default memcached port
   servers = memcached_server_list_append(servers, registry_ip,
-                                         11212, //MEMCACHED_DEFAULT_PORT,
+                                         11212,  // MEMCACHED_DEFAULT_PORT,
                                          &rc);
   rc = memcached_server_push(memc, servers);
   rt_assert(rc == MEMCACHED_SUCCESS, "Couldn't add memcached server");
@@ -343,16 +341,16 @@ void hrd_close_memcached() {
 }
 
 // Insert key -> value mapping into memcached running at HRD_REGISTRY_IP.
-void hrd_publish(const char* key, void* value, size_t len) {
+void hrd_publish(const char *key, void *value, size_t len) {
   assert(key != nullptr && value != nullptr && len > 0);
   if (memc == nullptr) memc = hrd_create_memc();
 
   memcached_return rc;
   rc = memcached_set(memc, key, strlen(key),
-                     reinterpret_cast<const char*>(value), len,
+                     reinterpret_cast<const char *>(value), len,
                      static_cast<time_t>(0), static_cast<uint32_t>(0));
   if (rc != MEMCACHED_SUCCESS) {
-    char* registry_ip = hrd_getenv("HRD_REGISTRY_IP");
+    char *registry_ip = hrd_getenv("HRD_REGISTRY_IP");
     fprintf(stderr,
             "\tHRD: Failed to publish key %s. Error %s. "
             "Reg IP = %s\n",
@@ -369,7 +367,7 @@ void hrd_publish(const char* key, void* value, size_t len) {
 // are no memory leaks or unterminated memcached connections! We don't need
 // to free() the resul of getenv() since it points to a string in the process
 // environment.
-int hrd_get_published(const char* key, void** value) {
+int hrd_get_published(const char *key, void **value) {
   assert(key != nullptr);
   if (memc == nullptr) memc = hrd_create_memc();
 
@@ -385,7 +383,7 @@ int hrd_get_published(const char* key, void** value) {
     assert(*value == nullptr);
     return -1;
   } else {
-    char* registry_ip = hrd_getenv("HRD_REGISTRY_IP");
+    char *registry_ip = hrd_getenv("HRD_REGISTRY_IP");
     fprintf(stderr,
             "HRD: Error finding value for key \"%s\": %s. "
             "Reg IP = %s\n",
@@ -403,7 +401,7 @@ int hrd_get_published(const char* key, void** value) {
 //
 // This avoids overwriting the memcached entry for qp_name which might still
 // be needed by the remote peer.
-void hrd_publish_ready(const char* qp_name) {
+void hrd_publish_ready(const char *qp_name) {
   char value[kHrdQPNameSize];
   assert(qp_name != nullptr && strlen(qp_name) < kHrdQPNameSize);
 
@@ -417,8 +415,8 @@ void hrd_publish_ready(const char* qp_name) {
 
 // To check if a queue pair with name qp_name is ready, we check if this
 // key-value mapping exists: "HRD_RESERVED_NAME_PREFIX-qp_name" -> "hrd_ready".
-void hrd_wait_till_ready(const char* qp_name) {
-  char* value;
+void hrd_wait_till_ready(const char *qp_name) {
+  char *value;
   char exp_value[kHrdQPNameSize];
   sprintf(exp_value, "%s", "hrd_ready");
 
@@ -428,7 +426,7 @@ void hrd_wait_till_ready(const char* qp_name) {
 
   int tries = 0;
   while (true) {
-    int ret = hrd_get_published(new_name, reinterpret_cast<void**>(&value));
+    int ret = hrd_get_published(new_name, reinterpret_cast<void **>(&value));
     tries++;
     if (ret > 0) {
       if (strcmp(value, exp_value) == 0) {
@@ -445,10 +443,10 @@ void hrd_wait_till_ready(const char* qp_name) {
   }
 }
 
-void hrd_post_dgram_recv(struct ibv_qp* qp, void* buf_addr, size_t len,
+void hrd_post_dgram_recv(struct ibv_qp *qp, void *buf_addr, size_t len,
                          uint32_t lkey) {
   int ret;
-  struct ibv_recv_wr* bad_wr;
+  struct ibv_recv_wr *bad_wr;
 
   struct ibv_sge list;
   memset(&list, 0, sizeof(struct ibv_sge));
@@ -468,7 +466,7 @@ void hrd_post_dgram_recv(struct ibv_qp* qp, void* buf_addr, size_t len,
   }
 }
 
-void hrd_bind_to_core(std::thread& thread, size_t n) {
+void hrd_bind_to_core(std::thread &thread, size_t n) {
   cpu_set_t cpuset;
   CPU_ZERO(&cpuset);
   CPU_SET(n, &cpuset);
