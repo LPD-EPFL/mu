@@ -6,10 +6,12 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/main",
-            "args": ["0"],
+            "args": ["0", "2"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
-            "environment": [],
+            "environment": [{
+                "name": "HRD_REGISTRY_IP", "value": "128.178.154.41"
+            }],
             "externalConsole": false,
             "MIMode": "gdb",
             "setupCommands": [
@@ -18,7 +20,10 @@
                     "text": "-enable-pretty-printing",
                     "ignoreFailures": true
                 }
-            ]
+            ],
+            "sourceFileMap": {
+                "/build/glibc-OTsEL5": "~/glibc/build/glibc-OTsEL5"
+            }
         }
     ]
 }
