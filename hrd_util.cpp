@@ -57,6 +57,8 @@ void hrd_ibv_devinfo(void) {
     printf("    max_ah: %d\n", device_attr.max_ah);
     printf("    phys_port_cnt: %u\n", device_attr.phys_port_cnt);
   }
+
+  ibv_free_device_list(dev_list);
 }
 
 // Finds the port with rank `port_index` (0-based) in the list of ENABLED ports.
@@ -128,6 +130,7 @@ void hrd_resolve_port_index(struct hrd_ctrl_blk_t *cb, size_t phy_port) {
           rt_assert(ret == 0, "Failed to query GID");
         }
 
+        ibv_free_device_list(dev_list);
         return;
       }
 
@@ -332,6 +335,8 @@ memcached_st *hrd_create_memc() {
   rc = memcached_server_push(memc, servers);
   rt_assert(rc == MEMCACHED_SUCCESS, "Couldn't add memcached server");
 
+  memcached_server_list_free(servers);
+
   return memc;
 }
 
@@ -430,9 +435,13 @@ void hrd_wait_till_ready(const char *qp_name) {
     tries++;
     if (ret > 0) {
       if (strcmp(value, exp_value) == 0) {
+        free(value);
+
         return;
       }
     }
+
+    free(value);
 
     usleep(200000);
 
