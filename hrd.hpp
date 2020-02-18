@@ -21,6 +21,9 @@
 #include <string>
 #include <thread>
 
+static const size_t ib_port_index = 0;
+static constexpr size_t kAppBufSize = (8 * 1024);
+
 static constexpr size_t kRoCE = false;  ///< Use RoCE
 static constexpr size_t kHrdMaxInline = 16;
 static constexpr size_t kHrdSQDepth = 128;   ///< Depth of all SEND queues
@@ -119,6 +122,7 @@ struct hrd_dgram_config_t {
   int buf_shm_key;
 };
 
+// TODO: classify
 struct hrd_ctrl_blk_t {
   size_t local_hid;  // Local ID on the machine this process runs on
 

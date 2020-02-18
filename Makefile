@@ -7,7 +7,7 @@ APPS    := main
 
 all: ${APPS}
 
-main: hrd_conn.o hrd_util.o main.o
+main: hrd_conn.o hrd_util.o neb.o main.o
 	${LD} -o $@ $^ ${LDFLAGS}
 
 PHONY: clean

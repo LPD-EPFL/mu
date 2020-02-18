@@ -55,10 +55,12 @@ struct hrd_ctrl_blk_t *hrd_ctrl_blk_init(size_t local_hid, size_t port_index,
   // Create connected QPs and transition them to RTS.
   // Create and register connected QP RDMA buffer.
   if (cb->conn_config.num_qps >= 1) {
-    cb->conn_qp = new ibv_qp *[2 * cb->conn_config.num_qps];
-    cb->conn_cq = new ibv_cq *[2 * cb->conn_config.num_qps];
     cb->conn_buf = (volatile uint8_t **)calloc(2 * cb->conn_config.num_qps,
                                                sizeof(uint8_t *));
+    cb->conn_qp =
+        (ibv_qp **)calloc(2 * cb->conn_config.num_qps, sizeof(ibv_qp));
+    cb->conn_cq =
+        (ibv_cq **)calloc(2 * cb->conn_config.num_qps, sizeof(ibv_cq));
     cb->conn_buf_mr =
         (ibv_mr **)calloc(2 * cb->conn_config.num_qps, sizeof(ibv_mr *));
 
@@ -157,6 +159,8 @@ int hrd_ctrl_blk_destroy(hrd_ctrl_blk_t *cb) {
 
     free(const_cast<ibv_mr **>(cb->conn_buf_mr));
     free(const_cast<uint8_t **>(cb->conn_buf));
+    free(const_cast<ibv_qp **>(cb->conn_qp));
+    free(const_cast<ibv_cq **>(cb->conn_cq));
   }
 
   // Destroy protection domain
