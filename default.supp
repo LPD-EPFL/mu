@@ -142,3 +142,47 @@
    fun:_Z19hrd_publish_conn_qpP14hrd_ctrl_blk_tmPKc
    fun:main
 }
+{
+   cond__/usr/lib/libmlx5.so.1.0.0
+   Memcheck:Cond
+   fun:ibv_cmd_destroy_qp
+   fun:mlx5_destroy_qp
+   fun:_Z20hrd_ctrl_blk_destroyP14hrd_ctrl_blk_t
+   fun:main
+}
+{
+   param__create_cq__verbs.c:844
+   Memcheck:Param
+   write(buf)
+   fun:write
+   fun:ibv_cmd_destroy_cq
+   fun:mlx5_destroy_cq
+   fun:_Z20hrd_ctrl_blk_destroyP14hrd_ctrl_blk_t
+   fun:main
+}
+{
+   cond__/usr/lib/libmlx5.so.1.0.0
+   Memcheck:Cond
+   fun:ibv_cmd_destroy_cq
+   fun:mlx5_destroy_cq
+   fun:_Z20hrd_ctrl_blk_destroyP14hrd_ctrl_blk_t
+   fun:main
+}
+{
+   cond__/usr/lib/libmlx5.so.1.0.0__2
+   Memcheck:Cond
+   fun:ibv_cmd_destroy_cq
+   fun:mlx5_destroy_cq
+   fun:_Z20hrd_ctrl_blk_destroyP14hrd_ctrl_blk_t
+   fun:main
+}
+{
+   param__mlx5_alloc_pd__verbs.c:240
+   Memcheck:Param
+   write(buf)
+   fun:write
+   fun:ibv_cmd_dealloc_pd
+   fun:mlx5_free_pd
+   fun:_Z20hrd_ctrl_blk_destroyP14hrd_ctrl_blk_t
+   fun:main
+}

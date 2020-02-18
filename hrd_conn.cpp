@@ -108,6 +108,7 @@ struct hrd_ctrl_blk_t *hrd_ctrl_blk_init(size_t local_hid, size_t port_index,
 
         cb->conn_buf_mr[i] = ibv_reg_mr(
             cb->pd, const_cast<uint8_t *>(cb->conn_buf[i]), reg_size, ib_flags);
+
         if (cb->conn_buf_mr[i] == nullptr) {
           printf("Buffer reg %d failed with code %s\n", i, strerror(errno));
           exit(-1);
@@ -131,7 +132,7 @@ int hrd_ctrl_blk_destroy(hrd_ctrl_blk_t *cb) {
   hrd_red_printf("HRD: Destroying control block %d\n", cb->local_hid);
 
   // Destroy QPs and CQs. QPs must be destroyed before CQs.
-  for (size_t i = 0; i < cb->conn_config.num_qps; i++) {
+  for (size_t i = 0; i < 2 * cb->conn_config.num_qps; i++) {
     rt_assert(ibv_destroy_qp(cb->conn_qp[i]) == 0,
               "Failed to destroy dgram QP");
 
@@ -148,8 +149,10 @@ int hrd_ctrl_blk_destroy(hrd_ctrl_blk_t *cb) {
                 cb->local_hid);
         return -1;
       }
-
-      free(const_cast<uint8_t *>(cb->conn_buf[i]));
+      // odd QPs share the same replay-buffer
+      if (i % 2 == 0 || i == 1) {
+        free(const_cast<uint8_t *>(cb->conn_buf[i]));
+      }
     }
 
     free(const_cast<ibv_mr **>(cb->conn_buf_mr));

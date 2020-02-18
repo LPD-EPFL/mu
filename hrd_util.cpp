@@ -78,6 +78,7 @@ void hrd_resolve_port_index(struct hrd_ctrl_blk_t *cb, size_t phy_port) {
 
   for (int dev_i = 0; dev_i < num_devices; dev_i++) {
     struct ibv_context *ib_ctx = ibv_open_device(dev_list[dev_i]);
+
     rt_assert(ib_ctx != nullptr, "Failed to open dev " + std::to_string(dev_i));
 
     struct ibv_device_attr device_attr;
@@ -442,7 +443,6 @@ void hrd_wait_till_ready(const char *qp_name) {
     }
 
     free(value);
-
     usleep(200000);
 
     if (tries > 100) {

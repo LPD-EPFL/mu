@@ -301,5 +301,7 @@ int main(int argc, char *argv[]) {
 
   poller_thread.join();
 
+  hrd_ctrl_blk_destroy(cb);
+
   return 0;
 }
