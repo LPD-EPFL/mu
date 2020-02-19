@@ -21,6 +21,8 @@ class ControlBlock {
   volatile uint8_t **conn_buf;
   struct ibv_mr **conn_buf_mr;
 
+  hrd_qp_attr_t **r_qps;
+
   void create_conn_qps();
   void connect_remote_qp(size_t idx, hrd_qp_attr_t *remote_qp_attr);
   void publish_conn_qp(size_t idx, const char *qp_name);

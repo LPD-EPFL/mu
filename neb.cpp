@@ -5,33 +5,25 @@ NonEquivocatingBroadcast::~NonEquivocatingBroadcast() {
 
   delete cb;
 
-  for (size_t i = 0; i < num_proc; i++) {
-    if (i == lgid) continue;
-
-    free(r_bcst_qps[i]);
-    free(r_repl_qps[i]);
-  }
-
-  free(r_bcst_qps);
-  free(r_repl_qps);
+  // close memcached connection
+  hrd_close_memcached();
 }
 
 NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
     : lgid(lgid), num_proc(num_proc) {
   printf("neb: Begin control path\n");
 
-  ConnectionConfig conn_config = ConnectionConfig::builder{}
-                                     .set__max_rd_atomic(16)
-                                     .set__sq_depth(kHrdSQDepth)
-                                     .set__num_qps(num_proc)
-                                     .set__use_uc(0)
-                                     .set__prealloc_buf(nullptr)
-                                     .set__buf_size(kAppBufSize)
-                                     .set__buf_shm_key(-1)
-                                     .build();
-
-  r_bcst_qps = (hrd_qp_attr_t **)calloc(num_proc, sizeof(hrd_qp_attr_t));
-  r_repl_qps = (hrd_qp_attr_t **)calloc(num_proc, sizeof(hrd_qp_attr_t));
+  ConnectionConfig conn_config =
+      ConnectionConfig::builder{}
+          .set__max_rd_atomic(16)
+          .set__sq_depth(kHrdSQDepth)
+          // TODO: set this to 2 * num_proc and adjust loop conditions
+          .set__num_qps(num_proc * 2)
+          .set__use_uc(0)
+          .set__prealloc_buf(nullptr)
+          .set__buf_size(kAppBufSize)
+          .set__buf_shm_key(-1)
+          .build();
 
   cb = new ControlBlock(lgid, ib_port_index, kHrdInvalidNUMANode, conn_config);
 
@@ -66,9 +58,6 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
 
     printf("neb: Server %s found server! Connecting..\n", clt_qp->name);
     cb->connect_remote_qp(i * 2, clt_qp);
-    hrd_publish_ready(clt_qp->name);
-    r_bcst_qps[i] = clt_qp;
-    printf("neb: Server %s READY\n", clt_qp->name);
 
     // Connect to replay
     sprintf(clt_name, "replay-%d-%zu", i, lgid);
@@ -82,9 +71,6 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
 
     printf("neb: Server %s found server! Connecting..\n", clt_qp->name);
     cb->connect_remote_qp(i * 2 + 1, clt_qp);
-    hrd_publish_ready(clt_qp->name);
-    r_repl_qps[i] = clt_qp;
-    printf("neb: Server %s READY\n", clt_qp->name);
   }
 
   // Wait till qps are ready
@@ -141,8 +127,8 @@ int NonEquivocatingBroadcast::broadcast(size_t m_id, size_t val) {
     wr.opcode = IBV_WR_RDMA_WRITE;
     wr.next = nullptr;
     // wr.send_flags = IBV_SEND_SIGNALED;
-    wr.wr.rdma.remote_addr = r_bcst_qps[i]->buf_addr;
-    wr.wr.rdma.rkey = r_bcst_qps[i]->rkey;
+    wr.wr.rdma.remote_addr = cb->r_qps[i * 2]->buf_addr;
+    wr.wr.rdma.rkey = cb->r_qps[i * 2]->rkey;
 
     printf("main: Write over broadcast QP to %d\n", i);
 
@@ -213,8 +199,9 @@ void NonEquivocatingBroadcast::start_poller() {
           wr.num_sge = 1;
           wr.opcode = IBV_WR_RDMA_READ;
           // wr.send_flags = IBV_SEND_SIGNALED;
-          wr.wr.rdma.remote_addr = r_repl_qps[j]->buf_addr + i * msg.size();
-          wr.wr.rdma.rkey = r_repl_qps[j]->rkey;
+          wr.wr.rdma.remote_addr =
+              cb->r_qps[j * 2 + 1]->buf_addr + i * msg.size();
+          wr.wr.rdma.rkey = cb->r_qps[j * 2 + 1]->rkey;
 
           printf("main: Posting replay read for %d at %d\n", i, j);
 

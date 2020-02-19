@@ -17,8 +17,6 @@ class NonEquivocatingBroadcast {
   size_t num_proc;
   // TODO(Kristian): use smart pointers
   ControlBlock *cb;
-  hrd_qp_attr_t **r_bcst_qps;
-  hrd_qp_attr_t **r_repl_qps;
 
   void start_poller();
 };
