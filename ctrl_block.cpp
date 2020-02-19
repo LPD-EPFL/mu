@@ -26,20 +26,13 @@ ControlBlock::~ControlBlock() {
       }
     }
 
-    free(const_cast<ibv_mr **>(conn_buf_mr));
-    free(const_cast<uint8_t **>(conn_buf));
-    free(const_cast<ibv_qp **>(conn_qp));
-    free(const_cast<ibv_cq **>(conn_cq));
-
     for (size_t i = 0; i < conn_config.num_qps; i++) {
       free(r_qps[i]);
     }
-
-    free(r_qps);
   }
 
   // Destroy protection domain
-  rt_assert(ibv_dealloc_pd(pd) == 0, "Failed to dealloc PD");
+  rt_assert(ibv_dealloc_pd(pd.get()) == 0, "Failed to dealloc PD");
 
   // Destroy device context
   rt_assert(ibv_close_device(resolve.ib_ctx) == 0, "Failed to close device");
@@ -55,9 +48,10 @@ ControlBlock::ControlBlock(size_t lgid, size_t port_index, size_t numa_node,
       port_index(port_index),
       numa_node(numa_node),
       conn_config(conn_config) {
-  printf("HRD: creating control block %zu: port %zu, socket %zu.\n", lgid,
+  printf("ctb: Begin control path\n");
+  printf("ctb: creating control block %zu: port %zu, socket %zu.\n", lgid,
          port_index, numa_node);
-  printf("HRD: control block %zu: Conn config = %s\n", lgid,
+  printf("ctb: control block %zu: Conn config = %s\n", lgid,
          conn_config.to_string().c_str());
 
   assert(port_index <= 16);
@@ -78,50 +72,45 @@ ControlBlock::ControlBlock(size_t lgid, size_t port_index, size_t numa_node,
               "allocation");
   }
 
-  r_qps =
-      (hrd_qp_attr_t **)calloc(conn_config.num_qps, sizeof(hrd_qp_attr_t *));
+  r_qps = std::make_unique<hrd_qp_attr_t *[]>(conn_config.num_qps);
+  conn_buf = std::make_unique<volatile uint8_t *[]>(conn_config.num_qps);
+  conn_qp = std::make_unique<ibv_qp *[]>(conn_config.num_qps);
+  conn_cq = std::make_unique<ibv_cq *[]>(conn_config.num_qps);
+  conn_buf_mr = std::make_unique<ibv_mr *[]>(conn_config.num_qps);
 
-  conn_buf =
-      (volatile uint8_t **)calloc(conn_config.num_qps, sizeof(uint8_t *));
-  conn_qp = (ibv_qp **)calloc(conn_config.num_qps, sizeof(ibv_qp *));
-  conn_cq = (ibv_cq **)calloc(conn_config.num_qps, sizeof(ibv_cq *));
-  conn_buf_mr = (ibv_mr **)calloc(conn_config.num_qps, sizeof(ibv_mr *));
-
+  // Resolve Port Index
   resolve = hrd_resolve_port_index(port_index);
   assert(resolve.ib_ctx != nullptr && resolve.dev_port_id >= 1);
 
-  pd = ibv_alloc_pd(resolve.ib_ctx);
+  // Create PD
+  pd = std::unique_ptr<ibv_pd>(ibv_alloc_pd(resolve.ib_ctx));
   assert(pd != nullptr);
 
+  // Create RC QPs
   create_conn_qps();
 
+  // Create Buffers and register MRs
   size_t reg_size = conn_config.buf_size;
-
   // use one replay buffer for all replay QPs
   auto *replay_buf =
       reinterpret_cast<volatile uint8_t *>(memalign(4096, reg_size));
 
   for (int i = 0; i < conn_config.num_qps; i++) {
     conn_buf[i] =
-        i % 2 == 0
-            ? reinterpret_cast<volatile uint8_t *>(memalign(4096, reg_size))
-            : replay_buf;
+        i % 2 != 0
+            ? replay_buf
+            : reinterpret_cast<volatile uint8_t *>(memalign(4096, reg_size));
 
     assert(conn_buf[i] != nullptr);
-
     memset(const_cast<uint8_t *>(conn_buf[i]), 0, reg_size);
 
-    int ib_flags;
     // Even ids are used for broadcast-p-q
-    if (i % 2 == 0) {
-      // TODO-Q(Kristian): Why local write?
-      ib_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE;
-    } else {
-      ib_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ;
-    }
+    // TODO-Q(Kristian): Why local write?
+    int ib_flags = i % 2 == 0 ? IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE
+                              : IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ;
 
-    conn_buf_mr[i] =
-        ibv_reg_mr(pd, const_cast<uint8_t *>(conn_buf[i]), reg_size, ib_flags);
+    conn_buf_mr[i] = ibv_reg_mr(pd.get(), const_cast<uint8_t *>(conn_buf[i]),
+                                reg_size, ib_flags);
 
     if (conn_buf_mr[i] == nullptr) {
       printf("Buffer reg %d failed with code %s\n", i, strerror(errno));
@@ -255,7 +244,7 @@ void ControlBlock::create_conn_qps() {
     create_attr.cap.max_recv_sge = 1;
     create_attr.cap.max_inline_data = kHrdMaxInline;
 
-    conn_qp[i] = ibv_create_qp(pd, &create_attr);
+    conn_qp[i] = ibv_create_qp(pd.get(), &create_attr);
     rt_assert(conn_qp[i] != nullptr, "Failed to create conn QP");
 
     struct ibv_qp_attr init_attr;

@@ -2,7 +2,6 @@
 
 static constexpr size_t ib_port_index = 0;
 static constexpr size_t kAppBufSize = (8 * 1024);
-
 static constexpr size_t kRoCE = false;  ///< Use RoCE
 static constexpr size_t kHrdMaxInline = 16;
 static constexpr size_t kHrdSQDepth = 128;   ///< Depth of all SEND queues

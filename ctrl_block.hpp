@@ -18,24 +18,28 @@ class ControlBlock {
   ~ControlBlock();
 
   size_t lgid;
+
   size_t port_index;
+
   size_t numa_node;
+
+  // InfiniBand info resolved from `phy_port`
   IBResolve resolve;
 
   ConnectionConfig conn_config;
   // TODO(Kristian): get rid of this
   // For now needed to access the rkey and raddress for remote operations
-  hrd_qp_attr_t **r_qps;
+  std::unique_ptr<hrd_qp_attr_t *[]> r_qps;
   // Connection Buffers
-  volatile uint8_t **conn_buf;
+  std::unique_ptr<volatile uint8_t *[]> conn_buf;
   // Protection Domain
-  struct ibv_pd *pd;
+  std::unique_ptr<ibv_pd> pd;
   // RConnected Queue Pairs
-  struct ibv_qp **conn_qp;
+  std::unique_ptr<ibv_qp *[]> conn_qp;
   // Completion Queues
-  struct ibv_cq **conn_cq;
+  std::unique_ptr<ibv_cq *[]> conn_cq;
   // Memory Regions
-  struct ibv_mr **conn_buf_mr;
+  std::unique_ptr<ibv_mr *[]> conn_buf_mr;
 
   void publish_conn_qp(size_t idx, const char *qp_name);
   // blocks and polls until it finds the matching remote qp entry in memcached

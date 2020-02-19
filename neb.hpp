@@ -1,6 +1,6 @@
 #include "ctrl_block.hpp"
 #include "hrd.hpp"
-// TODO(Kristian): use smart-pointers
+
 class NonEquivocatingBroadcast {
  public:
   /**
@@ -32,8 +32,7 @@ class NonEquivocatingBroadcast {
   size_t num_proc;
 
   // RDMA connector
-  // TODO(Kristian): use smart pointers
-  ControlBlock *cb;
+  std::unique_ptr<ControlBlock> cb;
 
   // thread that tries to poll
   std::thread poller_thread;
