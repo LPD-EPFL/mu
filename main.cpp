@@ -19,12 +19,16 @@ int main(int argc, char *argv[]) {
     rt_assert(num_proc > 1, "at least two nodes are required!");
   }
 
-  std::unique_ptr<NonEquivocatingBroadcast> neb(
-      new NonEquivocatingBroadcast(lgid, num_proc));
+  std::unique_ptr<NonEquivocatingBroadcast> neb;
+
+  neb = std::make_unique<NonEquivocatingBroadcast>(lgid, num_proc);
 
   neb->broadcast(1, 1337);
 
   std::this_thread::sleep_for(std::chrono::seconds(10));
+
+  // close memcached connection
+  hrd_close_memcached();
 
   return 0;
 }

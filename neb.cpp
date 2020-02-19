@@ -2,9 +2,6 @@
 
 NonEquivocatingBroadcast::~NonEquivocatingBroadcast() {
   poller_running = false;
-
-  // close memcached connection
-  hrd_close_memcached();
 }
 
 NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
@@ -19,8 +16,8 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
                                      .set__buf_shm_key(-1)
                                      .build();
 
-  cb = std::unique_ptr<ControlBlock>(
-      new ControlBlock(lgid, ib_port_index, kHrdInvalidNUMANode, conn_config));
+  cb = std::make_unique<ControlBlock>(lgid, ib_port_index, kHrdInvalidNUMANode,
+                                      conn_config);
 
   // Announce the QPs
   for (int i = 0; i < num_proc; i++) {
@@ -75,8 +72,7 @@ void NonEquivocatingBroadcast::broadcast(size_t m_id, size_t val) {
   struct neb_msg_t msg = {
       .id = m_id, .data = (void *)&text, .len = sizeof(text)};
 
-  auto *own_buf =
-      reinterpret_cast<volatile uint8_t *>(cb->conn_buf.get()[lgid]);
+  auto *own_buf = reinterpret_cast<volatile uint8_t *>(cb->conn_buf[lgid]);
 
   size_t msg_size = msg.marshall((uint8_t *)own_buf);
 
@@ -94,7 +90,7 @@ void NonEquivocatingBroadcast::broadcast(size_t m_id, size_t val) {
     memset(&sg, 0, sizeof(sg));
     sg.length = msg_size;
     sg.addr = reinterpret_cast<uint64_t>(own_buf);
-    sg.lkey = cb->conn_buf_mr.get()[lgid]->lkey;
+    sg.lkey = cb->conn_buf_mr[lgid]->lkey;
 
     memset(&wr, 0, sizeof(wr));
     wr.wr_id = 0;
@@ -103,12 +99,12 @@ void NonEquivocatingBroadcast::broadcast(size_t m_id, size_t val) {
     wr.opcode = IBV_WR_RDMA_WRITE;
     wr.next = nullptr;
     // wr.send_flags = IBV_SEND_SIGNALED;
-    wr.wr.rdma.remote_addr = cb->r_qps.get()[i * 2]->buf_addr;
-    wr.wr.rdma.rkey = cb->r_qps.get()[i * 2]->rkey;
+    wr.wr.rdma.remote_addr = cb->r_qps[i * 2]->buf_addr;
+    wr.wr.rdma.rkey = cb->r_qps[i * 2]->rkey;
 
     printf("neb: Write over broadcast QP to %d\n", i);
 
-    if (ibv_post_send(cb->conn_qp.get()[i * 2], &wr, &bad_wr)) {
+    if (ibv_post_send(cb->conn_qp[i * 2], &wr, &bad_wr)) {
       fprintf(stderr, "Error, ibv_post_send() failed\n");
       // TODO(Krisitan): properly handle err
       return;
@@ -136,7 +132,7 @@ void NonEquivocatingBroadcast::start_poller() {
       const size_t offset = 1024;
 
       auto *bcast_buf =
-          reinterpret_cast<volatile uint8_t *>(cb->conn_buf.get()[i * 2]);
+          reinterpret_cast<volatile uint8_t *>(cb->conn_buf[i * 2]);
 
       neb_msg_t msg;
 
@@ -147,7 +143,7 @@ void NonEquivocatingBroadcast::start_poller() {
         printf("neb: bcast from %d = %s\n", i, (char *)msg.data);
 
         auto *repl_buf =
-            reinterpret_cast<volatile uint8_t *>(cb->conn_buf.get()[i * 2 + 1]);
+            reinterpret_cast<volatile uint8_t *>(cb->conn_buf[i * 2 + 1]);
 
         memcpy((void *)&repl_buf[i * msg.size()], (void *)bcast_buf,
                msg.size());
@@ -167,10 +163,10 @@ void NonEquivocatingBroadcast::start_poller() {
 
           memset(&sg, 0, sizeof(sg));
           sg.addr =
-              reinterpret_cast<uint64_t>(cb->conn_buf.get()[i * 2 + 1]) +
+              reinterpret_cast<uint64_t>(cb->conn_buf[i * 2 + 1]) +
               (offset + (i * num_proc + j) * msg.size()) * sizeof(uint8_t);
           sg.length = msg.size();
-          sg.lkey = cb->conn_buf_mr.get()[i * 2 + 1]->lkey;
+          sg.lkey = cb->conn_buf_mr[i * 2 + 1]->lkey;
 
           memset(&wr, 0, sizeof(wr));
           // wr.wr_id      = 0;
@@ -179,12 +175,12 @@ void NonEquivocatingBroadcast::start_poller() {
           wr.opcode = IBV_WR_RDMA_READ;
           // wr.send_flags = IBV_SEND_SIGNALED;
           wr.wr.rdma.remote_addr =
-              cb->r_qps.get()[j * 2 + 1]->buf_addr + i * msg.size();
-          wr.wr.rdma.rkey = cb->r_qps.get()[j * 2 + 1]->rkey;
+              cb->r_qps[j * 2 + 1]->buf_addr + i * msg.size();
+          wr.wr.rdma.rkey = cb->r_qps[j * 2 + 1]->rkey;
 
           printf("neb: Posting replay read for %d at %d\n", i, j);
 
-          if (ibv_post_send(cb->conn_qp.get()[j * 2 + 1], &wr, &bad_wr)) {
+          if (ibv_post_send(cb->conn_qp[j * 2 + 1], &wr, &bad_wr)) {
             fprintf(stderr, "Error, ibv_post_send() failed\n");
             // TODO(Kristian): properly handle
             return;
