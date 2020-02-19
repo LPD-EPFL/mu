@@ -5,6 +5,7 @@
 class ConnectionConfig {
  public:
   class builder;
+
   // Required params
   size_t num_qps;
   bool use_uc;
@@ -72,8 +73,8 @@ class ConnectionConfig::builder {
   }
 
   ConnectionConfig build() const {
-    return ConnectionConfig{num_qps, use_uc, prealloc_buf, buf_size,
-                                buf_shm_key, sq_depth, max_rd_atomic};
+    return ConnectionConfig{num_qps,     use_uc,   prealloc_buf, buf_size,
+                            buf_shm_key, sq_depth, max_rd_atomic};
   }
 
  private:

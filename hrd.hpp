@@ -21,9 +21,12 @@
 #include <string>
 #include <thread>
 
-#include "consts.hpp"
 #include "conn_config.hpp"
+#include "consts.hpp"
 
+// This needs to be a macro because we don't have Mellanox OFED for Debian
+#define kHrdMlx5Atomics false
+#define kHrdReservedNamePrefix "__HRD_RESERVED_NAME_PREFIX"
 
 #define KB(x) (static_cast<size_t>(x) << 10)
 #define KB_(x) (KB(x) - 1)
@@ -76,30 +79,6 @@ struct hrd_qp_attr_t {
   uint32_t rkey;
 };
 
-// struct hrd_conn_config_t {
-//   // Required params
-//   size_t num_qps = 0;  // num_qps > 0 is used as a validity check
-//   bool use_uc;
-//   volatile uint8_t *prealloc_buf;
-//   size_t buf_size;
-//   int buf_shm_key;
-
-//   // Optional params with their default values
-//   size_t sq_depth = kHrdSQDepth;
-//   size_t max_rd_atomic = 16;
-
-//   std::string to_string() {
-//     std::ostringstream ret;
-//     ret << "[num_qps " << std::to_string(num_qps) << ", use_uc "
-//         << std::to_string(use_uc) << ", buf size " <<
-//         std::to_string(buf_size)
-//         << ", shm key " << std::to_string(buf_shm_key) << ", sq_depth "
-//         << std::to_string(sq_depth) << ", max_rd_atomic "
-//         << std::to_string(max_rd_atomic) << "]";
-//     return ret.str();
-//   }
-// };
-
 struct hrd_dgram_config_t {
   size_t num_qps;
   volatile uint8_t *prealloc_buf;
@@ -107,52 +86,26 @@ struct hrd_dgram_config_t {
   int buf_shm_key;
 };
 
-// TODO: classify
-struct hrd_ctrl_blk_t {
-  size_t local_hid;  // Local ID on the machine this process runs on
-
-  // Info about the device/port to use for this control block
-  size_t port_index;  // User-supplied. 0-based across all devices
-  size_t numa_node;   // NUMA node id
-
-  /// InfiniBand info resolved from \p phy_port, must be filled by constructor.
-  struct {
-    int device_id;               // Device index in list of verbs devices
-    struct ibv_context *ib_ctx;  // The verbs device context
-    uint8_t dev_port_id;         // 1-based port ID in device. 0 is invalid.
-    uint16_t port_lid;           // LID of phy_port. 0 is invalid.
-
-    union ibv_gid gid;  // GID, used only for RoCE
-  } resolve;
-
-  struct ibv_pd *pd;  // A protection domain for this control block
-
-  // Connected QPs
-  ConnectionConfig conn_config;
-  struct ibv_qp **conn_qp;
-  struct ibv_cq **conn_cq;
-  volatile uint8_t **conn_buf;  // A buffer for RDMA over RC/UC QPs
-  struct ibv_mr **conn_buf_mr;
-
-  uint8_t pad[64];
+/// InfiniBand info resolved from \p phy_port, must be filled by constructor.
+class IBResolve {
+ public:
+  // Device index in list of verbs devices
+  int device_id;
+  // TODO: use smart pointer
+  // The verbs device context
+  struct ibv_context *ib_ctx;
+  // 1-based port ID in device. 0 is invalid.
+  uint8_t dev_port_id;
+  // LID of phy_port. 0 is invalid.
+  uint16_t port_lid;
+  // GID, used only for RoCE
+  union ibv_gid gid;
 };
-
-// Major initialzation functions
-hrd_ctrl_blk_t *hrd_ctrl_blk_init(size_t local_hid, size_t port_index,
-                                  size_t numa_node,
-                                  ConnectionConfig *conn_config);
-
-int hrd_ctrl_blk_destroy(hrd_ctrl_blk_t *cb);
 
 // Debug
 void hrd_ibv_devinfo(void);
 
-void hrd_resolve_port_index(hrd_ctrl_blk_t *cb, size_t port_index);
-void hrd_create_conn_qps(hrd_ctrl_blk_t *cb);
-void hrd_create_dgram_qps(hrd_ctrl_blk_t *cb);
-
-void hrd_connect_qp(hrd_ctrl_blk_t *cb, size_t conn_qp_idx,
-                    hrd_qp_attr_t *remote_qp_attr);
+IBResolve hrd_resolve_port_index(size_t port_index);
 
 // Post 1 RECV for this queue pair for this buffer. Low performance.
 void hrd_post_dgram_recv(struct ibv_qp *qp, void *buf_addr, size_t len,
@@ -200,12 +153,6 @@ static inline int hrd_poll_cq_ret(struct ibv_cq *cq, int num_comps,
 // Registry functions
 void hrd_publish(const char *key, void *value, size_t len);
 int hrd_get_published(const char *key, void **value);
-
-// Publish the nth connected queue pair from this cb with this name
-void hrd_publish_conn_qp(hrd_ctrl_blk_t *cb, size_t n, const char *qp_name);
-
-// Publish the nth datagram queue pair from this cb with this name
-void hrd_publish_dgram_qp(hrd_ctrl_blk_t *cb, size_t n, const char *qp_name);
 
 struct hrd_qp_attr_t *hrd_get_published_qp(const char *qp_name);
 

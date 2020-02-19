@@ -31,3 +31,6 @@
 *.out
 *.app
 main
+
+# MAC specific
+.DS_Store

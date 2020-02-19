@@ -1,4 +1,6 @@
 #include <sstream>
+
+#include "ctrl_block.hpp"
 #include "hrd.hpp"
 
 // Every thread creates a TCP connection to the registry only once.
@@ -15,6 +17,21 @@ static std::string link_layer_str(uint8_t link_layer) {
     default:
       return "[Invalid]";
   }
+}
+
+hrd_qp_attr_t *hrd_get_published_qp(const char *qp_name) {
+  assert(strlen(qp_name) < kHrdQPNameSize - 1);
+  assert(strstr(qp_name, kHrdReservedNamePrefix) == nullptr);
+
+  hrd_qp_attr_t *ret;
+  for (size_t i = 0; i < strlen(qp_name); i++) assert(qp_name[i] != ' ');
+
+  int ret_len = hrd_get_published(qp_name, reinterpret_cast<void **>(&ret));
+
+  // The registry lookup returns only if we get a unique QP for @qp_name, or
+  // if the memcached lookup succeeds but we don't have an entry for @qp_name.
+  rt_assert(ret_len == static_cast<int>(sizeof(*ret)) || ret_len == -1, "");
+  return ret;
 }
 
 // Print information about all IB devices in the system
@@ -64,9 +81,10 @@ void hrd_ibv_devinfo(void) {
 // Finds the port with rank `port_index` (0-based) in the list of ENABLED ports.
 // Fills its device id and device-local port id (1-based) into the supplied
 // control block.
-void hrd_resolve_port_index(struct hrd_ctrl_blk_t *cb, size_t phy_port) {
+IBResolve hrd_resolve_port_index(size_t phy_port) {
   std::ostringstream xmsg;  // The exception message
-  auto &resolve = cb->resolve;
+
+  IBResolve resolve;
 
   // Get the device list
   int num_devices = 0;
@@ -132,7 +150,7 @@ void hrd_resolve_port_index(struct hrd_ctrl_blk_t *cb, size_t phy_port) {
         }
 
         ibv_free_device_list(dev_list);
-        return;
+        return resolve;
       }
 
       ports_to_discover--;

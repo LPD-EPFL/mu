@@ -15,7 +15,3 @@ static constexpr size_t kHrdMaxLID = 256;
 static constexpr size_t kHrdMaxUDQPs = 256;  ///< Maximum number of UD QPs
 
 static constexpr size_t kHrdQPNameSize = 200;
-
-// This needs to be a macro because we don't have Mellanox OFED for Debian
-#define kHrdMlx5Atomics false
-#define kHrdReservedNamePrefix "__HRD_RESERVED_NAME_PREFIX"

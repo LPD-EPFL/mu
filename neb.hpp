@@ -1,5 +1,5 @@
+#include "ctrl_block.hpp"
 #include "hrd.hpp"
-
 // TODO(Kristian): use smart-pointers
 class NonEquivocatingBroadcast {
  public:
@@ -16,9 +16,9 @@ class NonEquivocatingBroadcast {
   size_t lgid;
   size_t num_proc;
   // TODO(Kristian): use smart pointers
-  hrd_ctrl_blk_t *cb;
-  hrd_qp_attr_t **bcst_qps;
-  hrd_qp_attr_t **repl_qps;
+  ControlBlock *cb;
+  hrd_qp_attr_t **r_bcst_qps;
+  hrd_qp_attr_t **r_repl_qps;
 
   void start_poller();
 };

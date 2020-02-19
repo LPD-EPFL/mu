@@ -1,28 +1,24 @@
 #include "neb.hpp"
 
 NonEquivocatingBroadcast::~NonEquivocatingBroadcast() {
-  // TODO(Kristian): clean all CQs
   poller_running = false;
 
-  hrd_ctrl_blk_destroy(cb);
   delete cb;
 
   for (size_t i = 0; i < num_proc; i++) {
     if (i == lgid) continue;
 
-    free(bcst_qps[i]);
-    free(repl_qps[i]);
+    free(r_bcst_qps[i]);
+    free(r_repl_qps[i]);
   }
 
-  free(bcst_qps);
-  free(repl_qps);
-
-  hrd_close_memcached();
+  free(r_bcst_qps);
+  free(r_repl_qps);
 }
 
 NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
     : lgid(lgid), num_proc(num_proc) {
-  printf("neb: Begin control path");
+  printf("neb: Begin control path\n");
 
   ConnectionConfig conn_config = ConnectionConfig::builder{}
                                      .set__max_rd_atomic(16)
@@ -34,11 +30,10 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
                                      .set__buf_shm_key(-1)
                                      .build();
 
-  bcst_qps = (hrd_qp_attr_t **)malloc(num_proc * sizeof(hrd_qp_attr_t));
-  repl_qps = (hrd_qp_attr_t **)malloc(num_proc * sizeof(hrd_qp_attr_t));
+  r_bcst_qps = (hrd_qp_attr_t **)calloc(num_proc, sizeof(hrd_qp_attr_t));
+  r_repl_qps = (hrd_qp_attr_t **)calloc(num_proc, sizeof(hrd_qp_attr_t));
 
-  cb =
-      hrd_ctrl_blk_init(lgid, ib_port_index, kHrdInvalidNUMANode, &conn_config);
+  cb = new ControlBlock(lgid, ib_port_index, kHrdInvalidNUMANode, conn_config);
 
   // Announce the QPs
   for (int i = 0; i < num_proc; i++) {
@@ -46,11 +41,11 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
 
     char srv_name[kHrdQPNameSize];
     sprintf(srv_name, "broadcast-%d-%zu", i, lgid);
-    hrd_publish_conn_qp(cb, i * 2, srv_name);
+    cb->publish_conn_qp(i * 2, srv_name);
     printf("neb: Node %zu published broadcast slot for node %d\n", lgid, i);
 
     sprintf(srv_name, "replay-%zu-%d", lgid, i);
-    hrd_publish_conn_qp(cb, i * 2 + 1, srv_name);
+    cb->publish_conn_qp(i * 2 + 1, srv_name);
     printf("neb: Node %zu published replay slot for node %d\n", lgid, i);
   }
 
@@ -70,10 +65,9 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
     }
 
     printf("neb: Server %s found server! Connecting..\n", clt_qp->name);
-    hrd_connect_qp(cb, i * 2, clt_qp);
-    // This garbles the server's qp_attr - which is safe
+    cb->connect_remote_qp(i * 2, clt_qp);
     hrd_publish_ready(clt_qp->name);
-    bcst_qps[i] = clt_qp;
+    r_bcst_qps[i] = clt_qp;
     printf("neb: Server %s READY\n", clt_qp->name);
 
     // Connect to replay
@@ -87,10 +81,9 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
     }
 
     printf("neb: Server %s found server! Connecting..\n", clt_qp->name);
-    hrd_connect_qp(cb, i * 2 + 1, clt_qp);
-    // This garbles the server's qp_attr - which is safe
+    cb->connect_remote_qp(i * 2 + 1, clt_qp);
     hrd_publish_ready(clt_qp->name);
-    repl_qps[i] = clt_qp;
+    r_repl_qps[i] = clt_qp;
     printf("neb: Server %s READY\n", clt_qp->name);
   }
 
@@ -148,8 +141,8 @@ int NonEquivocatingBroadcast::broadcast(size_t m_id, size_t val) {
     wr.opcode = IBV_WR_RDMA_WRITE;
     wr.next = nullptr;
     // wr.send_flags = IBV_SEND_SIGNALED;
-    wr.wr.rdma.remote_addr = bcst_qps[i]->buf_addr;
-    wr.wr.rdma.rkey = bcst_qps[i]->rkey;
+    wr.wr.rdma.remote_addr = r_bcst_qps[i]->buf_addr;
+    wr.wr.rdma.rkey = r_bcst_qps[i]->rkey;
 
     printf("main: Write over broadcast QP to %d\n", i);
 
@@ -169,8 +162,8 @@ int NonEquivocatingBroadcast::broadcast(size_t m_id, size_t val) {
 void NonEquivocatingBroadcast::start_poller() {
   printf("main: poller thread running\n");
   if (poller_running) return;
-
   poller_running = true;
+
   while (poller_running) {
     for (int i = 0; i < num_proc; i++) {
       if (i == lgid) continue;
@@ -220,8 +213,8 @@ void NonEquivocatingBroadcast::start_poller() {
           wr.num_sge = 1;
           wr.opcode = IBV_WR_RDMA_READ;
           // wr.send_flags = IBV_SEND_SIGNALED;
-          wr.wr.rdma.remote_addr = repl_qps[j]->buf_addr + i * msg.size();
-          wr.wr.rdma.rkey = repl_qps[j]->rkey;
+          wr.wr.rdma.remote_addr = r_repl_qps[j]->buf_addr + i * msg.size();
+          wr.wr.rdma.rkey = r_repl_qps[j]->rkey;
 
           printf("main: Posting replay read for %d at %d\n", i, j);
 

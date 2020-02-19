@@ -1,4 +1,3 @@
-#include "hrd.hpp"
 #include "neb.hpp"
 
 #include <cstdlib>
