@@ -68,7 +68,7 @@ static double ns_since(const struct timespec &t0) {
 
 /// Registry info about a QP
 struct hrd_qp_attr_t {
-  char name[kHrdQPNameSize];
+  char name[QP_NAME_SIZE];
   uint16_t lid;
   uint32_t qpn;
   union ibv_gid gid;  ///< GID, used for only RoCE
@@ -77,13 +77,6 @@ struct hrd_qp_attr_t {
   uintptr_t buf_addr;
   uint32_t buf_size;
   uint32_t rkey;
-};
-
-struct hrd_dgram_config_t {
-  size_t num_qps;
-  volatile uint8_t *prealloc_buf;
-  size_t buf_size;
-  int buf_shm_key;
 };
 
 /// InfiniBand info resolved from \p phy_port, must be filled by constructor.
@@ -106,10 +99,6 @@ class IBResolve {
 void hrd_ibv_devinfo(void);
 
 IBResolve hrd_resolve_port_index(size_t port_index);
-
-// Post 1 RECV for this queue pair for this buffer. Low performance.
-void hrd_post_dgram_recv(struct ibv_qp *qp, void *buf_addr, size_t len,
-                         uint32_t lkey);
 
 // Fill @wc with @num_comps comps from this @cq. Exit on error.
 static inline void hrd_poll_cq(struct ibv_cq *cq, int num_comps,

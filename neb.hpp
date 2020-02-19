@@ -3,22 +3,47 @@
 // TODO(Kristian): use smart-pointers
 class NonEquivocatingBroadcast {
  public:
-  NonEquivocatingBroadcast(size_t id, size_t num_p);
+  /**
+   * TODO(Kristian): doc
+   * @param id: of the local process
+   * @param num_proc: number of processes in the cluster
+   *
+   */
+  NonEquivocatingBroadcast(size_t id, size_t num_proc);
   ~NonEquivocatingBroadcast();
 
-  int broadcast(size_t m_id, size_t val);
+  /**
+   * TODO(Kristian): doc
+   * @param m_id: id of the message
+   * @param val: value of the message
+   */
+  void broadcast(size_t m_id, size_t val);
+  /**
+   * TODO(Kristian): doc
+   *
+   */
   void *deliver();
 
  private:
-  std::thread poller_thread;
-  // TODO(Kristian): make atomic
-  bool poller_running = false;
+  // local id
   size_t lgid;
+
+  // number of processes in the cluster
   size_t num_proc;
+
+  // RDMA connector
   // TODO(Kristian): use smart pointers
   ControlBlock *cb;
 
+  // thread that tries to poll
+  std::thread poller_thread;
+
+  // starts the poller
   void start_poller();
+
+  // ensures only one thread loops endlessly
+  // TODO(Kristian): make atomic
+  bool poller_running = false;
 };
 
 // TODO(Kristian): Classify

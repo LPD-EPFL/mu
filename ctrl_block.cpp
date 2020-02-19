@@ -132,7 +132,7 @@ ControlBlock::ControlBlock(size_t lgid, size_t port_index, size_t numa_node,
 
 void ControlBlock::publish_conn_qp(size_t idx, const char *qp_name) {
   assert(idx < conn_config.num_qps);
-  assert(strlen(qp_name) < kHrdQPNameSize - 1);
+  assert(strlen(qp_name) < QP_NAME_SIZE - 1);
   assert(strstr(qp_name, kHrdReservedNamePrefix) == nullptr);
 
   size_t len = strlen(qp_name);
@@ -151,12 +151,24 @@ void ControlBlock::publish_conn_qp(size_t idx, const char *qp_name) {
   qp_attr.rkey = conn_buf_mr[idx]->rkey;
 
   hrd_publish(qp_attr.name, &qp_attr, sizeof(hrd_qp_attr_t));
+
+  printf("ctb: Published %s\n", qp_name);
 }
 
-void ControlBlock::connect_remote_qp(size_t idx, hrd_qp_attr_t *remote_qp) {
+void ControlBlock::connect_remote_qp(size_t idx, const char *qp_name) {
   assert(idx < conn_config.num_qps);
   assert(conn_qp[idx] != nullptr);
   assert(resolve.dev_port_id >= 1);
+
+  printf("ctb: Looking for server %s.\n", qp_name);
+
+  hrd_qp_attr_t *remote_qp = nullptr;
+  while (remote_qp == nullptr) {
+    remote_qp = hrd_get_published_qp(qp_name);
+    if (remote_qp == nullptr) usleep(200000);
+  }
+
+  printf("ctb: Found server %s! Connecting..\n", qp_name);
 
   r_qps[idx] = remote_qp;
 
@@ -218,7 +230,6 @@ void ControlBlock::connect_remote_qp(size_t idx, hrd_qp_attr_t *remote_qp) {
   }
 
   hrd_publish_ready(remote_qp->name);
-  printf("ctb: %s READY\n", remote_qp->name);
 }
 
 void ControlBlock::create_conn_qps() {

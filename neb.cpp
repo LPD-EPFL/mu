@@ -13,17 +13,15 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
     : lgid(lgid), num_proc(num_proc) {
   printf("neb: Begin control path\n");
 
-  ConnectionConfig conn_config =
-      ConnectionConfig::builder{}
-          .set__max_rd_atomic(16)
-          .set__sq_depth(kHrdSQDepth)
-          // TODO: set this to 2 * num_proc and adjust loop conditions
-          .set__num_qps(num_proc * 2)
-          .set__use_uc(0)
-          .set__prealloc_buf(nullptr)
-          .set__buf_size(kAppBufSize)
-          .set__buf_shm_key(-1)
-          .build();
+  ConnectionConfig conn_config = ConnectionConfig::builder{}
+                                     .set__max_rd_atomic(16)
+                                     .set__sq_depth(kHrdSQDepth)
+                                     .set__num_qps(num_proc * 2)
+                                     .set__use_uc(0)
+                                     .set__prealloc_buf(nullptr)
+                                     .set__buf_size(kAppBufSize)
+                                     .set__buf_shm_key(-1)
+                                     .build();
 
   cb = new ControlBlock(lgid, ib_port_index, kHrdInvalidNUMANode, conn_config);
 
@@ -31,53 +29,33 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
   for (int i = 0; i < num_proc; i++) {
     if (i == num_proc) continue;
 
-    char srv_name[kHrdQPNameSize];
+    char srv_name[QP_NAME_SIZE];
+
     sprintf(srv_name, "broadcast-%d-%zu", i, lgid);
     cb->publish_conn_qp(i * 2, srv_name);
-    printf("neb: Node %zu published broadcast slot for node %d\n", lgid, i);
 
     sprintf(srv_name, "replay-%zu-%d", lgid, i);
     cb->publish_conn_qp(i * 2 + 1, srv_name);
-    printf("neb: Node %zu published replay slot for node %d\n", lgid, i);
   }
 
+  // Connect to remote QPs
   for (int i = 0; i < num_proc; i++) {
     if (i == lgid) continue;
 
-    char clt_name[kHrdQPNameSize];
-    hrd_qp_attr_t *clt_qp = nullptr;
+    char clt_name[QP_NAME_SIZE];
 
-    // connect to broadcast
     sprintf(clt_name, "broadcast-%zu-%d", lgid, i);
-    printf("neb: Looking for %s server\n", clt_name);
+    cb->connect_remote_qp(i * 2, clt_name);
 
-    while (clt_qp == nullptr) {
-      clt_qp = hrd_get_published_qp(clt_name);
-      if (clt_qp == nullptr) usleep(200000);
-    }
-
-    printf("neb: Server %s found server! Connecting..\n", clt_qp->name);
-    cb->connect_remote_qp(i * 2, clt_qp);
-
-    // Connect to replay
     sprintf(clt_name, "replay-%d-%zu", i, lgid);
-    printf("neb: Looking for %s server\n", clt_name);
-
-    clt_qp = nullptr;
-    while (clt_qp == nullptr) {
-      clt_qp = hrd_get_published_qp(clt_name);
-      if (clt_qp == nullptr) usleep(200000);
-    }
-
-    printf("neb: Server %s found server! Connecting..\n", clt_qp->name);
-    cb->connect_remote_qp(i * 2 + 1, clt_qp);
+    cb->connect_remote_qp(i * 2 + 1, clt_name);
   }
 
   // Wait till qps are ready
   for (int i = 0; i < num_proc; i++) {
     if (i == lgid) continue;
 
-    char clt_name[kHrdQPNameSize];
+    char clt_name[QP_NAME_SIZE];
 
     sprintf(clt_name, "broadcast-%d-%zu", i, lgid);
     hrd_wait_till_ready(clt_name);
@@ -86,15 +64,16 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
     hrd_wait_till_ready(clt_name);
   }
 
-  printf("neb: Broadcast and replay connections established\n");
+  printf("neb: Broadcast and replay connections established!\n");
+  printf("neb: Begin data path!\n");
 
   poller_thread = std::thread([=] { start_poller(); });
   poller_thread.detach();
 }
 
-int NonEquivocatingBroadcast::broadcast(size_t m_id, size_t val) {
+void NonEquivocatingBroadcast::broadcast(size_t m_id, size_t val) {
   // TODO(Kristian): Fixme
-  char text[kHrdQPNameSize];
+  char text[QP_NAME_SIZE];
   sprintf(text, "Hello From %zu", lgid);
 
   struct neb_msg_t msg = {
@@ -130,11 +109,12 @@ int NonEquivocatingBroadcast::broadcast(size_t m_id, size_t val) {
     wr.wr.rdma.remote_addr = cb->r_qps[i * 2]->buf_addr;
     wr.wr.rdma.rkey = cb->r_qps[i * 2]->rkey;
 
-    printf("main: Write over broadcast QP to %d\n", i);
+    printf("neb: Write over broadcast QP to %d\n", i);
 
     if (ibv_post_send(cb->conn_qp[i * 2], &wr, &bad_wr)) {
       fprintf(stderr, "Error, ibv_post_send() failed\n");
-      return -1;
+      // TODO(Krisitan): properly handle err
+      return;
     }
 
     if (bad_wr != nullptr) {
@@ -143,10 +123,12 @@ int NonEquivocatingBroadcast::broadcast(size_t m_id, size_t val) {
 
     // hrd_poll_cq(cb->conn_cq[i * 2], 1, &wc);
   }
+
+  return;
 }
 
 void NonEquivocatingBroadcast::start_poller() {
-  printf("main: poller thread running\n");
+  printf("neb: poller thread running\n");
   if (poller_running) return;
   poller_running = true;
 
@@ -165,7 +147,7 @@ void NonEquivocatingBroadcast::start_poller() {
 
       // TODO(Kristian): add more checks like matching next id etc.
       if (msg.id != 0) {
-        printf("main: bcast from %d = %s\n", i, (char *)msg.data);
+        printf("neb: bcast from %d = %s\n", i, (char *)msg.data);
 
         auto *repl_buf =
             reinterpret_cast<volatile uint8_t *>(cb->conn_buf[i * 2 + 1]);
@@ -173,7 +155,7 @@ void NonEquivocatingBroadcast::start_poller() {
         memcpy((void *)&repl_buf[i * msg.size()], (void *)bcast_buf,
                msg.size());
 
-        printf("main: copying to replay-buffer\n");
+        printf("neb: copying to replay-buffer\n");
 
         // read replay slots for origin i
         for (int j = 0; j < num_proc; j++) {
@@ -203,7 +185,7 @@ void NonEquivocatingBroadcast::start_poller() {
               cb->r_qps[j * 2 + 1]->buf_addr + i * msg.size();
           wr.wr.rdma.rkey = cb->r_qps[j * 2 + 1]->rkey;
 
-          printf("main: Posting replay read for %d at %d\n", i, j);
+          printf("neb: Posting replay read for %d at %d\n", i, j);
 
           if (ibv_post_send(cb->conn_qp[j * 2 + 1], &wr, &bad_wr)) {
             fprintf(stderr, "Error, ibv_post_send() failed\n");
@@ -221,7 +203,7 @@ void NonEquivocatingBroadcast::start_poller() {
 
           r_msg.unmarshall(
               (uint8_t *)&repl_buf[(offset + (i * num_proc + j) * msg.size())]);
-          printf("main: replay entry for %d at %d = %s\n", i, j,
+          printf("neb: replay entry for %d at %d = %s\n", i, j,
                  (char *)r_msg.data);
         }
       }

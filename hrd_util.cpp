@@ -20,7 +20,7 @@ static std::string link_layer_str(uint8_t link_layer) {
 }
 
 hrd_qp_attr_t *hrd_get_published_qp(const char *qp_name) {
-  assert(strlen(qp_name) < kHrdQPNameSize - 1);
+  assert(strlen(qp_name) < QP_NAME_SIZE - 1);
   assert(strstr(qp_name, kHrdReservedNamePrefix) == nullptr);
 
   hrd_qp_attr_t *ret;
@@ -426,10 +426,10 @@ int hrd_get_published(const char *key, void **value) {
 // This avoids overwriting the memcached entry for qp_name which might still
 // be needed by the remote peer.
 void hrd_publish_ready(const char *qp_name) {
-  char value[kHrdQPNameSize];
-  assert(qp_name != nullptr && strlen(qp_name) < kHrdQPNameSize);
+  char value[QP_NAME_SIZE];
+  assert(qp_name != nullptr && strlen(qp_name) < QP_NAME_SIZE);
 
-  char new_name[2 * kHrdQPNameSize];
+  char new_name[2 * QP_NAME_SIZE];
   sprintf(new_name, "%s", kHrdReservedNamePrefix);
   strcat(new_name, qp_name);
 
@@ -441,10 +441,10 @@ void hrd_publish_ready(const char *qp_name) {
 // key-value mapping exists: "HRD_RESERVED_NAME_PREFIX-qp_name" -> "hrd_ready".
 void hrd_wait_till_ready(const char *qp_name) {
   char *value;
-  char exp_value[kHrdQPNameSize];
+  char exp_value[QP_NAME_SIZE];
   sprintf(exp_value, "%s", "hrd_ready");
 
-  char new_name[2 * kHrdQPNameSize];
+  char new_name[2 * QP_NAME_SIZE];
   sprintf(new_name, "%s", kHrdReservedNamePrefix);
   strcat(new_name, qp_name);
 
