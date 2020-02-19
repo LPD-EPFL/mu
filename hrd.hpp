@@ -21,25 +21,9 @@
 #include <string>
 #include <thread>
 
-static const size_t ib_port_index = 0;
-static constexpr size_t kAppBufSize = (8 * 1024);
+#include "consts.hpp"
+#include "conn_config.hpp"
 
-static constexpr size_t kRoCE = false;  ///< Use RoCE
-static constexpr size_t kHrdMaxInline = 16;
-static constexpr size_t kHrdSQDepth = 128;   ///< Depth of all SEND queues
-static constexpr size_t kHrdRQDepth = 2048;  ///< Depth of all RECV queues
-
-static constexpr uint32_t kHrdInvalidNUMANode = 9;
-static constexpr uint32_t kHrdDefaultPSN = 3185;
-static constexpr uint32_t kHrdDefaultQKey = 0x11111111;
-static constexpr size_t kHrdMaxLID = 256;
-static constexpr size_t kHrdMaxUDQPs = 256;  ///< Maximum number of UD QPs
-
-static constexpr size_t kHrdQPNameSize = 200;
-
-// This needs to be a macro because we don't have Mellanox OFED for Debian
-#define kHrdMlx5Atomics false
-#define kHrdReservedNamePrefix "__HRD_RESERVED_NAME_PREFIX"
 
 #define KB(x) (static_cast<size_t>(x) << 10)
 #define KB_(x) (KB(x) - 1)
@@ -92,28 +76,29 @@ struct hrd_qp_attr_t {
   uint32_t rkey;
 };
 
-struct hrd_conn_config_t {
-  // Required params
-  size_t num_qps = 0;  // num_qps > 0 is used as a validity check
-  bool use_uc;
-  volatile uint8_t *prealloc_buf;
-  size_t buf_size;
-  int buf_shm_key;
+// struct hrd_conn_config_t {
+//   // Required params
+//   size_t num_qps = 0;  // num_qps > 0 is used as a validity check
+//   bool use_uc;
+//   volatile uint8_t *prealloc_buf;
+//   size_t buf_size;
+//   int buf_shm_key;
 
-  // Optional params with their default values
-  size_t sq_depth = kHrdSQDepth;
-  size_t max_rd_atomic = 16;
+//   // Optional params with their default values
+//   size_t sq_depth = kHrdSQDepth;
+//   size_t max_rd_atomic = 16;
 
-  std::string to_string() {
-    std::ostringstream ret;
-    ret << "[num_qps " << std::to_string(num_qps) << ", use_uc "
-        << std::to_string(use_uc) << ", buf size " << std::to_string(buf_size)
-        << ", shm key " << std::to_string(buf_shm_key) << ", sq_depth "
-        << std::to_string(sq_depth) << ", max_rd_atomic "
-        << std::to_string(max_rd_atomic) << "]";
-    return ret.str();
-  }
-};
+//   std::string to_string() {
+//     std::ostringstream ret;
+//     ret << "[num_qps " << std::to_string(num_qps) << ", use_uc "
+//         << std::to_string(use_uc) << ", buf size " <<
+//         std::to_string(buf_size)
+//         << ", shm key " << std::to_string(buf_shm_key) << ", sq_depth "
+//         << std::to_string(sq_depth) << ", max_rd_atomic "
+//         << std::to_string(max_rd_atomic) << "]";
+//     return ret.str();
+//   }
+// };
 
 struct hrd_dgram_config_t {
   size_t num_qps;
@@ -143,7 +128,7 @@ struct hrd_ctrl_blk_t {
   struct ibv_pd *pd;  // A protection domain for this control block
 
   // Connected QPs
-  hrd_conn_config_t conn_config;
+  ConnectionConfig conn_config;
   struct ibv_qp **conn_qp;
   struct ibv_cq **conn_cq;
   volatile uint8_t **conn_buf;  // A buffer for RDMA over RC/UC QPs
@@ -155,7 +140,7 @@ struct hrd_ctrl_blk_t {
 // Major initialzation functions
 hrd_ctrl_blk_t *hrd_ctrl_blk_init(size_t local_hid, size_t port_index,
                                   size_t numa_node,
-                                  hrd_conn_config_t *conn_config);
+                                  ConnectionConfig *conn_config);
 
 int hrd_ctrl_blk_destroy(hrd_ctrl_blk_t *cb);
 

@@ -5,7 +5,7 @@
 // size of the new buffer to create.
 struct hrd_ctrl_blk_t *hrd_ctrl_blk_init(size_t local_hid, size_t port_index,
                                          size_t numa_node,
-                                         hrd_conn_config_t *conn_config) {
+                                         ConnectionConfig *conn_config) {
   if (kHrdMlx5Atomics) {
     rt_assert(!kRoCE, "mlx5 atomics not supported with RoCE");
     hrd_red_printf(

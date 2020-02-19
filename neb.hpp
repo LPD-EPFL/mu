@@ -12,15 +12,15 @@ class NonEquivocatingBroadcast {
  private:
   std::thread poller_thread;
   // TODO(Kristian): make atomic
-  bool running;
+  bool poller_running = false;
   size_t lgid;
   size_t num_proc;
   // TODO(Kristian): use smart pointers
   hrd_ctrl_blk_t *cb;
   hrd_qp_attr_t **bcst_qps;
   hrd_qp_attr_t **repl_qps;
-  
-  void run_poller();
+
+  void start_poller();
 };
 
 // TODO(Kristian): Classify

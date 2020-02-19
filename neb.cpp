@@ -1,9 +1,8 @@
 #include "neb.hpp"
-#include "hrd.hpp"
 
 NonEquivocatingBroadcast::~NonEquivocatingBroadcast() {
   // TODO(Kristian): clean all CQs
-  running = false;
+  poller_running = false;
 
   hrd_ctrl_blk_destroy(cb);
   delete cb;
@@ -22,19 +21,18 @@ NonEquivocatingBroadcast::~NonEquivocatingBroadcast() {
 }
 
 NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
-    : lgid(lgid), num_proc(num_proc), running(true) {
+    : lgid(lgid), num_proc(num_proc) {
   printf("neb: Begin control path");
 
-  // TODO(Kristian): use builder pattern
-  struct hrd_conn_config_t conn_config;
-  memset(&conn_config, 0, sizeof(hrd_conn_config_t));
-  conn_config.max_rd_atomic = 16;
-  conn_config.sq_depth = kHrdSQDepth;
-  conn_config.num_qps = num_proc;
-  conn_config.use_uc = 0;
-  conn_config.prealloc_buf = nullptr;
-  conn_config.buf_size = kAppBufSize;
-  conn_config.buf_shm_key = -1;
+  ConnectionConfig conn_config = ConnectionConfig::builder{}
+                                     .set__max_rd_atomic(16)
+                                     .set__sq_depth(kHrdSQDepth)
+                                     .set__num_qps(num_proc)
+                                     .set__use_uc(0)
+                                     .set__prealloc_buf(nullptr)
+                                     .set__buf_size(kAppBufSize)
+                                     .set__buf_shm_key(-1)
+                                     .build();
 
   bcst_qps = (hrd_qp_attr_t **)malloc(num_proc * sizeof(hrd_qp_attr_t));
   repl_qps = (hrd_qp_attr_t **)malloc(num_proc * sizeof(hrd_qp_attr_t));
@@ -111,7 +109,8 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
 
   printf("neb: Broadcast and replay connections established\n");
 
-  std::thread([=] { run_poller(); }).detach();
+  poller_thread = std::thread([=] { start_poller(); });
+  poller_thread.detach();
 }
 
 int NonEquivocatingBroadcast::broadcast(size_t m_id, size_t val) {
@@ -167,10 +166,12 @@ int NonEquivocatingBroadcast::broadcast(size_t m_id, size_t val) {
   }
 }
 
-void NonEquivocatingBroadcast::run_poller() {
+void NonEquivocatingBroadcast::start_poller() {
   printf("main: poller thread running\n");
+  if (poller_running) return;
 
-  while (running) {
+  poller_running = true;
+  while (poller_running) {
     for (int i = 0; i < num_proc; i++) {
       if (i == lgid) continue;
 
