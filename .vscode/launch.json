@@ -10,7 +10,7 @@
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [{
-                "name": "HRD_REGISTRY_IP", "value": "128.178.154.41"
+                "name": "NEB_REGISTRY_IP", "value": "128.178.154.41"
             }],
             "externalConsole": false,
             "MIMode": "gdb",

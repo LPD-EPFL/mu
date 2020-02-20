@@ -1,5 +1,5 @@
 #include "neb.hpp"
-
+#include "store_conn.hpp"
 /**
  * Returns the index for the `broadcast-lgid-p_idx` QP
  * * @param p_id: id of the process
@@ -67,10 +67,10 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
     char clt_name[QP_NAME_SIZE];
 
     sprintf(clt_name, "broadcast-%d-%zu", i, lgid);
-    hrd_wait_till_ready(clt_name);
+    MemoryStore::getInstance().wait_till_ready(clt_name);
 
     sprintf(clt_name, "replay-%zu-%d", lgid, i);
-    hrd_wait_till_ready(clt_name);
+    MemoryStore::getInstance().wait_till_ready(clt_name);
   }
 
   printf("neb: Begin data path!\n");

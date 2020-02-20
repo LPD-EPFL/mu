@@ -1,4 +1,5 @@
 #include "ctrl_block.hpp"
+#include "store_conn.hpp"
 
 ControlBlock::~ControlBlock() {
   printf("ctb: Destroying control block %lu\n", lgid);
@@ -138,7 +139,7 @@ void ControlBlock::publish_conn_qp(size_t idx, const char *qp_name) {
   qp_attr.buf_size = conn_config.buf_size;
   qp_attr.rkey = conn_buf_mr[idx]->rkey;
 
-  hrd_publish(qp_attr.name, &qp_attr, sizeof(hrd_qp_attr_t));
+  MemoryStore::getInstance().set(qp_attr.name, &qp_attr, sizeof(hrd_qp_attr_t));
 
   printf("ctb: Published %s\n", qp_name);
 }
@@ -152,7 +153,7 @@ void ControlBlock::connect_remote_qp(size_t idx, const char *qp_name) {
 
   hrd_qp_attr_t *remote_qp = nullptr;
   while (remote_qp == nullptr) {
-    remote_qp = hrd_get_published_qp(qp_name);
+    remote_qp = MemoryStore::getInstance().get_qp(qp_name);
     if (remote_qp == nullptr) usleep(200000);
   }
 
@@ -217,7 +218,7 @@ void ControlBlock::connect_remote_qp(size_t idx, const char *qp_name) {
     assert(false);
   }
 
-  hrd_publish_ready(remote_qp->name);
+  MemoryStore::getInstance().set_qp_ready(remote_qp->name);
 }
 
 void ControlBlock::create_conn_qps() {

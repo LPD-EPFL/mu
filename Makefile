@@ -8,7 +8,7 @@ APPS    := main
 
 all: ${APPS}
 
-main: ctrl_block.o hrd_util.o neb.o main.o
+main: ctrl_block.o store_conn.o util.o neb.o main.o
 	${LD} -o $@ $^ ${LDFLAGS}
 
 PHONY: clean

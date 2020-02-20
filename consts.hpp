@@ -15,3 +15,5 @@ static constexpr size_t kHrdMaxUDQPs = 256;  ///< Maximum number of UD QPs
 static constexpr size_t QP_NAME_SIZE = 200;
 static constexpr auto RESERVED_NAME_PREFIX = "NEB__READY__";
 static constexpr size_t DEFAULT_NUM_PROCESSES = 4;
+static constexpr int DEFAULT_MEMCACHED_PORT = 11212;
+static constexpr auto ENV_REGISTRY_IP = "NEB_REGISTRY_IP";

@@ -3,9 +3,6 @@
 #include "ctrl_block.hpp"
 #include "hrd.hpp"
 
-// Every thread creates a TCP connection to the registry only once.
-__thread memcached_st *memc = nullptr;
-
 static std::string link_layer_str(uint8_t link_layer) {
   switch (link_layer) {
     case IBV_LINK_LAYER_UNSPECIFIED:
@@ -17,21 +14,6 @@ static std::string link_layer_str(uint8_t link_layer) {
     default:
       return "[Invalid]";
   }
-}
-
-hrd_qp_attr_t *hrd_get_published_qp(const char *qp_name) {
-  assert(strlen(qp_name) < QP_NAME_SIZE - 1);
-  assert(strstr(qp_name, RESERVED_NAME_PREFIX) == nullptr);
-
-  hrd_qp_attr_t *ret;
-  for (size_t i = 0; i < strlen(qp_name); i++) assert(qp_name[i] != ' ');
-
-  int ret_len = hrd_get_published(qp_name, reinterpret_cast<void **>(&ret));
-
-  // The registry lookup returns only if we get a unique QP for @qp_name, or
-  // if the memcached lookup succeeds but we don't have an entry for @qp_name.
-  rt_assert(ret_len == static_cast<int>(sizeof(*ret)) || ret_len == -1, "");
-  return ret;
 }
 
 // Print information about all IB devices in the system
@@ -342,136 +324,7 @@ void hrd_get_formatted_time(char *timebuf) {
   strftime(timebuf, 26, "%Y:%m:%d %H:%M:%S", tm_info);
 }
 
-memcached_st *hrd_create_memc() {
-  memcached_server_st *servers = nullptr;
-  memcached_st *memc = nullptr;
-  memcached_return rc;
 
-  memc = memcached_create(nullptr);
-  char *registry_ip = hrd_getenv("HRD_REGISTRY_IP");
-
-  // We run the memcached server on the default memcached port
-  servers = memcached_server_list_append(servers, registry_ip,
-                                         11212,  // MEMCACHED_DEFAULT_PORT,
-                                         &rc);
-  rc = memcached_server_push(memc, servers);
-  rt_assert(rc == MEMCACHED_SUCCESS, "Couldn't add memcached server");
-
-  memcached_server_list_free(servers);
-
-  return memc;
-}
-
-void hrd_close_memcached() {
-  assert(memc != nullptr);
-  memcached_free(memc);
-}
-
-// Insert key -> value mapping into memcached running at HRD_REGISTRY_IP.
-void hrd_publish(const char *key, void *value, size_t len) {
-  assert(key != nullptr && value != nullptr && len > 0);
-  if (memc == nullptr) memc = hrd_create_memc();
-
-  memcached_return rc;
-  rc = memcached_set(memc, key, strlen(key),
-                     reinterpret_cast<const char *>(value), len,
-                     static_cast<time_t>(0), static_cast<uint32_t>(0));
-  if (rc != MEMCACHED_SUCCESS) {
-    char *registry_ip = hrd_getenv("HRD_REGISTRY_IP");
-    fprintf(stderr,
-            "\tHRD: Failed to publish key %s. Error %s. "
-            "Reg IP = %s\n",
-            key, memcached_strerror(memc, rc), registry_ip);
-    exit(-1);
-  }
-}
-
-// Get the value associated with "key" into "value", and return the length
-// of the value. If the key is not found, return nullptr and len -1. For all
-// other errors, terminate.
-//
-// This function sometimes gets called in a polling loop - ensure that there
-// are no memory leaks or unterminated memcached connections! We don't need
-// to free() the resul of getenv() since it points to a string in the process
-// environment.
-int hrd_get_published(const char *key, void **value) {
-  assert(key != nullptr);
-  if (memc == nullptr) memc = hrd_create_memc();
-
-  memcached_return rc;
-  size_t value_length;
-  uint32_t flags;
-
-  *value = memcached_get(memc, key, strlen(key), &value_length, &flags, &rc);
-
-  if (rc == MEMCACHED_SUCCESS) {
-    return static_cast<int>(value_length);
-  } else if (rc == MEMCACHED_NOTFOUND) {
-    assert(*value == nullptr);
-    return -1;
-  } else {
-    char *registry_ip = hrd_getenv("HRD_REGISTRY_IP");
-    fprintf(stderr,
-            "HRD: Error finding value for key \"%s\": %s. "
-            "Reg IP = %s\n",
-            key, memcached_strerror(memc, rc), registry_ip);
-    exit(-1);
-  }
-
-  // Never reached
-  assert(false);
-}
-
-// To advertise a queue pair with name qp_name as ready, we publish this
-// key-value mapping: "RESERVED_NAME_PREFIX-qp_name" -> "hrd_ready". This
-// requires that a qp_name never starts with RESERVED_NAME_PREFIX.
-//
-// This avoids overwriting the memcached entry for qp_name which might still
-// be needed by the remote peer.
-void hrd_publish_ready(const char *qp_name) {
-  char value[QP_NAME_SIZE];
-  assert(qp_name != nullptr && strlen(qp_name) < QP_NAME_SIZE);
-
-  char new_name[2 * QP_NAME_SIZE];
-  sprintf(new_name, "%s", RESERVED_NAME_PREFIX);
-  strcat(new_name, qp_name);
-
-  sprintf(value, "%s", "hrd_ready");
-  hrd_publish(new_name, value, strlen(value));
-}
-
-// To check if a queue pair with name qp_name is ready, we check if this
-// key-value mapping exists: "RESERVED_NAME_PREFIX-qp_name" -> "hrd_ready".
-void hrd_wait_till_ready(const char *qp_name) {
-  char *value;
-  char exp_value[QP_NAME_SIZE];
-  sprintf(exp_value, "%s", "hrd_ready");
-
-  char new_name[2 * QP_NAME_SIZE];
-  sprintf(new_name, "%s", RESERVED_NAME_PREFIX);
-  strcat(new_name, qp_name);
-
-  int tries = 0;
-  while (true) {
-    int ret = hrd_get_published(new_name, reinterpret_cast<void **>(&value));
-    tries++;
-    if (ret > 0) {
-      if (strcmp(value, exp_value) == 0) {
-        free(value);
-
-        return;
-      }
-    }
-
-    free(value);
-    usleep(200000);
-
-    if (tries > 100) {
-      fprintf(stderr, "HRD: Waiting for QP %s to be ready\n", qp_name);
-      tries = 0;
-    }
-  }
-}
 
 void hrd_post_dgram_recv(struct ibv_qp *qp, void *buf_addr, size_t len,
                          uint32_t lkey) {

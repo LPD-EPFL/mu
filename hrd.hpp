@@ -135,17 +135,6 @@ static inline int hrd_poll_cq_ret(struct ibv_cq *cq, int num_comps,
   return 0;  // Success
 }
 
-// Registry functions
-void hrd_publish(const char *key, void *value, size_t len);
-int hrd_get_published(const char *key, void **value);
-
-struct hrd_qp_attr_t *hrd_get_published_qp(const char *qp_name);
-
-void hrd_publish_ready(const char *qp_name);
-void hrd_wait_till_ready(const char *qp_name);
-
-void hrd_close_memcached();
-
 // Utility functions
 static inline uint32_t hrd_fastrand(uint64_t *seed) {
   *seed = *seed * 1103515245 + 12345;
