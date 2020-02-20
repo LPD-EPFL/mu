@@ -10,7 +10,7 @@ ControlBlock::~ControlBlock() {
     rt_assert(ibv_destroy_cq(conn_cq[i]) == 0, "Failed to destroy CQ");
   }
 
-  for (int i = 0; i < conn_config.num_qps; i++) {
+  for (size_t i = 0; i < conn_config.num_qps; i++) {
     assert(conn_buf_mr[i] != nullptr);
 
     // Destroy memory regions
@@ -96,7 +96,7 @@ ControlBlock::ControlBlock(size_t lgid, size_t port_index, size_t numa_node,
   auto *replay_buf =
       reinterpret_cast<volatile uint8_t *>(memalign(4096, reg_size));
 
-  for (int i = 0; i < conn_config.num_qps; i++) {
+  for (size_t i = 0; i < conn_config.num_qps; i++) {
     conn_buf[i] =
         i % 2 != 0
             ? replay_buf
@@ -113,7 +113,7 @@ ControlBlock::ControlBlock(size_t lgid, size_t port_index, size_t numa_node,
         ibv_reg_mr(pd, const_cast<uint8_t *>(conn_buf[i]), reg_size, ib_flags);
 
     if (conn_buf_mr[i] == nullptr) {
-      printf("Buffer reg %d failed with code %s\n", i, strerror(errno));
+      printf("Buffer reg %lu failed with code %s\n", i, strerror(errno));
       exit(-1);
     }
   }

@@ -35,41 +35,41 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
                                       conn_config);
 
   // Announce the QPs
-  for (int i = 0; i < num_proc; i++) {
+  for (size_t i = 0; i < num_proc; i++) {
     if (i == num_proc) continue;
 
     char srv_name[QP_NAME_SIZE];
 
-    sprintf(srv_name, "broadcast-%d-%zu", i, lgid);
+    sprintf(srv_name, "broadcast-%zu-%zu", i, lgid);
     cb->publish_conn_qp(b_idx(i), srv_name);
 
-    sprintf(srv_name, "replay-%zu-%d", lgid, i);
+    sprintf(srv_name, "replay-%zu-%zu", lgid, i);
     cb->publish_conn_qp(r_idx(i), srv_name);
   }
 
   // Connect to remote QPs
-  for (int i = 0; i < num_proc; i++) {
+  for (size_t i = 0; i < num_proc; i++) {
     if (i == lgid) continue;
 
     char clt_name[QP_NAME_SIZE];
 
-    sprintf(clt_name, "broadcast-%zu-%d", lgid, i);
+    sprintf(clt_name, "broadcast-%zu-%zu", lgid, i);
     cb->connect_remote_qp(b_idx(i), clt_name);
 
-    sprintf(clt_name, "replay-%d-%zu", i, lgid);
+    sprintf(clt_name, "replay-%zu-%zu", i, lgid);
     cb->connect_remote_qp(r_idx(i), clt_name);
   }
 
   // Wait till qps are ready
-  for (int i = 0; i < num_proc; i++) {
+  for (size_t i = 0; i < num_proc; i++) {
     if (i == lgid) continue;
 
     char clt_name[QP_NAME_SIZE];
 
-    sprintf(clt_name, "broadcast-%d-%zu", i, lgid);
+    sprintf(clt_name, "broadcast-%zu-%zu", i, lgid);
     MemoryStore::getInstance().wait_till_ready(clt_name);
 
-    sprintf(clt_name, "replay-%zu-%d", lgid, i);
+    sprintf(clt_name, "replay-%zu-%zu", lgid, i);
     MemoryStore::getInstance().wait_till_ready(clt_name);
   }
 
@@ -95,7 +95,7 @@ void NonEquivocatingBroadcast::broadcast(size_t m_id, size_t val) {
   size_t msg_size = msg.marshall((uint8_t *)own_buf);
 
   // Broadcast: write to every "broadcast-self-x" qp
-  for (int i = 0; i < num_proc; i++) {
+  for (size_t i = 0; i < num_proc; i++) {
     if (i == lgid) continue;
 
     struct ibv_sge sg;
@@ -120,7 +120,7 @@ void NonEquivocatingBroadcast::start_poller() {
   poller_running = true;
 
   while (poller_running) {
-    for (int i = 0; i < num_proc; i++) {
+    for (size_t i = 0; i < num_proc; i++) {
       if (i == lgid) continue;
 
       const size_t offset = 1024;
@@ -135,7 +135,7 @@ void NonEquivocatingBroadcast::start_poller() {
       // TODO(Kristian): add more checks like matching next id etc.
       if (msg.id == 0) continue;
 
-      printf("neb: bcast from %d = %s\n", i, (char *)msg.data);
+      printf("neb: bcast from %zu = %s\n", i, (char *)msg.data);
 
       auto *repl_buf =
           reinterpret_cast<volatile uint8_t *>(cb->get_buf(r_idx(i)));
@@ -144,7 +144,7 @@ void NonEquivocatingBroadcast::start_poller() {
       memcpy((void *)&repl_buf[i * msg.size()], (void *)bcast_buf, msg.size());
 
       // read replay slots for origin i
-      for (int j = 0; j < num_proc; j++) {
+      for (size_t j = 0; j < num_proc; j++) {
         if (j == lgid || j == i) {
           continue;
         }
@@ -163,7 +163,7 @@ void NonEquivocatingBroadcast::start_poller() {
 
         r_msg.unmarshall(
             (uint8_t *)&repl_buf[(offset + (i * num_proc + j) * msg.size())]);
-        printf("neb: replay entry for %d at %d = %s\n", i, j,
+        printf("neb: replay entry for %zu at %zu = %s\n", i, j,
                (char *)r_msg.data);
       }
     }
@@ -204,6 +204,7 @@ int NonEquivocatingBroadcast::post_write(ibv_sge sg, size_t proc_id) {
     printf("bad_wr is set!\n");
   }
 
+  return 0;
   // hrd_poll_cq(cb->conn_cq[i * 2], 1, &wc);
 }
 
@@ -238,4 +239,6 @@ int NonEquivocatingBroadcast::post_replay_read(ibv_sge sg, size_t d_id,
   if (bad_wr != nullptr) {
     printf("bad_wr is set!\n");
   }
+
+  return 0;
 }

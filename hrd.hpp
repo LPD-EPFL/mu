@@ -56,11 +56,11 @@ static constexpr inline T round_up(T x) {
 }
 
 /// Return nanoseconds elapsed since timestamp \p t0
-static double ns_since(const struct timespec &t0) {
-  struct timespec t1;
-  clock_gettime(CLOCK_REALTIME, &t1);
-  return (t1.tv_sec - t0.tv_sec) * 1000000000.0 + (t1.tv_nsec - t0.tv_nsec);
-}
+// static double ns_since(const struct timespec &t0) {
+//   struct timespec t1;
+//   clock_gettime(CLOCK_REALTIME, &t1);
+//   return (t1.tv_sec - t0.tv_sec) * 1000000000.0 + (t1.tv_nsec - t0.tv_nsec);
+// }
 
 /// Registry info about a QP
 struct hrd_qp_attr_t {

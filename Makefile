@@ -1,7 +1,6 @@
-FLAGS  := -std=c++17 -O3 -Wall -Werror -Wno-unused-result
 LD      := g++
 LDFLAGS := ${LDFLAGS} -libverbs -lrt -lpthread -lmemcached -lnuma
-CXXFLAGS := -g 
+CXXFLAGS := -g -std=c++17 -O3 -Wall -Werror -Wno-unused-result 
 BUILDDIR := build
 
 APPS    := main
