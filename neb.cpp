@@ -1,19 +1,34 @@
 #include "neb.hpp"
 
+/**
+ * Returns the index for the `broadcast-lgid-p_idx` QP
+ * * @param p_id: id of the process
+ */
+static inline size_t b_idx(size_t p_id) { return 2 * p_id; }
+
+/**
+ * Returns the index for the `replay-lgid-p_idx` QP
+ * @param p_id: id of the process
+ */
+static inline size_t r_idx(size_t p_id) { return 2 * p_id + 1; }
+
 NonEquivocatingBroadcast::~NonEquivocatingBroadcast() {
   poller_running = false;
 }
 
+/**
+ * TODO(Kristian): DOC
+ */
 NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
     : lgid(lgid), num_proc(num_proc) {
   ConnectionConfig conn_config = ConnectionConfig::builder{}
-                                     .set__max_rd_atomic(16)
-                                     .set__sq_depth(kHrdSQDepth)
-                                     .set__num_qps(num_proc * 2)
-                                     .set__use_uc(0)
-                                     .set__prealloc_buf(nullptr)
-                                     .set__buf_size(kAppBufSize)
-                                     .set__buf_shm_key(-1)
+                                     .max_rd_atomic(16)
+                                     .sq_depth(kHrdSQDepth)
+                                     .num_qps(num_proc * 2)
+                                     .use_uc(0)
+                                     .prealloc_buf(nullptr)
+                                     .buf_size(kAppBufSize)
+                                     .buf_shm_key(-1)
                                      .build();
 
   cb = std::make_unique<ControlBlock>(lgid, ib_port_index, kHrdInvalidNUMANode,
@@ -26,10 +41,10 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
     char srv_name[QP_NAME_SIZE];
 
     sprintf(srv_name, "broadcast-%d-%zu", i, lgid);
-    cb->publish_conn_qp(i * 2, srv_name);
+    cb->publish_conn_qp(b_idx(i), srv_name);
 
     sprintf(srv_name, "replay-%zu-%d", lgid, i);
-    cb->publish_conn_qp(i * 2 + 1, srv_name);
+    cb->publish_conn_qp(r_idx(i), srv_name);
   }
 
   // Connect to remote QPs
@@ -39,10 +54,10 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
     char clt_name[QP_NAME_SIZE];
 
     sprintf(clt_name, "broadcast-%zu-%d", lgid, i);
-    cb->connect_remote_qp(i * 2, clt_name);
+    cb->connect_remote_qp(b_idx(i), clt_name);
 
     sprintf(clt_name, "replay-%d-%zu", i, lgid);
-    cb->connect_remote_qp(i * 2 + 1, clt_name);
+    cb->connect_remote_qp(r_idx(i), clt_name);
   }
 
   // Wait till qps are ready
@@ -64,6 +79,9 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(size_t lgid, size_t num_proc)
   poller_thread.detach();
 }
 
+/**
+ * TODO(Kristian): DOC
+ */
 void NonEquivocatingBroadcast::broadcast(size_t m_id, size_t val) {
   // TODO(Kristian): Fixme
   char text[QP_NAME_SIZE];
@@ -72,7 +90,7 @@ void NonEquivocatingBroadcast::broadcast(size_t m_id, size_t val) {
   struct neb_msg_t msg = {
       .id = m_id, .data = (void *)&text, .len = sizeof(text)};
 
-  auto *own_buf = reinterpret_cast<volatile uint8_t *>(cb->conn_buf[lgid]);
+  auto *own_buf = reinterpret_cast<volatile uint8_t *>(cb->get_buf(lgid));
 
   size_t msg_size = msg.marshall((uint8_t *)own_buf);
 
@@ -80,46 +98,22 @@ void NonEquivocatingBroadcast::broadcast(size_t m_id, size_t val) {
   for (int i = 0; i < num_proc; i++) {
     if (i == lgid) continue;
 
-    const size_t offset = 256;
-
     struct ibv_sge sg;
-    struct ibv_send_wr wr;
-    // struct ibv_wc wc;
-    struct ibv_send_wr *bad_wr = nullptr;
-
     memset(&sg, 0, sizeof(sg));
+
     sg.length = msg_size;
     sg.addr = reinterpret_cast<uint64_t>(own_buf);
-    sg.lkey = cb->conn_buf_mr[lgid]->lkey;
+    sg.lkey = cb->get_mr(lgid)->lkey;
 
-    memset(&wr, 0, sizeof(wr));
-    wr.wr_id = 0;
-    wr.sg_list = &sg;
-    wr.num_sge = 1;
-    wr.opcode = IBV_WR_RDMA_WRITE;
-    wr.next = nullptr;
-    // wr.send_flags = IBV_SEND_SIGNALED;
-    wr.wr.rdma.remote_addr = cb->r_qps[i * 2]->buf_addr;
-    wr.wr.rdma.rkey = cb->r_qps[i * 2]->rkey;
-
-    printf("neb: Write over broadcast QP to %d\n", i);
-
-    if (ibv_post_send(cb->conn_qp[i * 2], &wr, &bad_wr)) {
-      fprintf(stderr, "Error, ibv_post_send() failed\n");
-      // TODO(Krisitan): properly handle err
-      return;
-    }
-
-    if (bad_wr != nullptr) {
-      printf("bad_wr is set!\n");
-    }
-
-    // hrd_poll_cq(cb->conn_cq[i * 2], 1, &wc);
+    post_write(sg, i);
   }
 
   return;
 }
 
+/**
+ * TODO(Kristian): DOC
+ */
 void NonEquivocatingBroadcast::start_poller() {
   printf("neb: poller thread running\n");
   if (poller_running) return;
@@ -132,73 +126,45 @@ void NonEquivocatingBroadcast::start_poller() {
       const size_t offset = 1024;
 
       auto *bcast_buf =
-          reinterpret_cast<volatile uint8_t *>(cb->conn_buf[i * 2]);
+          reinterpret_cast<volatile uint8_t *>(cb->get_buf(i * 2));
 
       neb_msg_t msg;
 
       msg.unmarshall((uint8_t *)bcast_buf);
 
       // TODO(Kristian): add more checks like matching next id etc.
-      if (msg.id != 0) {
-        printf("neb: bcast from %d = %s\n", i, (char *)msg.data);
+      if (msg.id == 0) continue;
 
-        auto *repl_buf =
-            reinterpret_cast<volatile uint8_t *>(cb->conn_buf[i * 2 + 1]);
+      printf("neb: bcast from %d = %s\n", i, (char *)msg.data);
 
-        memcpy((void *)&repl_buf[i * msg.size()], (void *)bcast_buf,
-               msg.size());
+      auto *repl_buf =
+          reinterpret_cast<volatile uint8_t *>(cb->get_buf(r_idx(i)));
 
-        printf("neb: copying to replay-buffer\n");
+      // TODO(Kristian): make it a local RDMA write
+      memcpy((void *)&repl_buf[i * msg.size()], (void *)bcast_buf, msg.size());
 
-        // read replay slots for origin i
-        for (int j = 0; j < num_proc; j++) {
-          if (j == lgid || j == i) {
-            continue;
-          }
-
-          struct ibv_sge sg;
-          struct ibv_send_wr wr;
-          // struct ibv_wc wc;
-          struct ibv_send_wr *bad_wr = nullptr;
-
-          memset(&sg, 0, sizeof(sg));
-          sg.addr =
-              reinterpret_cast<uint64_t>(cb->conn_buf[i * 2 + 1]) +
-              (offset + (i * num_proc + j) * msg.size()) * sizeof(uint8_t);
-          sg.length = msg.size();
-          sg.lkey = cb->conn_buf_mr[i * 2 + 1]->lkey;
-
-          memset(&wr, 0, sizeof(wr));
-          // wr.wr_id      = 0;
-          wr.sg_list = &sg;
-          wr.num_sge = 1;
-          wr.opcode = IBV_WR_RDMA_READ;
-          // wr.send_flags = IBV_SEND_SIGNALED;
-          wr.wr.rdma.remote_addr =
-              cb->r_qps[j * 2 + 1]->buf_addr + i * msg.size();
-          wr.wr.rdma.rkey = cb->r_qps[j * 2 + 1]->rkey;
-
-          printf("neb: Posting replay read for %d at %d\n", i, j);
-
-          if (ibv_post_send(cb->conn_qp[j * 2 + 1], &wr, &bad_wr)) {
-            fprintf(stderr, "Error, ibv_post_send() failed\n");
-            // TODO(Kristian): properly handle
-            return;
-          }
-
-          // hrd_poll_cq(cb->conn_cq[j * 2 + 1], 1, &wc);
-
-          if (bad_wr != nullptr) {
-            printf("bad_wr is set!\n");
-          }
-
-          neb_msg_t r_msg;
-
-          r_msg.unmarshall(
-              (uint8_t *)&repl_buf[(offset + (i * num_proc + j) * msg.size())]);
-          printf("neb: replay entry for %d at %d = %s\n", i, j,
-                 (char *)r_msg.data);
+      // read replay slots for origin i
+      for (int j = 0; j < num_proc; j++) {
+        if (j == lgid || j == i) {
+          continue;
         }
+
+        struct ibv_sge sg;
+        memset(&sg, 0, sizeof(sg));
+        // TODO(Kristian): where do we want to store the read values?
+        sg.addr = reinterpret_cast<uint64_t>(cb->get_buf(r_idx(i))) +
+                  (offset + (i * num_proc + j) * msg.size()) * sizeof(uint8_t);
+        sg.length = msg.size();
+        sg.lkey = cb->get_mr(r_idx(i))->lkey;
+
+        post_replay_read(sg, j, i);
+
+        neb_msg_t r_msg;
+
+        r_msg.unmarshall(
+            (uint8_t *)&repl_buf[(offset + (i * num_proc + j) * msg.size())]);
+        printf("neb: replay entry for %d at %d = %s\n", i, j,
+               (char *)r_msg.data);
       }
     }
 
@@ -206,4 +172,70 @@ void NonEquivocatingBroadcast::start_poller() {
   }
 
   printf("neb: poller thread finishing\n");
+}
+
+/**
+ * TODO(Kristian): DOC
+ */
+int NonEquivocatingBroadcast::post_write(ibv_sge sg, size_t proc_id) {
+  struct ibv_send_wr wr;
+  // struct ibv_wc wc;
+  struct ibv_send_wr *bad_wr = nullptr;
+
+  memset(&wr, 0, sizeof(wr));
+  wr.wr_id = 0;
+  wr.sg_list = &sg;
+  wr.num_sge = 1;
+  wr.opcode = IBV_WR_RDMA_WRITE;
+  wr.next = nullptr;
+  // wr.send_flags = IBV_SEND_SIGNALED;
+  wr.wr.rdma.remote_addr = cb->get_r_qp(b_idx(proc_id))->buf_addr;
+  wr.wr.rdma.rkey = cb->get_r_qp(b_idx(proc_id))->rkey;
+
+  printf("neb: Write over broadcast QP to %lu \n", proc_id);
+
+  if (ibv_post_send(cb->get_qp(b_idx(proc_id)), &wr, &bad_wr)) {
+    fprintf(stderr, "Error, ibv_post_send() failed\n");
+    // TODO(Krisitan): properly handle err
+    return -1;
+  }
+
+  if (bad_wr != nullptr) {
+    printf("bad_wr is set!\n");
+  }
+
+  // hrd_poll_cq(cb->conn_cq[i * 2], 1, &wc);
+}
+
+/**
+ * TODO(Kristian): DOC
+ */
+int NonEquivocatingBroadcast::post_replay_read(ibv_sge sg, size_t d_id,
+                                               size_t o_id) {
+  struct ibv_send_wr wr;
+  struct ibv_send_wr *bad_wr = nullptr;
+  // struct ibv_wc wc;
+  memset(&wr, 0, sizeof(wr));
+
+  wr.sg_list = &sg;
+  wr.num_sge = 1;
+  wr.opcode = IBV_WR_RDMA_READ;
+  // wr.send_flags = IBV_SEND_SIGNALED;
+  wr.wr.rdma.remote_addr =
+      cb->get_r_qp(r_idx(d_id))->buf_addr + o_id * sg.length;
+  wr.wr.rdma.rkey = cb->get_r_qp(r_idx(d_id))->rkey;
+
+  printf("neb: Posting replay read at %lu\n", d_id);
+
+  if (ibv_post_send(cb->get_qp(r_idx(d_id)), &wr, &bad_wr)) {
+    fprintf(stderr, "Error, ibv_post_send() failed\n");
+    // TODO(Kristian): properly handle
+    return -1;
+  }
+
+  // hrd_poll_cq(cb->get_cq(r_idx(j)), 1, &wc);
+
+  if (bad_wr != nullptr) {
+    printf("bad_wr is set!\n");
+  }
 }

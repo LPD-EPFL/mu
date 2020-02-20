@@ -1,171 +1,59 @@
 {
-   cond__mlx5_alloc_context
-   Memcheck:Cond
-   fun:ibv_exp_cmd_query_device
-   fun:mlx5_exp_query_device
-   fun:mlx5_alloc_context
-   fun:ibv_open_device@@IBVERBS_1.1
-   fun:_Z22hrd_resolve_port_indexP14hrd_ctrl_blk_tm
-   fun:_Z17hrd_ctrl_blk_initmmmP17hrd_conn_config_t
-}
-{
-   cond__mlx5_alloc_context_2
-   Memcheck:Cond
-   fun:ibv_exp_cmd_query_device
-   fun:mlx5_exp_query_device
-   fun:mlx5_alloc_context
-   fun:ibv_open_device@@IBVERBS_1.1
-   fun:_Z22hrd_resolve_port_indexP14hrd_ctrl_blk_tm
-   fun:_Z17hrd_ctrl_blk_initmmmP17hrd_conn_config_t
-}
-{
-   cond__ibv_cmd_query_device__cmd.c:123
-   Memcheck:Cond
-   fun:vfprintf
-   fun:__vsnprintf_chk
-   fun:__snprintf_chk
-   fun:snprintf
-   fun:__mlx5_query_device
-   fun:mlx5_query_device
-   fun:_Z22hrd_resolve_port_indexP14hrd_ctrl_blk_tm
-   fun:_Z17hrd_ctrl_blk_initmmmP17hrd_conn_config_t
-}
-{
-   uninit__ibv_cmd_query_device__cmd.c:123
-   Memcheck:Value8
-   fun:_itoa_word
-   fun:vfprintf
-   fun:__vsnprintf_chk
-   fun:__snprintf_chk
-   fun:snprintf
-   fun:__mlx5_query_device
-   fun:mlx5_query_device
-   fun:_Z22hrd_resolve_port_indexP14hrd_ctrl_blk_tm
-   fun:_Z17hrd_ctrl_blk_initmmmP17hrd_conn_config_t
-}
-{
-   cond__ibv_cmd_query_device__cmd.c:123
-   Memcheck:Cond
-   fun:_itoa_word
-   fun:vfprintf
-   fun:__vsnprintf_chk
-   fun:__snprintf_chk
-   fun:snprintf
-   fun:__mlx5_query_device
-   fun:mlx5_query_device
-   fun:_Z22hrd_resolve_port_indexP14hrd_ctrl_blk_tm
-   fun:_Z17hrd_ctrl_blk_initmmmP17hrd_conn_config_t
-}
-{
-   cond__ibv_cmd_query_device__2__cmd.c:123
-   Memcheck:Cond
-   fun:vfprintf
-   fun:__vsnprintf_chk
-   fun:__snprintf_chk
-   fun:snprintf
-   fun:__mlx5_query_device
-   fun:mlx5_query_device
-   fun:_Z22hrd_resolve_port_indexP14hrd_ctrl_blk_tm
-   fun:_Z17hrd_ctrl_blk_initmmmP17hrd_conn_config_t
-}
-{
-   cond__/usr/lib/libmlx5.so.1.0.0
-   Memcheck:Cond
-   fun:_Z22hrd_resolve_port_indexP14hrd_ctrl_blk_tm
-   fun:_Z17hrd_ctrl_blk_initmmmP17hrd_conn_config_t
-}
-{
-   uninit__syscall__mlx5_alloc_pd__verbs.c:240
+   param__writeto__/usr/lib/libmlx5.so.1.0.0
    Memcheck:Param
    write(buf)
-   fun:write
-   fun:ibv_exp_cmd_create_qp
-   fun:create_qp
-   fun:mlx5_create_qp
-   fun:ibv_create_qp@@IBVERBS_1.1
-   fun:_Z19hrd_create_conn_qpsP14hrd_ctrl_blk_t
-   fun:_Z17hrd_ctrl_blk_initmmmP17hrd_conn_config_t
+   ...
+   obj:/usr/lib/libmlx5.so.1.0.0
+   ...
 }
 {
-   cond__/usr/lib/libmlx5.so.1.0.0
-   Memcheck:Cond
-   fun:update_port_data
-   fun:mlx5_modify_qp
-   fun:ibv_modify_qp@@IBVERBS_1.1
-   fun:_Z19hrd_create_conn_qpsP14hrd_ctrl_blk_t
-   fun:_Z17hrd_ctrl_blk_initmmmP17hrd_conn_config_t
-}
-{
-   redir__mlx5_alloc_pd__verbs.c:240
-   Memcheck:Param
-   write(buf)
-   fun:write
-   fun:ibv_cmd_reg_mr
-   fun:mlx5_reg_mr
-   fun:__ibv_common_reg_mr
-   fun:ibv_reg_mr@@IBVERBS_1.1
-   fun:_Z17hrd_ctrl_blk_initmmmP17hrd_conn_config_t
-}
-{
-   uninit__syscall__/usr/lib/libmlx5.so.1.0.0
+   param__sendto__/usr/lib/libmlx5.so.1.0.0
    Memcheck:Param
    socketcall.sendto(msg)
-   fun:send
-   obj:/usr/lib/x86_64-linux-gnu/libmemcached.so.11.0.0
-   obj:/usr/lib/x86_64-linux-gnu/libmemcached.so.11.0.0
-   obj:/usr/lib/x86_64-linux-gnu/libmemcached.so.11.0.0
-   obj:/usr/lib/x86_64-linux-gnu/libmemcached.so.11.0.0
-   obj:/usr/lib/x86_64-linux-gnu/libmemcached.so.11.0.0
-   fun:memcached_set
-   fun:_Z11hrd_publishPKcPvm
-   fun:_Z19hrd_publish_conn_qpP14hrd_ctrl_blk_tmPKc
-}
-{
-   leak__memcached_create__/usr/lib/x86_64-linux-gnu/libmemcached.so.11.0.0
-   Memcheck:Leak
-   match-leak-kinds: definite
-   fun:malloc
-   fun:memcached_create
-   fun:_Z15hrd_create_memcv
-   fun:_Z11hrd_publishPKcPvm
-   fun:_Z19hrd_publish_conn_qpP14hrd_ctrl_blk_tmPKc
+   ...
+   obj:/usr/lib/libmlx5.so.1.0.0
+   ...
 }
 {
    cond__/usr/lib/libmlx5.so.1.0.0
    Memcheck:Cond
-   fun:ibv_cmd_destroy_qp
-   fun:mlx5_destroy_qp
-   fun:_Z20hrd_ctrl_blk_destroyP14hrd_ctrl_blk_t
+   ...
+   obj:/usr/lib/libmlx5.so.1.0.0
+   ...
 }
 {
-   param__create_cq__verbs.c:844
+   value8__/usr/lib/libmlx5.so.1.0.0
+   Memcheck:Value8
+   ...
+   obj:/usr/lib/libmlx5.so.1.0.0
+   ...
+}
+{
+   param__sendto__obj:/usr/lib/x86_64-linux-gnu/libmemcached.so.11.0.0
    Memcheck:Param
-   write(buf)
-   fun:write
-   fun:ibv_cmd_destroy_cq
-   fun:mlx5_destroy_cq
-   fun:_Z20hrd_ctrl_blk_destroyP14hrd_ctrl_blk_t
+   socketcall.sendto(msg)
+   ...
+   obj:/usr/lib/x86_64-linux-gnu/libmemcached.so.11.0.0
+   ...
 }
 {
-   cond__/usr/lib/libmlx5.so.1.0.0
+   cond__libibverbs
    Memcheck:Cond
-   fun:ibv_cmd_destroy_cq
-   fun:mlx5_destroy_cq
-   fun:_Z20hrd_ctrl_blk_destroyP14hrd_ctrl_blk_t
+   ...
+   obj:/usr/lib/libibverbs.so.1
+   ...
 }
 {
-   cond__/usr/lib/libmlx5.so.1.0.0__2
+   cond__libibverbs
+   Memcheck:Value8
+   ...
+   obj:/usr/lib/libibverbs.so.1
+   ...
+}
+{
+   cond__hrd_resolve_port_index
    Memcheck:Cond
-   fun:ibv_cmd_destroy_cq
-   fun:mlx5_destroy_cq
-   fun:_Z20hrd_ctrl_blk_destroyP14hrd_ctrl_blk_t
-}
-{
-   param__mlx5_alloc_pd__verbs.c:240
-   Memcheck:Param
-   write(buf)
-   fun:write
-   fun:ibv_cmd_dealloc_pd
-   fun:mlx5_free_pd
-   fun:_Z20hrd_ctrl_blk_destroyP14hrd_ctrl_blk_t
+   ...
+   fun:_Z22hrd_resolve_port_indexm
+   ...
 }

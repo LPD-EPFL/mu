@@ -1,7 +1,7 @@
 #include "ctrl_block.hpp"
 
 ControlBlock::~ControlBlock() {
-  printf("HRD: Destroying control block %lu\n", lgid);
+  printf("ctb: Destroying control block %lu\n", lgid);
 
   // Destroy QPs and CQs. QPs must be destroyed before CQs.
   for (size_t i = 0; i < conn_config.num_qps; i++) {
@@ -9,36 +9,35 @@ ControlBlock::~ControlBlock() {
     rt_assert(ibv_destroy_cq(conn_cq[i]) == 0, "Failed to destroy CQ");
   }
 
-  // Destroy memory regions
-  if (conn_config.num_qps > 0) {
-    for (int i = 0; i < conn_config.num_qps; i++) {
-      assert(conn_buf_mr[i] != nullptr);
+  for (int i = 0; i < conn_config.num_qps; i++) {
+    assert(conn_buf_mr[i] != nullptr);
 
-      if (ibv_dereg_mr(conn_buf_mr[i])) {
-        fprintf(stderr, "HRD: Couldn't deregister conn MR for cb %zu\n", lgid);
-        // TODO(Kristian): handle me
-        return;
-      }
-
-      // odd QP-indexes share the same replay-buffer
-      if (i % 2 == 0 || i == 1) {
-        free(const_cast<uint8_t *>(conn_buf[i]));
-      }
+    // Destroy memory regions
+    if (ibv_dereg_mr(conn_buf_mr[i])) {
+      fprintf(stderr, "ctb: Couldn't deregister conn MR for cb %zu\n", lgid);
+      // TODO(Kristian): handle me
+      return;
     }
 
-    for (size_t i = 0; i < conn_config.num_qps; i++) {
-      free(r_qps[i]);
+    // Free memory buffer
+    // Replay QPs share all the same buffer
+    if (i % 2 == 0 || i == 1) {
+      free(const_cast<uint8_t *>(conn_buf[i]));
     }
   }
 
+  // Free remote QP attributes
+  for (size_t i = 0; i < conn_config.num_qps; i++) {
+    free(r_qps[i]);
+  }
+
   // Destroy protection domain
-  rt_assert(ibv_dealloc_pd(pd.get()) == 0, "Failed to dealloc PD");
+  rt_assert(ibv_dealloc_pd(pd) == 0, "Failed to dealloc PD");
 
   // Destroy device context
   rt_assert(ibv_close_device(resolve.ib_ctx) == 0, "Failed to close device");
 
-  printf("HRD: Control block %zu destroyed.\n", lgid);
-
+  printf("ctb: Control block %zu destroyed.\n", lgid);
   return;
 }
 
@@ -83,7 +82,7 @@ ControlBlock::ControlBlock(size_t lgid, size_t port_index, size_t numa_node,
   assert(resolve.ib_ctx != nullptr && resolve.dev_port_id >= 1);
 
   // Create PD
-  pd = std::unique_ptr<ibv_pd>(ibv_alloc_pd(resolve.ib_ctx));
+  pd = ibv_alloc_pd(resolve.ib_ctx);
   assert(pd != nullptr);
 
   // Create RC QPs
@@ -92,6 +91,7 @@ ControlBlock::ControlBlock(size_t lgid, size_t port_index, size_t numa_node,
   // Create Buffers and register MRs
   size_t reg_size = conn_config.buf_size;
   // use one replay buffer for all replay QPs
+  // TODO(Kristian): this custom logic should ideally not be here
   auto *replay_buf =
       reinterpret_cast<volatile uint8_t *>(memalign(4096, reg_size));
 
@@ -105,12 +105,11 @@ ControlBlock::ControlBlock(size_t lgid, size_t port_index, size_t numa_node,
     memset(const_cast<uint8_t *>(conn_buf[i]), 0, reg_size);
 
     // Even ids are used for broadcast-p-q
-    // TODO-Q(Kristian): Why local write?
     int ib_flags = i % 2 == 0 ? IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE
                               : IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ;
 
-    conn_buf_mr[i] = ibv_reg_mr(pd.get(), const_cast<uint8_t *>(conn_buf[i]),
-                                reg_size, ib_flags);
+    conn_buf_mr[i] =
+        ibv_reg_mr(pd, const_cast<uint8_t *>(conn_buf[i]), reg_size, ib_flags);
 
     if (conn_buf_mr[i] == nullptr) {
       printf("Buffer reg %d failed with code %s\n", i, strerror(errno));
@@ -122,7 +121,7 @@ ControlBlock::ControlBlock(size_t lgid, size_t port_index, size_t numa_node,
 void ControlBlock::publish_conn_qp(size_t idx, const char *qp_name) {
   assert(idx < conn_config.num_qps);
   assert(strlen(qp_name) < QP_NAME_SIZE - 1);
-  assert(strstr(qp_name, kHrdReservedNamePrefix) == nullptr);
+  assert(strstr(qp_name, RESERVED_NAME_PREFIX) == nullptr);
 
   size_t len = strlen(qp_name);
   for (size_t i = 0; i < len; i++) assert(qp_name[i] != ' ');
@@ -244,7 +243,7 @@ void ControlBlock::create_conn_qps() {
     create_attr.cap.max_recv_sge = 1;
     create_attr.cap.max_inline_data = kHrdMaxInline;
 
-    conn_qp[i] = ibv_create_qp(pd.get(), &create_attr);
+    conn_qp[i] = ibv_create_qp(pd, &create_attr);
     rt_assert(conn_qp[i] != nullptr, "Failed to create conn QP");
 
     struct ibv_qp_attr init_attr;
@@ -264,3 +263,13 @@ void ControlBlock::create_conn_qps() {
     }
   }
 }
+
+ibv_qp *ControlBlock::get_qp(size_t idx) { return conn_qp[idx]; }
+
+ibv_cq *ControlBlock::get_cq(size_t idx) { return conn_cq[idx]; }
+
+ibv_mr *ControlBlock::get_mr(size_t idx) { return conn_buf_mr[idx]; }
+
+volatile uint8_t *ControlBlock::get_buf(size_t idx) { return conn_buf[idx]; }
+
+hrd_qp_attr_t *ControlBlock::get_r_qp(size_t idx) { return r_qps[idx]; }

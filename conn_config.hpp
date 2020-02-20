@@ -15,13 +15,13 @@ class ConnectionConfig {
   bool use_uc = false;
 
   // Preallocated buffer
-  std::shared_ptr<volatile uint8_t[]> prealloc_buf;
+  std::shared_ptr<volatile uint8_t[]> prealloc_buf = nullptr;
 
   // Size to use for the newly allocated buffer
-  size_t buf_size;
+  size_t buf_size = 0;
 
   // Shared memory key
-  int buf_shm_key;
+  int buf_shm_key = -1;
 
   // ----------------------------- Optional params -----------------------------
   // Request capacity
@@ -56,53 +56,53 @@ class ConnectionConfig {
 
 class ConnectionConfig::builder {
  public:
-  builder &set__num_qps(size_t v) {
-    num_qps = v;
+  builder &num_qps(size_t v) {
+    _num_qps = v;
     return *this;
   }
 
-  builder &set__use_uc(bool v) {
-    use_uc = v;
+  builder &use_uc(bool v) {
+    _use_uc = v;
     return *this;
   }
 
-  builder &set__prealloc_buf(std::shared_ptr<volatile uint8_t[]> v) {
-    prealloc_buf = v;
+  builder &prealloc_buf(std::shared_ptr<volatile uint8_t[]> v) {
+    _prealloc_buf = v;
     return *this;
   }
 
-  builder &set__buf_size(size_t v) {
-    buf_size = v;
+  builder &buf_size(size_t v) {
+    _buf_size = v;
     return *this;
   }
 
-  builder &set__buf_shm_key(int v) {
-    buf_shm_key = v;
+  builder &buf_shm_key(int v) {
+    _buf_shm_key = v;
     return *this;
   }
 
-  builder &set__sq_depth(size_t v) {
-    sq_depth = v;
+  builder &sq_depth(size_t v) {
+    _sq_depth = v;
     return *this;
   }
 
-  builder &set__max_rd_atomic(size_t v) {
-    max_rd_atomic = v;
+  builder &max_rd_atomic(size_t v) {
+    _max_rd_atomic = v;
     return *this;
   }
 
   ConnectionConfig build() const {
-    return ConnectionConfig{num_qps,     use_uc,   prealloc_buf, buf_size,
-                            buf_shm_key, sq_depth, max_rd_atomic};
+    return ConnectionConfig{_num_qps,     _use_uc,   _prealloc_buf, _buf_size,
+                            _buf_shm_key, _sq_depth, _max_rd_atomic};
   }
 
  private:
   // num_qps > 0 is used as a validity check
-  size_t num_qps = 0;
-  bool use_uc = false;
-  std::shared_ptr<volatile uint8_t[]> prealloc_buf;
-  size_t buf_size;
-  int buf_shm_key;
-  size_t sq_depth = kHrdSQDepth;
-  size_t max_rd_atomic = 16;
+  size_t _num_qps = 0;
+  bool _use_uc = false;
+  std::shared_ptr<volatile uint8_t[]> _prealloc_buf = nullptr;
+  size_t _buf_size = 0;
+  int _buf_shm_key = -1;
+  size_t _sq_depth = kHrdSQDepth;
+  size_t _max_rd_atomic = 16;
 };

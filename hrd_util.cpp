@@ -21,7 +21,7 @@ static std::string link_layer_str(uint8_t link_layer) {
 
 hrd_qp_attr_t *hrd_get_published_qp(const char *qp_name) {
   assert(strlen(qp_name) < QP_NAME_SIZE - 1);
-  assert(strstr(qp_name, kHrdReservedNamePrefix) == nullptr);
+  assert(strstr(qp_name, RESERVED_NAME_PREFIX) == nullptr);
 
   hrd_qp_attr_t *ret;
   for (size_t i = 0; i < strlen(qp_name); i++) assert(qp_name[i] != ' ');
@@ -101,6 +101,7 @@ IBResolve hrd_resolve_port_index(size_t phy_port) {
 
     struct ibv_device_attr device_attr;
     memset(&device_attr, 0, sizeof(device_attr));
+
     if (ibv_query_device(ib_ctx, &device_attr) != 0) {
       xmsg << " Failed to query InfiniBand device " << std::to_string(dev_i);
       throw std::runtime_error(xmsg.str());
@@ -109,6 +110,8 @@ IBResolve hrd_resolve_port_index(size_t phy_port) {
     for (uint8_t port_i = 1; port_i <= device_attr.phys_port_cnt; port_i++) {
       // Count this port only if it is enabled
       struct ibv_port_attr port_attr;
+      memset(&port_attr, 0, sizeof(ibv_port_attr));
+
       if (ibv_query_port(ib_ctx, port_i, &port_attr) != 0) {
         xmsg << "Failed to query port " << std::to_string(port_i)
              << " on device " << ib_ctx->device->name;
@@ -420,8 +423,8 @@ int hrd_get_published(const char *key, void **value) {
 }
 
 // To advertise a queue pair with name qp_name as ready, we publish this
-// key-value mapping: "HRD_RESERVED_NAME_PREFIX-qp_name" -> "hrd_ready". This
-// requires that a qp_name never starts with HRD_RESERVED_NAME_PREFIX.
+// key-value mapping: "RESERVED_NAME_PREFIX-qp_name" -> "hrd_ready". This
+// requires that a qp_name never starts with RESERVED_NAME_PREFIX.
 //
 // This avoids overwriting the memcached entry for qp_name which might still
 // be needed by the remote peer.
@@ -430,7 +433,7 @@ void hrd_publish_ready(const char *qp_name) {
   assert(qp_name != nullptr && strlen(qp_name) < QP_NAME_SIZE);
 
   char new_name[2 * QP_NAME_SIZE];
-  sprintf(new_name, "%s", kHrdReservedNamePrefix);
+  sprintf(new_name, "%s", RESERVED_NAME_PREFIX);
   strcat(new_name, qp_name);
 
   sprintf(value, "%s", "hrd_ready");
@@ -438,14 +441,14 @@ void hrd_publish_ready(const char *qp_name) {
 }
 
 // To check if a queue pair with name qp_name is ready, we check if this
-// key-value mapping exists: "HRD_RESERVED_NAME_PREFIX-qp_name" -> "hrd_ready".
+// key-value mapping exists: "RESERVED_NAME_PREFIX-qp_name" -> "hrd_ready".
 void hrd_wait_till_ready(const char *qp_name) {
   char *value;
   char exp_value[QP_NAME_SIZE];
   sprintf(exp_value, "%s", "hrd_ready");
 
   char new_name[2 * QP_NAME_SIZE];
-  sprintf(new_name, "%s", kHrdReservedNamePrefix);
+  sprintf(new_name, "%s", RESERVED_NAME_PREFIX);
   strcat(new_name, qp_name);
 
   int tries = 0;

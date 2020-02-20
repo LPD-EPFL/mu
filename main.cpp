@@ -8,10 +8,9 @@
 int main(int argc, char *argv[]) {
   rt_assert(argc > 1);
 
-  size_t lgid;
-  size_t num_proc = 4;
+  size_t num_proc = DEFAULT_NUM_PROCESSES;
+  size_t lgid = atoi(argv[1]);
 
-  lgid = atoi(argv[1]);
 
   // otherwise default is 4
   if (argc > 2) {

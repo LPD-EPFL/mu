@@ -43,6 +43,10 @@ class NonEquivocatingBroadcast {
   // ensures only one thread loops endlessly
   // TODO(Kristian): make atomic
   bool poller_running = false;
+
+  int post_write(ibv_sge sg, size_t proc_id);
+
+  int post_replay_read(ibv_sge sg, size_t o_id, size_t d_id);
 };
 
 // TODO(Kristian): Classify

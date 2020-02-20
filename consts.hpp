@@ -13,3 +13,5 @@ static constexpr size_t kHrdMaxLID = 256;
 static constexpr size_t kHrdMaxUDQPs = 256;  ///< Maximum number of UD QPs
 // The lenght of the QP name published to memcached
 static constexpr size_t QP_NAME_SIZE = 200;
+static constexpr auto RESERVED_NAME_PREFIX = "NEB__READY__";
+static constexpr size_t DEFAULT_NUM_PROCESSES = 4;

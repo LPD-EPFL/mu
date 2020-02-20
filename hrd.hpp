@@ -24,10 +24,6 @@
 #include "conn_config.hpp"
 #include "consts.hpp"
 
-// This needs to be a macro because we don't have Mellanox OFED for Debian
-#define kHrdMlx5Atomics false
-#define kHrdReservedNamePrefix "__HRD_RESERVED_NAME_PREFIX"
-
 #define KB(x) (static_cast<size_t>(x) << 10)
 #define KB_(x) (KB(x) - 1)
 #define MB(x) (static_cast<size_t>(x) << 20)
