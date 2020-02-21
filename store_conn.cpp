@@ -3,7 +3,7 @@
 MemoryStore::MemoryStore() : memc(memcached_create(nullptr), memcached_free) {
   rt_assert(&memc != nullptr, "failed to create memcached");
 
-  char *registry_ip = hrd_getenv(ENV_REGISTRY_IP);
+  char *registry_ip = getenv(ENV_REGISTRY_IP);
   memcached_return rc;
 
   // TODO(Kristian): this code looks really ugly, can we minimize it by using
@@ -27,7 +27,7 @@ void MemoryStore::set(const char *key, void *value, size_t len) {
                      static_cast<time_t>(0), static_cast<uint32_t>(0));
 
   if (rc != MEMCACHED_SUCCESS) {
-    char *registry_ip = hrd_getenv("HRD_REGISTRY_IP");
+    char *registry_ip = getenv(ENV_REGISTRY_IP);
     fprintf(stderr,
             "\tHRD: Failed to publish key %s. Error %s. "
             "Reg IP = %s\n",
@@ -60,7 +60,7 @@ int MemoryStore::get(const char *key, void **value) {
     assert(*value == nullptr);
     return -1;
   } else {
-    char *registry_ip = hrd_getenv("HRD_REGISTRY_IP");
+    char *registry_ip = getenv(ENV_REGISTRY_IP);
     fprintf(stderr,
             "HRD: Error finding value for key \"%s\": %s. "
             "Reg IP = %s\n",

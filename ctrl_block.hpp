@@ -1,8 +1,12 @@
 #pragma once
 
+#include <memory>
+#include <cassert>
+#include <malloc.h>
+#include <unistd.h>
 #include <infiniband/verbs.h>
-
-#include "hrd.hpp"
+#include "conn_config.hpp"
+#include "store_conn.hpp"
 
 class ControlBlock {
  public:
@@ -68,4 +72,6 @@ class ControlBlock {
   std::unique_ptr<ibv_mr *[]> conn_buf_mr;
 
   void create_conn_qps();
+
+  IBResolve resolve_port_index(size_t phy_port);
 };

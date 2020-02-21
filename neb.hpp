@@ -1,5 +1,7 @@
+#include <thread>
+
 #include "ctrl_block.hpp"
-#include "hrd.hpp"
+#include "store_conn.hpp"
 
 class NonEquivocatingBroadcast {
  public:

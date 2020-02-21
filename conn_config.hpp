@@ -1,5 +1,8 @@
 #pragma once
 
+#include <memory>
+#include <sstream>
+
 #include "consts.hpp"
 
 class ConnectionConfig {

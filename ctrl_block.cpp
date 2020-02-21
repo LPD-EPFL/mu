@@ -1,5 +1,4 @@
 #include "ctrl_block.hpp"
-#include "store_conn.hpp"
 
 ControlBlock::~ControlBlock() {
   printf("ctb: Destroying control block %lu\n", lgid);
@@ -79,7 +78,7 @@ ControlBlock::ControlBlock(size_t lgid, size_t port_index, size_t numa_node,
   conn_buf_mr = std::make_unique<ibv_mr *[]>(conn_config.num_qps);
 
   // Resolve Port Index
-  resolve = hrd_resolve_port_index(port_index);
+  resolve = resolve_port_index(port_index);
   assert(resolve.ib_ctx != nullptr && resolve.dev_port_id >= 1);
 
   // Create PD
@@ -274,3 +273,98 @@ ibv_mr *ControlBlock::get_mr(size_t idx) { return conn_buf_mr[idx]; }
 volatile uint8_t *ControlBlock::get_buf(size_t idx) { return conn_buf[idx]; }
 
 hrd_qp_attr_t *ControlBlock::get_r_qp(size_t idx) { return r_qps[idx]; }
+
+// Finds the port with rank `port_index` (0-based) in the list of ENABLED ports.
+// Fills its device id and device-local port id (1-based) into the supplied
+// control block.
+IBResolve ControlBlock::resolve_port_index(size_t phy_port) {
+  std::ostringstream xmsg;  // The exception message
+
+  IBResolve resolve;
+
+  // Get the device list
+  int num_devices = 0;
+  struct ibv_device **dev_list = ibv_get_device_list(&num_devices);
+  rt_assert(dev_list != nullptr, "Failed to get InfiniBand device list");
+
+  // Traverse the device list
+  int ports_to_discover = phy_port;
+
+  for (int dev_i = 0; dev_i < num_devices; dev_i++) {
+    struct ibv_context *ib_ctx = ibv_open_device(dev_list[dev_i]);
+
+    rt_assert(ib_ctx != nullptr, "Failed to open dev " + std::to_string(dev_i));
+
+    struct ibv_device_attr device_attr;
+    memset(&device_attr, 0, sizeof(device_attr));
+
+    if (ibv_query_device(ib_ctx, &device_attr) != 0) {
+      xmsg << " Failed to query InfiniBand device " << std::to_string(dev_i);
+      throw std::runtime_error(xmsg.str());
+    }
+
+    for (uint8_t port_i = 1; port_i <= device_attr.phys_port_cnt; port_i++) {
+      // Count this port only if it is enabled
+      struct ibv_port_attr port_attr;
+      memset(&port_attr, 0, sizeof(ibv_port_attr));
+
+      if (ibv_query_port(ib_ctx, port_i, &port_attr) != 0) {
+        xmsg << "Failed to query port " << std::to_string(port_i)
+             << " on device " << ib_ctx->device->name;
+        throw std::runtime_error(xmsg.str());
+      }
+
+      if (port_attr.phys_state != IBV_PORT_ACTIVE &&
+          port_attr.phys_state != IBV_PORT_ACTIVE_DEFER) {
+        continue;
+      }
+
+      if (ports_to_discover == 0) {
+        // Resolution succeeded. Check if the link layer matches.
+        if (!kRoCE && port_attr.link_layer != IBV_LINK_LAYER_INFINIBAND) {
+          throw std::runtime_error(
+              "Transport type required is InfiniBand but port link layer is " +
+              link_layer_str(port_attr.link_layer));
+        }
+
+        if (kRoCE && port_attr.link_layer != IBV_LINK_LAYER_ETHERNET) {
+          throw std::runtime_error(
+              "Transport type required is RoCE but port link layer is " +
+              link_layer_str(port_attr.link_layer) +
+              ". Try setting kRoCE to false.");
+        }
+
+        printf("HRD: port index %zu resolved to device %d, port %d. Name %s.\n",
+               phy_port, dev_i, port_i, dev_list[dev_i]->name);
+
+        resolve.device_id = dev_i;
+        resolve.ib_ctx = ib_ctx;
+        resolve.dev_port_id = port_i;
+        resolve.port_lid = port_attr.lid;
+
+        // Resolve and cache the ibv_gid struct for RoCE
+        if (kRoCE) {
+          int ret = ibv_query_gid(ib_ctx, resolve.dev_port_id, 0, &resolve.gid);
+          rt_assert(ret == 0, "Failed to query GID");
+        }
+
+        ibv_free_device_list(dev_list);
+        return resolve;
+      }
+
+      ports_to_discover--;
+    }
+
+    // Thank you Mario, but our port is in another device
+    if (ibv_close_device(ib_ctx) != 0) {
+      xmsg << "Failed to close device" << ib_ctx->device->name;
+      throw std::runtime_error(xmsg.str());
+    }
+  }
+
+  // If we are here, port resolution has failed
+  assert(resolve.ib_ctx == nullptr);
+  xmsg << "Failed to resolve InfiniBand port index "
+       << std::to_string(phy_port);
+  throw std::runtime_error(xmsg.str());
+}

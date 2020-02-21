@@ -1,5 +1,4 @@
 #include "neb.hpp"
-#include "store_conn.hpp"
 /**
  * Returns the index for the `broadcast-lgid-p_idx` QP
  * * @param p_id: id of the process

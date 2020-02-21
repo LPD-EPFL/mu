@@ -1,4 +1,8 @@
-#include "hrd.hpp"
+#pragma once
+
+#include <unistd.h>
+#include <libmemcached/memcached.h>
+#include "util.hpp"
 
 /**
  * Acts as a central public registry for all processes.
