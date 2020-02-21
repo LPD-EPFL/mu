@@ -58,7 +58,7 @@ void hrd_ibv_devinfo(void) {
 }
 
 // Return the environment variable @name if it is set. Exit if not.
-char *getenv(const char *name) {
+char *get_env(const char *name) {
   char *env = getenv(name);
   if (env == nullptr) {
     fprintf(stderr, "Environment variable %s not set\n", name);

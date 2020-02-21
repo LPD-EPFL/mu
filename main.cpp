@@ -1,7 +1,6 @@
 #include <cstdlib>
 
 #include "neb.hpp"
-#include "util.hpp"
 
 /*
  * NOTE: we assume IDs starting from 0
@@ -17,8 +16,6 @@ int main(int argc, char *argv[]) {
     num_proc = atoi(argv[2]);
     rt_assert(num_proc > 1, "at least two nodes are required!");
   }
-
-  hrd_ibv_devinfo();
 
   std::unique_ptr<NonEquivocatingBroadcast> neb;
 

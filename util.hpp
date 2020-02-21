@@ -40,7 +40,7 @@ class IBResolve {
 
 std::string link_layer_str(uint8_t link_layer);
 
-char *getenv(const char *name);
+char *get_env(const char *name);
 
 void hrd_ibv_devinfo(void);
 
