@@ -1,4 +1,5 @@
 #include <thread>
+#include <cstring>
 
 #include "ctrl_block.hpp"
 #include "store_conn.hpp"

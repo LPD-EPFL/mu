@@ -1,7 +1,7 @@
 #pragma once
 
 #include <memory>
-#include <string>
+#include <cstring>
 #include <cassert>
 #include <stdexcept>
 #include <infiniband/verbs.h>
