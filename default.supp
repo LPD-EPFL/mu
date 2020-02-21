@@ -54,6 +54,6 @@
    cond__hrd_resolve_port_index
    Memcheck:Cond
    ...
-   fun:_Z22hrd_resolve_port_indexm
+   fun:*resolve_port_index*
    ...
 }

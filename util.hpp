@@ -46,12 +46,12 @@ void hrd_ibv_devinfo(void);
 
 // Check a condition at runtime. If the condition is false, throw exception.
 static inline void rt_assert(bool condition, std::string throw_str) {
-  if (__builtin_expect(!!(condition), 0)) throw std::runtime_error(throw_str);
+  if (__builtin_expect(!!(!condition), 0)) throw std::runtime_error(throw_str);
 }
 
 // Check a condition at runtime. If the condition is false, throw exception.
 static inline void rt_assert(bool condition) {
-  if (__builtin_expect(!!(condition), 0)) throw std::runtime_error("");
+  if (__builtin_expect(!!(!condition), 0)) throw std::runtime_error("");
 }
 
 // Fill @wc with @num_comps comps from this @cq. Exit on error.
