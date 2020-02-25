@@ -1,7 +1,7 @@
 #pragma once
 
-#include <unistd.h>
 #include <libmemcached/memcached.h>
+#include <unistd.h>
 #include "util.hpp"
 
 /**
@@ -12,6 +12,19 @@
  */
 class MemoryStore {
  public:
+  class QPAttr {
+   public:
+    char name[QP_NAME_LENGTH];
+    uint16_t lid;
+    uint32_t qpn;
+    union ibv_gid gid;  //< GID, used for only RoCE
+
+    // Info about the RDMA buffer associated with this QP
+    uintptr_t buf_addr;
+    uint32_t buf_size;
+    uint32_t rkey;
+  };
+
   static MemoryStore &getInstance() {
     static MemoryStore instance;
 
@@ -44,7 +57,7 @@ class MemoryStore {
    * TODO(Kristian): DOC
    * @param qp_name
    */
-  hrd_qp_attr_t *get_qp(const char *qp_name);
+  MemoryStore::QPAttr *get_qp(const char *qp_name);
 
   /**
    * TODO(Kristian): DOC

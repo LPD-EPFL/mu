@@ -71,7 +71,7 @@ ControlBlock::ControlBlock(size_t lgid, size_t port_index, size_t numa_node,
               "allocation");
   }
 
-  r_qps = std::make_unique<hrd_qp_attr_t *[]>(conn_config.num_qps);
+  r_qps = std::make_unique<MemoryStore::QPAttr *[]>(conn_config.num_qps);
   conn_buf = std::make_unique<volatile uint8_t *[]>(conn_config.num_qps);
   conn_qp = std::make_unique<ibv_qp *[]>(conn_config.num_qps);
   conn_cq = std::make_unique<ibv_cq *[]>(conn_config.num_qps);
@@ -90,10 +90,12 @@ ControlBlock::ControlBlock(size_t lgid, size_t port_index, size_t numa_node,
 
   // Create Buffers and register MRs
   size_t reg_size = conn_config.buf_size;
-  // use one replay buffer for all replay QPs
+  // use one replay buffer for all replay QPs and the size is twice the default
+  // buffer size as one half is used for replay reading and the other for replay
+  // writing.
   // TODO(Kristian): this custom logic should ideally not be here
   auto *replay_buf =
-      reinterpret_cast<volatile uint8_t *>(memalign(4096, reg_size));
+      reinterpret_cast<volatile uint8_t *>(memalign(4096, 2 * reg_size));
 
   for (size_t i = 0; i < conn_config.num_qps; i++) {
     conn_buf[i] =
@@ -120,14 +122,14 @@ ControlBlock::ControlBlock(size_t lgid, size_t port_index, size_t numa_node,
 
 void ControlBlock::publish_conn_qp(size_t idx, const char *qp_name) {
   assert(idx < conn_config.num_qps);
-  assert(strlen(qp_name) < QP_NAME_SIZE - 1);
+  assert(strlen(qp_name) < QP_NAME_LENGTH - 1);
   assert(strstr(qp_name, RESERVED_NAME_PREFIX) == nullptr);
 
   size_t len = strlen(qp_name);
   for (size_t i = 0; i < len; i++) assert(qp_name[i] != ' ');
 
-  hrd_qp_attr_t qp_attr;
-  memset(&qp_attr, 0, sizeof(hrd_qp_attr_t));
+  MemoryStore::QPAttr qp_attr;
+  memset(&qp_attr, 0, sizeof(MemoryStore::QPAttr));
 
   strcpy(qp_attr.name, qp_name);
   qp_attr.lid = resolve.port_lid;
@@ -138,7 +140,8 @@ void ControlBlock::publish_conn_qp(size_t idx, const char *qp_name) {
   qp_attr.buf_size = conn_config.buf_size;
   qp_attr.rkey = conn_buf_mr[idx]->rkey;
 
-  MemoryStore::getInstance().set(qp_attr.name, &qp_attr, sizeof(hrd_qp_attr_t));
+  MemoryStore::getInstance().set(qp_attr.name, &qp_attr,
+                                 sizeof(MemoryStore::QPAttr));
 
   printf("ctb: Published %s\n", qp_name);
 }
@@ -150,7 +153,7 @@ void ControlBlock::connect_remote_qp(size_t idx, const char *qp_name) {
 
   printf("ctb: Looking for server %s.\n", qp_name);
 
-  hrd_qp_attr_t *remote_qp = nullptr;
+  MemoryStore::QPAttr *remote_qp = nullptr;
   while (remote_qp == nullptr) {
     remote_qp = MemoryStore::getInstance().get_qp(qp_name);
     if (remote_qp == nullptr) usleep(200000);
@@ -272,12 +275,12 @@ ibv_mr *ControlBlock::get_mr(size_t idx) { return conn_buf_mr[idx]; }
 
 volatile uint8_t *ControlBlock::get_buf(size_t idx) { return conn_buf[idx]; }
 
-hrd_qp_attr_t *ControlBlock::get_r_qp(size_t idx) { return r_qps[idx]; }
+MemoryStore::QPAttr *ControlBlock::get_r_qp(size_t idx) { return r_qps[idx]; }
 
 // Finds the port with rank `port_index` (0-based) in the list of ENABLED ports.
 // Fills its device id and device-local port id (1-based) into the supplied
 // control block.
-IBResolve ControlBlock::resolve_port_index(size_t phy_port) {
+ControlBlock::IBResolve ControlBlock::resolve_port_index(size_t phy_port) {
   std::ostringstream xmsg;  // The exception message
 
   IBResolve resolve;

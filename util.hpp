@@ -8,36 +8,6 @@
 
 #include "consts.hpp"
 
-// Registry info about a QP
-// TODO(Kristian): move this to the MemoryStore
-struct hrd_qp_attr_t {
-  char name[QP_NAME_SIZE];
-  uint16_t lid;
-  uint32_t qpn;
-  union ibv_gid gid;  //< GID, used for only RoCE
-
-  // Info about the RDMA buffer associated with this QP
-  uintptr_t buf_addr;
-  uint32_t buf_size;
-  uint32_t rkey;
-};
-
-// InfiniBand info resolved from \p phy_port, must be filled by constructor.
-class IBResolve {
- public:
-  // Device index in list of verbs devices
-  int device_id;
-  // TODO: use smart pointer
-  // The verbs device context
-  struct ibv_context *ib_ctx;
-  // 1-based port ID in device. 0 is invalid.
-  uint8_t dev_port_id;
-  // LID of phy_port. 0 is invalid.
-  uint16_t port_lid;
-  // GID, used only for RoCE
-  union ibv_gid gid;
-};
-
 std::string link_layer_str(uint8_t link_layer);
 
 char *get_env(const char *name);

@@ -1,15 +1,29 @@
 #pragma once
 
-#include <memory>
-#include <cassert>
+#include <infiniband/verbs.h>
 #include <malloc.h>
 #include <unistd.h>
-#include <infiniband/verbs.h>
+#include <cassert>
+#include <memory>
 #include "conn_config.hpp"
 #include "store_conn.hpp"
 
 class ControlBlock {
  public:
+  class IBResolve {
+   public:
+    // Device index in list of verbs devices
+    int device_id;
+    // TODO: use smart pointer
+    // The verbs device context
+    struct ibv_context *ib_ctx;
+    // 1-based port ID in device. 0 is invalid.
+    uint8_t dev_port_id;
+    // LID of phy_port. 0 is invalid.
+    uint16_t port_lid;
+    // GID, used only for RoCE
+    union ibv_gid gid;
+  };
   /**
    * TODO(Kristian): doc
    * @param local_hid:
@@ -28,9 +42,11 @@ class ControlBlock {
 
   ibv_mr *get_mr(size_t idx);
 
+  std::tuple<volatile uint8_t*, volatile uint8_t*> get_replay_buf();
+
   volatile uint8_t *get_buf(size_t idx);
 
-  hrd_qp_attr_t *get_r_qp(size_t idx);
+  MemoryStore::QPAttr *get_r_qp(size_t idx);
 
   void publish_conn_qp(size_t idx, const char *qp_name);
 
@@ -48,7 +64,7 @@ class ControlBlock {
   ConnectionConfig conn_config;
 
   // InfiniBand info resolved from `phy_port`
-  IBResolve resolve;
+  ControlBlock::IBResolve resolve;
 
   // Protection Domain
   // Not wrapped by a smart pointer as the destruction shoud happen after all
@@ -56,7 +72,7 @@ class ControlBlock {
   ibv_pd *pd;
 
   // For now needed to access the rkey and raddress for remote operations
-  std::unique_ptr<hrd_qp_attr_t *[]> r_qps;
+  std::unique_ptr<MemoryStore::QPAttr *[]> r_qps;
 
   // Connection Buffers
   std::unique_ptr<volatile uint8_t *[]> conn_buf;
@@ -73,5 +89,5 @@ class ControlBlock {
 
   void create_conn_qps();
 
-  IBResolve resolve_port_index(size_t phy_port);
+  ControlBlock::IBResolve resolve_port_index(size_t phy_port);
 };

@@ -76,10 +76,10 @@ int MemoryStore::get(const char *key, void **value) {
 // key-value mapping exists: "RESERVED_NAME_PREFIX-qp_name" -> "hrd_ready".
 void MemoryStore::wait_till_ready(const char *qp_name) {
   char *value;
-  char exp_value[QP_NAME_SIZE];
+  char exp_value[QP_NAME_LENGTH];
   sprintf(exp_value, "%s", "hrd_ready");
 
-  char new_name[2 * QP_NAME_SIZE];
+  char new_name[2 * QP_NAME_LENGTH];
   sprintf(new_name, "%s", RESERVED_NAME_PREFIX);
   strcat(new_name, qp_name);
 
@@ -112,10 +112,10 @@ void MemoryStore::wait_till_ready(const char *qp_name) {
 // This avoids overwriting the memcached entry for qp_name which might still
 // be needed by the remote peer.
 void MemoryStore::set_qp_ready(const char *qp_name) {
-  char value[QP_NAME_SIZE];
-  assert(qp_name != nullptr && strlen(qp_name) < QP_NAME_SIZE);
+  char value[QP_NAME_LENGTH];
+  assert(qp_name != nullptr && strlen(qp_name) < QP_NAME_LENGTH);
 
-  char new_name[2 * QP_NAME_SIZE];
+  char new_name[2 * QP_NAME_LENGTH];
   sprintf(new_name, "%s", RESERVED_NAME_PREFIX);
   strcat(new_name, qp_name);
 
@@ -123,11 +123,11 @@ void MemoryStore::set_qp_ready(const char *qp_name) {
   set(new_name, value, strlen(value));
 }
 
-hrd_qp_attr_t *MemoryStore::get_qp(const char *qp_name) {
-  assert(strlen(qp_name) < QP_NAME_SIZE - 1);
+MemoryStore::QPAttr *MemoryStore::get_qp(const char *qp_name) {
+  assert(strlen(qp_name) < QP_NAME_LENGTH - 1);
   assert(strstr(qp_name, RESERVED_NAME_PREFIX) == nullptr);
 
-  hrd_qp_attr_t *ret;
+  MemoryStore::QPAttr *ret;
   for (size_t i = 0; i < strlen(qp_name); i++) assert(qp_name[i] != ' ');
 
   int ret_len = get(qp_name, reinterpret_cast<void **>(&ret));
