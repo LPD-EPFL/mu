@@ -5,8 +5,8 @@
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/buf",
-            // "args": ["0", "3"],
+            "program": "${workspaceFolder}/main",
+            "args": ["0", "3"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [{

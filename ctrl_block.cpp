@@ -104,14 +104,15 @@ ControlBlock::ControlBlock(size_t lgid, size_t port_index, size_t numa_node,
             : reinterpret_cast<volatile uint8_t *>(memalign(4096, reg_size));
 
     assert(conn_buf[i] != nullptr);
-    memset(const_cast<uint8_t *>(conn_buf[i]), 0, reg_size);
+    memset(const_cast<uint8_t *>(conn_buf[i]), 0,
+           i == 1 ? 2 * reg_size : reg_size);
 
     // Even ids are used for broadcast-p-q
     int ib_flags = i % 2 == 0 ? IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE
                               : IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ;
 
-    conn_buf_mr[i] =
-        ibv_reg_mr(pd, const_cast<uint8_t *>(conn_buf[i]), reg_size, ib_flags);
+    conn_buf_mr[i] = ibv_reg_mr(pd, const_cast<uint8_t *>(conn_buf[i]),
+                                i % 2 != 0 ? 2 * reg_size : reg_size, ib_flags);
 
     if (conn_buf_mr[i] == nullptr) {
       printf("Buffer reg %lu failed with code %s\n", i, strerror(errno));

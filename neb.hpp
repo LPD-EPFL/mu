@@ -1,6 +1,7 @@
 #include <cstring>
 #include <thread>
 
+#include "buffer_overlay.hpp"
 #include "ctrl_block.hpp"
 #include "store_conn.hpp"
 
@@ -17,7 +18,8 @@ class NonEquivocatingBroadcast {
    *
    */
   NonEquivocatingBroadcast(size_t id, size_t num_proc,
-                           void (*deliver_cb)(void *data));
+                           void (*deliver_cb)(uint64_t k, volatile uint8_t *m,
+                                              size_t proc_id));
   ~NonEquivocatingBroadcast();
 
   /**
@@ -25,7 +27,7 @@ class NonEquivocatingBroadcast {
    * @param msg_id: id of the message
    * @param val: value of the message
    */
-  void broadcast(uint64_t msg_id, Broadcastable &msg);
+  void broadcast(uint64_t k, Broadcastable &msg);
 
  private:
   // local id
@@ -35,7 +37,7 @@ class NonEquivocatingBroadcast {
   size_t num_proc;
 
   // last received message counter for every process
-  std::unique_ptr<int[]> last;
+  std::unique_ptr<uint64_t[]> last;
 
   // RDMA connector
   std::unique_ptr<ControlBlock> cb;
@@ -46,13 +48,13 @@ class NonEquivocatingBroadcast {
   // starts the poller
   void start_poller();
 
-  void (*deliver_callback)(void *data);
+  void (*deliver_callback)(uint64_t k, volatile uint8_t *m, size_t proc_id);
 
   // ensures only one thread loops endlessly
   // TODO(Kristian): make atomic
   bool poller_running = false;
 
-  int post_write(ibv_sge sg, size_t proc_id);
+  int post_write(ibv_sge sg, size_t dest_id, uint64_t msg_offset);
 
-  int post_replay_read(ibv_sge sg, size_t o_id, size_t d_id);
+  int post_replay_read(ibv_sge sg, size_t r_id, uint64_t msg_offset);
 };
