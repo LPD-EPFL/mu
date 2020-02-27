@@ -19,7 +19,8 @@ class NonEquivocatingBroadcast {
    *
    */
   NonEquivocatingBroadcast(size_t id, size_t num_proc,
-                           void (*deliver_cb)(uint64_t k, volatile uint8_t *m,
+                           void (*deliver_cb)(uint64_t k,
+                                              const volatile uint8_t &m,
                                               size_t proc_id));
   ~NonEquivocatingBroadcast();
 
@@ -56,7 +57,8 @@ class NonEquivocatingBroadcast {
   // starts the poller
   void start_poller();
 
-  void (*deliver_callback)(uint64_t k, volatile uint8_t *m, size_t proc_id);
+  void (*deliver_callback)(uint64_t k, const volatile uint8_t &m,
+                           size_t proc_id);
 
   // ensures only one thread loops endlessly
   // TODO(Kristian): make atomic

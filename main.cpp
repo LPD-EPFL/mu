@@ -14,14 +14,14 @@ class NebSampleMessage : public NonEquivocatingBroadcast::Broadcastable {
     return sizeof(val);
   };
 
-  void unmarshall(volatile uint8_t *buf) {
-    val = reinterpret_cast<volatile uint64_t *>(buf)[0];
+  void unmarshall(const volatile uint8_t &buf) {
+    val = reinterpret_cast<const volatile uint64_t &>(buf);
   }
 
   size_t size() { return sizeof(val); }
 };
 
-void deliver_callback(uint64_t k, volatile uint8_t *m, size_t proc_id) {
+void deliver_callback(uint64_t k, const volatile uint8_t &m, size_t proc_id) {
   NebSampleMessage msg;
 
   msg.unmarshall(m);

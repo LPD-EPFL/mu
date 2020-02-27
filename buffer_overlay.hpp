@@ -22,9 +22,9 @@
 class BufferEntry {
  public:
   /**
-   * @param ptr: a pointer to the start address of the entry
+   * @param start: a reference to the the entry
    * */
-  BufferEntry(volatile uint8_t* ptr);
+  BufferEntry(const volatile uint8_t& start);
 
   /**
    * @returns: the message id
@@ -32,14 +32,14 @@ class BufferEntry {
   uint64_t id();
 
   /**
-   * @returns: a pointer to the content
+   * @returns: a reference to the content
    **/
-  volatile uint8_t* content();
+  const volatile uint8_t& content();
 
   /**
-   * @returns: a pointer to the signature
+   * @returns: a reference to the signature
    **/
-  volatile uint8_t* signature();
+  const volatile uint8_t& signature();
 
   /**
    * @returns: the address of the entry
@@ -47,7 +47,7 @@ class BufferEntry {
   uint64_t addr();
 
  private:
-  volatile uint8_t* ptr;
+  const volatile uint8_t& start;
 };
 
 /**
@@ -56,7 +56,11 @@ class BufferEntry {
  **/
 class BroadcastBuffer {
  public:
-  BroadcastBuffer(volatile uint8_t* ptr, size_t buf_size);
+  /**
+   * @param start: a reference to the buffer
+   * @param buf_size: the buffer size in bytes
+   **/
+  BroadcastBuffer(volatile uint8_t& start, size_t buf_size);
 
   /**
    * @param index: index of the entry
@@ -75,17 +79,20 @@ class BroadcastBuffer {
   /**
    * Ideally we should not copy but marshall data directly into the broadcast
    * buffer.
-   * This function is only used initially when broadcasting a
+   * This function is only used initially when broadcasting a message to write
+   *it into a memory region accessible by the RNIC
    * @param index: index of the entry
    * @param k: message key
-   * @param buf: the buffer to copy into the `content` field of the entry
+   * @param buf: a reference to the buffer to copy into the `content` field of
+   *the entry
    * @param len: the length of the buffer to copy
    * @thorws: std::out_of_range
    **/
-  size_t write(uint64_t index, uint64_t k, volatile uint8_t* buf, size_t len);
+  std::unique_ptr<BufferEntry> write(uint64_t index, uint64_t k,
+                                     volatile uint8_t& buf, size_t len);
 
  private:
-  volatile uint8_t* ptr;
+  volatile uint8_t& start;
   size_t buf_size;
   uint64_t num_entries;
 };
@@ -101,7 +108,13 @@ class BroadcastBuffer {
  **/
 class ReplayBufferWriter {
  public:
-  ReplayBufferWriter(volatile uint8_t* ptr, size_t buf_size, int num_proc);
+  /**
+   * @param start: a reference to the buffer
+   * @param buf_size: the size of the buffer in bytes
+   * @param num_proc: the total number of processes in the cluster
+   **/
+  ReplayBufferWriter(const volatile uint8_t& start, size_t buf_size,
+                     int num_proc);
 
   /**
    * @param proc_id: the process id
@@ -116,7 +129,7 @@ class ReplayBufferWriter {
   std::unique_ptr<BufferEntry> get_entry(size_t proc_id, uint64_t index);
 
  private:
-  volatile uint8_t* ptr;
+  const volatile uint8_t& start;
   size_t buf_size;
   uint64_t num_proc;
   uint64_t num_entries_per_proc;
@@ -134,7 +147,13 @@ class ReplayBufferWriter {
  **/
 class ReplayBufferReader {
  public:
-  ReplayBufferReader(volatile uint8_t* ptr, size_t buf_size, int num_proc);
+  /**
+   * @param start: a reference to the buffer
+   * @param buf_size: the size of the buffer in bytes
+   * @param num_proc: the total number of processes in the cluster
+   **/
+  ReplayBufferReader(const volatile uint8_t& start, size_t buf_size,
+                     int num_proc);
 
   /**
    * @param origin_id: the id of the process who's value is replayed
@@ -153,7 +172,7 @@ class ReplayBufferReader {
                                          uint64_t index);
 
  private:
-  volatile uint8_t* ptr;
+  const volatile uint8_t& start;
   size_t buf_size;
   uint64_t num_proc;
   uint64_t num_entries_per_proc;

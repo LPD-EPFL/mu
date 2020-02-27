@@ -20,7 +20,7 @@ NonEquivocatingBroadcast::~NonEquivocatingBroadcast() {
  */
 NonEquivocatingBroadcast::NonEquivocatingBroadcast(
     size_t lgid, size_t num_proc,
-    void (*deliver_cb)(uint64_t k, volatile uint8_t *m, size_t proc_id))
+    void (*deliver_cb)(uint64_t k, const volatile uint8_t &m, size_t proc_id))
     : lgid(lgid),
       num_proc(num_proc),
       last(std::make_unique<uint64_t[]>(num_proc)),
@@ -79,14 +79,14 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(
 
   for (size_t i = 0; i < num_proc; i++) {
     bcast_buf.push_back(
-        std::make_unique<BroadcastBuffer>(cb->get_buf(b_idx(i)), BUFFER_SIZE));
+        std::make_unique<BroadcastBuffer>(*cb->get_buf(b_idx(i)), BUFFER_SIZE));
   }
 
-  replay_w_buf = std::make_unique<ReplayBufferWriter>(cb->get_buf(r_idx(lgid)),
+  replay_w_buf = std::make_unique<ReplayBufferWriter>(*cb->get_buf(r_idx(lgid)),
                                                       BUFFER_SIZE, num_proc);
 
   replay_r_buf = std::make_unique<ReplayBufferReader>(
-      &(cb->get_buf(r_idx(lgid))[BUFFER_SIZE]), BUFFER_SIZE, num_proc);
+      cb->get_buf(r_idx(lgid))[BUFFER_SIZE], BUFFER_SIZE, num_proc);
 
   printf("neb: Begin data path!\n");
 
@@ -103,7 +103,7 @@ void NonEquivocatingBroadcast::broadcast(uint64_t k, Broadcastable &msg) {
   // TODO(Kristian): ideally directly write to the bcast_buf
   auto tmp = std::make_unique<volatile uint8_t[]>(BUFFER_ENTRY_SIZE);
   auto msg_size = msg.marshall(tmp.get());
-  auto addr = bcast_buf[lgid]->write(next_idx, k, tmp.get(), msg_size);
+  auto entry = bcast_buf[lgid]->write(next_idx, k, *(tmp.get()), msg_size);
 
   // Broadcast: write to every "broadcast-self-x" qp
   for (size_t i = 0; i < num_proc; i++) {
@@ -112,7 +112,7 @@ void NonEquivocatingBroadcast::broadcast(uint64_t k, Broadcastable &msg) {
     struct ibv_sge sg;
     memset(&sg, 0, sizeof(sg));
 
-    sg.addr = addr;
+    sg.addr = entry->addr();
     sg.length = msg_size + NEB_MSG_OVERHEAD;
     sg.lkey = cb->get_mr(b_idx(lgid))->lkey;
 
@@ -121,7 +121,7 @@ void NonEquivocatingBroadcast::broadcast(uint64_t k, Broadcastable &msg) {
   // increase the message counter
   last[lgid] = next_idx;
   // deliver to ourself
-  deliver_callback(k, reinterpret_cast<volatile uint8_t *>(addr), lgid);
+  deliver_callback(k, entry->content(), lgid);
 }
 
 /**
@@ -146,7 +146,8 @@ void NonEquivocatingBroadcast::start_poller() {
       if (bcast_entry->id() == 0 || bcast_entry->id() != next_index) continue;
 
       printf("neb: bcast from %zu = (%lu, %lu)\n", i, bcast_entry->id(),
-             *reinterpret_cast<volatile uint64_t *>(bcast_entry->content()));
+             *reinterpret_cast<const volatile uint64_t *>(
+                 &bcast_entry->content()));
 
       auto replay_entry_w = replay_w_buf->get_entry(i, next_index);
 
@@ -154,7 +155,8 @@ void NonEquivocatingBroadcast::start_poller() {
              BUFFER_ENTRY_SIZE);
 
       printf("neb: repl for %zu = (%lu, %lu)\n", i, replay_entry_w->id(),
-             *reinterpret_cast<volatile uint64_t *>(replay_entry_w->content()));
+             *reinterpret_cast<const volatile uint64_t *>(
+                 &replay_entry_w->content()));
 
       bool is_valid = true;
       // read replay slots for origin i
@@ -182,10 +184,10 @@ void NonEquivocatingBroadcast::start_poller() {
           is_valid = false;
         }
 
-        printf(
-            "neb: replay entry for %zu at %zu = (%lu,%lu)\n", i, j,
-            replay_entry_r->id(),
-            *reinterpret_cast<volatile uint64_t *>(replay_entry_r->content()));
+        printf("neb: replay entry for %zu at %zu = (%lu,%lu)\n", i, j,
+               replay_entry_r->id(),
+               *reinterpret_cast<const volatile uint64_t *>(
+                   &replay_entry_r->content()));
       }
 
       if (is_valid) {
