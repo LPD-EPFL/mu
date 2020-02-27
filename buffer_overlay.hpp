@@ -23,7 +23,7 @@ class BufferEntry {
  public:
   /**
    * @param start: a reference to the the entry
-   * */
+   **/
   BufferEntry(const volatile uint8_t& start);
 
   /**
@@ -77,14 +77,12 @@ class BroadcastBuffer {
   std::unique_ptr<BufferEntry> get_entry(uint64_t index);
 
   /**
-   * Ideally we should not copy but marshall data directly into the broadcast
-   * buffer.
    * This function is only used initially when broadcasting a message to write
    *it into a memory region accessible by the RNIC
    * @param index: index of the entry
    * @param k: message key
    * @param buf: a reference to the buffer to copy into the `content` field of
-   *the entry
+   * the entry
    * @param len: the length of the buffer to copy
    * @thorws: std::out_of_range
    **/

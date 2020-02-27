@@ -40,7 +40,7 @@ std::unique_ptr<BufferEntry> BroadcastBuffer::get_entry(uint64_t index) {
   return std::make_unique<BufferEntry>(*(&start + get_byte_offset(index)));
 }
 
-// TODO(Kristian): eventually rather pass an object with a marshall interface
+// TODO(Kristian): Eventually, rather pass an object with a marshall interface
 // and save creating an intermediary buffer and a copy cycle
 std::unique_ptr<BufferEntry> BroadcastBuffer::write(uint64_t index, uint64_t k,
                                                     volatile uint8_t& buf,

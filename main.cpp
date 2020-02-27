@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
     usleep(20000);
   }
 
-  printf("main: sleep for 1 sek\n");
+  printf("main: sleep for 1 sec\n");
   std::this_thread::sleep_for(std::chrono::seconds(1));
 
   return 0;
