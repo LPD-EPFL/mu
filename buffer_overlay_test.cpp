@@ -1,27 +1,27 @@
 #include <iostream>
 #include <vector>
-
+#include <cstring>
 #include "buffer_overlay.cpp"
 
 void boradcast_buffer_test() {
   printf("---boradcast_buffer_test---\n");
+  
   const auto buf_size = 2048;
+  const char str[100] = "Hello World!";
 
-  auto buf = (uint8_t*)calloc(buf_size, sizeof(uint8_t));
-  auto bcast_buf = BroadcastBuffer(buf, buf_size);
+  std::unique_ptr<uint8_t[]> buf((uint8_t*)calloc(buf_size, sizeof(uint8_t)));
+  auto bcast_buf = BroadcastBuffer(buf.get(), buf_size);
 
   auto e = bcast_buf.get_entry(1);
-
   printf("ID: %lu, Content: %s\n", e->id(), e->content());
 
-  char str[100] = "Hello World!";
 
   bcast_buf.write(1, 1, (uint8_t*)&str, strlen(str));
   bcast_buf.write(10, 10, (uint8_t*)&str, strlen(str));
 
   e = bcast_buf.get_entry(1);
   printf("ID: %lu, Content: %s\n", e->id(), e->content());
-
+  
   e = bcast_buf.get_entry(10);
   printf("ID: %lu, Content: %s\n", e->id(), e->content());
 
@@ -44,8 +44,9 @@ void replay_buffer_write_test() {
   const auto num_proc = 4;
   const auto process_space = 512;
 
-  auto buf = (uint8_t*)calloc(buf_size, sizeof(uint8_t));
-  auto replay_buf_w = ReplayBufferWriter(buf, buf_size, num_proc);
+  std::unique_ptr<uint8_t[]> buf((uint8_t*)calloc(buf_size, sizeof(uint8_t)));
+
+  auto replay_buf_w = ReplayBufferWriter(buf.get(), buf_size, num_proc);
 
   // origin_id, entry_index, expected_offset
   typedef std::tuple<uint64_t, uint64_t, uint64_t> test_case;
@@ -54,6 +55,7 @@ void replay_buffer_write_test() {
 
   cases.push_back({0, 1, 0});
   cases.push_back({0, 2, BUFFER_ENTRY_SIZE});
+  cases.push_back({0, 4, 3 * BUFFER_ENTRY_SIZE});
   cases.push_back({1, 1, process_space});
 
   for (auto c : cases) {
@@ -65,12 +67,6 @@ void replay_buffer_write_test() {
       throw;
     }
   }
-
-  auto offset = replay_buf_w.get_byte_offset(0, 4);
-
-  if (offset != 3 * BUFFER_ENTRY_SIZE) {
-    throw std::logic_error("wrong offset returned");
-  }
 }
 
 void replay_buffer_read_test() {
@@ -80,8 +76,9 @@ void replay_buffer_read_test() {
   const auto process_space = 4096 * 4 * BUFFER_ENTRY_SIZE;
   const auto entry_space = BUFFER_ENTRY_SIZE * num_proc;
 
-  auto buf = (uint8_t*)calloc(buf_size, sizeof(uint8_t));
-  auto replay_buf_r = ReplayBufferReader(buf, buf_size, num_proc);
+  std::unique_ptr<uint8_t[]> buf((uint8_t*)calloc(buf_size, sizeof(uint8_t)));
+  
+  auto replay_buf_r = ReplayBufferReader(buf.get(), buf_size, num_proc);
 
   // origin_id, replayer_id, entry_index, expected_offset
   typedef std::tuple<uint64_t, uint64_t, uint64_t, uint64_t> test_case;

@@ -77,6 +77,17 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(
     MemoryStore::getInstance().wait_till_ready(clt_name);
   }
 
+  for (size_t i = 0; i < num_proc; i++) {
+    bcast_buf.push_back(
+        std::make_unique<BroadcastBuffer>(cb->get_buf(b_idx(i)), BUFFER_SIZE));
+  }
+
+  replay_w_buf = std::make_unique<ReplayBufferWriter>(cb->get_buf(r_idx(lgid)),
+                                                      BUFFER_SIZE, num_proc);
+
+  replay_r_buf = std::make_unique<ReplayBufferReader>(
+      &(cb->get_buf(r_idx(lgid))[BUFFER_SIZE]), BUFFER_SIZE, num_proc);
+
   printf("neb: Begin data path!\n");
 
   poller_thread = std::thread([=] { start_poller(); });
@@ -87,16 +98,13 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(
  * TODO(Kristian): DOC
  */
 void NonEquivocatingBroadcast::broadcast(uint64_t k, Broadcastable &msg) {
-  auto bcast_buf = BroadcastBuffer(cb->get_buf(b_idx(lgid)), BUFFER_SIZE);
+  const auto next_idx = last[lgid] + 1;
+
   // TODO(Kristian): ideally directly write to the bcast_buf
   auto tmp = std::make_unique<volatile uint8_t[]>(BUFFER_ENTRY_SIZE);
   auto msg_size = msg.marshall(tmp.get());
+  auto addr = bcast_buf[lgid]->write(next_idx, k, tmp.get(), msg_size);
 
-  const auto next_idx = last[lgid] + 1;
-
-  auto addr = bcast_buf.write(next_idx, k, tmp.get(), msg_size);
-  printf("boradcasting: %lu\n", *reinterpret_cast<volatile uint64_t *>(
-                                    bcast_buf.get_entry(next_idx)->content()));
   // Broadcast: write to every "broadcast-self-x" qp
   for (size_t i = 0; i < num_proc; i++) {
     if (i == lgid) continue;
@@ -108,7 +116,7 @@ void NonEquivocatingBroadcast::broadcast(uint64_t k, Broadcastable &msg) {
     sg.length = msg_size + NEB_MSG_OVERHEAD;
     sg.lkey = cb->get_mr(b_idx(lgid))->lkey;
 
-    post_write(sg, i, bcast_buf.get_byte_offset(next_idx));
+    post_write(sg, i, bcast_buf[lgid]->get_byte_offset(next_idx));
   }
 
   // increase the message counter
@@ -125,22 +133,13 @@ void NonEquivocatingBroadcast::start_poller() {
 
   poller_running = true;
 
-  auto replay_buf_w =
-      ReplayBufferWriter(cb->get_buf(r_idx(lgid)), BUFFER_SIZE, num_proc);
-
-  auto replay_buf_r = ReplayBufferReader(
-      &(cb->get_buf(r_idx(lgid))[BUFFER_SIZE]), BUFFER_SIZE, num_proc);
-
   while (poller_running) {
     for (size_t i = 0; i < num_proc; i++) {
       if (i == lgid) continue;
 
       uint64_t next_index = last[i] + 1;
 
-      printf("Process %lu index %lu\n", i, next_index);
-
-      auto bcast_buf = BroadcastBuffer(cb->get_buf(b_idx(i)), BUFFER_SIZE);
-      auto bcast_entry = bcast_buf.get_entry(next_index);
+      auto bcast_entry = bcast_buf[i]->get_entry(next_index);
 
       // TODO(Kristian): eventually check for matching signature
       if (bcast_entry->id() == 0 || bcast_entry->id() != next_index) continue;
@@ -148,7 +147,7 @@ void NonEquivocatingBroadcast::start_poller() {
       printf("neb: bcast from %zu = (%lu, %lu)\n", i, bcast_entry->id(),
              *reinterpret_cast<volatile uint64_t *>(bcast_entry->content()));
 
-      auto replay_entry_w = replay_buf_w.get_entry(i, next_index);
+      auto replay_entry_w = replay_w_buf->get_entry(i, next_index);
 
       // TODO(Kristian): make it a local RDMA write
       memcpy((void *)replay_entry_w->addr(), (void *)bcast_entry->addr(),
@@ -159,12 +158,14 @@ void NonEquivocatingBroadcast::start_poller() {
 
       bool is_valid = true;
       // read replay slots for origin i
+      // for now in every loop we trigger a blocking (until local senq queue has
+      // processed the wr) read request.
       for (size_t j = 0; j < num_proc; j++) {
         if (j == lgid || j == i) {
           continue;
         }
 
-        auto replay_entry_r = replay_buf_r.get_entry(i, j, next_index);
+        auto replay_entry_r = replay_r_buf->get_entry(i, j, next_index);
 
         struct ibv_sge sg;
         memset(&sg, 0, sizeof(sg));
@@ -173,9 +174,10 @@ void NonEquivocatingBroadcast::start_poller() {
         sg.length = BUFFER_ENTRY_SIZE;
         sg.lkey = cb->get_mr(r_idx(lgid))->lkey;
 
-        post_replay_read(sg, j, replay_buf_w.get_byte_offset(i, next_index));
+        post_replay_read(sg, j, replay_w_buf->get_byte_offset(i, next_index));
 
-        if (memcmp((void *)bcast_entry->addr(), (void *)replay_entry_r->addr(),
+        if (replay_entry_r->id() != 0 &&
+            memcmp((void *)bcast_entry->addr(), (void *)replay_entry_r->addr(),
                    BUFFER_ENTRY_SIZE)) {
           is_valid = false;
         }
@@ -191,8 +193,6 @@ void NonEquivocatingBroadcast::start_poller() {
         last[i] = next_index;
       }
     }
-
-    sleep(1);
   }
 
   printf("neb: poller thread finishing\n");
@@ -229,8 +229,8 @@ int NonEquivocatingBroadcast::post_write(ibv_sge sg, size_t dest_id,
     printf("bad_wr is set!\n");
   }
 
-  return 0;
   // hrd_poll_cq(cb->conn_cq[i * 2], 1, &wc);
+  return 0;
 }
 
 /**
@@ -240,13 +240,16 @@ int NonEquivocatingBroadcast::post_replay_read(ibv_sge sg, size_t r_id,
                                                uint64_t msg_offset) {
   struct ibv_send_wr wr;
   struct ibv_send_wr *bad_wr = nullptr;
-  // struct ibv_wc wc;
+  struct ibv_wc wc;
   memset(&wr, 0, sizeof(wr));
 
   wr.sg_list = &sg;
   wr.num_sge = 1;
   wr.opcode = IBV_WR_RDMA_READ;
-  // wr.send_flags = IBV_SEND_SIGNALED;
+  // for now we want a signal so we don't flood the send queue with read
+  // requests since the poller_thread is reading infinitelly until it sees a
+  // value.
+  wr.send_flags = IBV_SEND_SIGNALED;
   wr.wr.rdma.remote_addr = cb->get_r_qp(r_idx(r_id))->buf_addr + msg_offset;
   wr.wr.rdma.rkey = cb->get_r_qp(r_idx(r_id))->rkey;
 
@@ -258,7 +261,7 @@ int NonEquivocatingBroadcast::post_replay_read(ibv_sge sg, size_t r_id,
     return -1;
   }
 
-  // hrd_poll_cq(cb->get_cq(r_idx(r_id)), 1, &wc);
+  hrd_poll_cq(cb->get_cq(r_idx(r_id)), 1, &wc);
 
   if (bad_wr != nullptr) {
     printf("bad_wr is set!\n");

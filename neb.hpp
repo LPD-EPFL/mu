@@ -1,5 +1,6 @@
 #include <cstring>
 #include <thread>
+#include <vector>
 
 #include "buffer_overlay.hpp"
 #include "ctrl_block.hpp"
@@ -38,6 +39,10 @@ class NonEquivocatingBroadcast {
 
   // last received message counter for every process
   std::unique_ptr<uint64_t[]> last;
+
+  std::vector<std::unique_ptr<BroadcastBuffer>> bcast_buf;
+  std::unique_ptr<ReplayBufferWriter> replay_w_buf;
+  std::unique_ptr<ReplayBufferReader> replay_r_buf;
 
   // RDMA connector
   std::unique_ptr<ControlBlock> cb;

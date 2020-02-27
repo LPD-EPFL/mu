@@ -4,11 +4,9 @@
 
 #include "consts.hpp"
 
-/**
- * NOTE: Buffer entries are indexed beginning from 1! Trying to access an entry
- * with index 0 will throw a `std::out_of_range`. Internally indexing starts at
- * 0. However, the exposed interface assumes indexes starting from 1.
- **/
+/// NOTE: Buffer entries are indexed beginning from 1! Trying to access an entry
+/// at index 0 will throw a `std::out_of_range`. Internally, indexing starts at
+/// 0. However, the exposed interface assumes indexes starting from 1.
 
 /**
  * A buffer entry has a fixed size of `BUFFER_ENTRY_SIZE` which should always
@@ -62,7 +60,7 @@ class BroadcastBuffer {
 
   /**
    * @param index: index of the entry
-   * @returns: the offset in bytes where this entries lies inside the buffer
+   * @returns: the offset in bytes where this entries is inside the buffer
    * @thorws: std::out_of_range
    **/
   uint64_t get_byte_offset(uint64_t index);
@@ -79,6 +77,7 @@ class BroadcastBuffer {
    * @param k: message key
    * @param buf: the buffer to write into the `content` field of the entry
    * @param len: the length of the buffer to copy
+   * @thorws: std::out_of_range
    **/
   size_t write(uint64_t index, uint64_t k, volatile uint8_t* buf, size_t len);
 
@@ -127,8 +126,8 @@ class ReplayBufferWriter {
  * for every index there is a slot for every process to store the replayed
  * values.
  *
- * We therefore don't support any direct write opertaions since the RNIC will
- * writeto this buffer.
+ * We don't support any direct write opertaions since the RNIC will write to 
+ * this buffer.
  **/
 class ReplayBufferReader {
  public:

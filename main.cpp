@@ -51,15 +51,15 @@ int main(int argc, char *argv[]) {
 
   NebSampleMessage m;
 
-  m.val = 1000 + lgid;
 
+  m.val = 1000 + lgid;
   neb->broadcast(1, m);
-  sleep(1);
+  m.val = 2000 + lgid;
   neb->broadcast(2, m);
-  sleep(1);
+  m.val = 3000 + lgid;
   neb->broadcast(3, m);
 
-  std::this_thread::sleep_for(std::chrono::seconds(10));
+  std::this_thread::sleep_for(std::chrono::seconds(2));
 
   return 0;
 }
