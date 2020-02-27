@@ -22,7 +22,7 @@
 class BufferEntry {
  public:
   /**
-   * @param ptr: a poiter to the start address of the entry
+   * @param ptr: a pointer to the start address of the entry
    * */
   BufferEntry(volatile uint8_t* ptr);
 
@@ -60,22 +60,25 @@ class BroadcastBuffer {
 
   /**
    * @param index: index of the entry
-   * @returns: the offset in bytes where this entries is inside the buffer
+   * @returns: the offset in bytes where this entry resides in the buffer
    * @thorws: std::out_of_range
    **/
   uint64_t get_byte_offset(uint64_t index);
 
   /**
    * @param index: index of the entry
-   * @returns: the buffer entry associated with the provided index
+   * @returns: the entry associated with the provided index
    * @thorws: std::out_of_range
    **/
   std::unique_ptr<BufferEntry> get_entry(uint64_t index);
 
   /**
+   * Ideally we should not copy but marshall data directly into the broadcast
+   * buffer.
+   * This function is only used initially when broadcasting a
    * @param index: index of the entry
    * @param k: message key
-   * @param buf: the buffer to write into the `content` field of the entry
+   * @param buf: the buffer to copy into the `content` field of the entry
    * @param len: the length of the buffer to copy
    * @thorws: std::out_of_range
    **/
@@ -126,7 +129,7 @@ class ReplayBufferWriter {
  * for every index there is a slot for every process to store the replayed
  * values.
  *
- * We don't support any direct write opertaions since the RNIC will write to 
+ * We don't support any direct write opertaions since the RNIC will write to
  * this buffer.
  **/
 class ReplayBufferReader {

@@ -31,6 +31,9 @@ class NonEquivocatingBroadcast {
   void broadcast(uint64_t k, Broadcastable &msg);
 
  private:
+  NonEquivocatingBroadcast() = default;
+  void operator=(MemoryStore const &);
+
   // local id
   size_t lgid;
 

@@ -50,16 +50,14 @@ int main(int argc, char *argv[]) {
                                                    deliver_callback);
 
   NebSampleMessage m;
+  for (int i = 1; i <= 200; i++) {
+    m.val = 1000 * lgid + i;
+    neb->broadcast(i, m);
+    usleep(20000);
+  }
 
-
-  m.val = 1000 + lgid;
-  neb->broadcast(1, m);
-  m.val = 2000 + lgid;
-  neb->broadcast(2, m);
-  m.val = 3000 + lgid;
-  neb->broadcast(3, m);
-
-  std::this_thread::sleep_for(std::chrono::seconds(2));
+  printf("main: sleep for 1 sek\n");
+  std::this_thread::sleep_for(std::chrono::seconds(1));
 
   return 0;
 }

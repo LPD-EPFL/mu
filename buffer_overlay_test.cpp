@@ -27,12 +27,14 @@ void boradcast_buffer_test() {
 
   try {
     bcast_buf.get_entry(1000);
+    exit(1);
   } catch (const std::exception& e) {
     printf("correctly thrown: %s for index 1000\n", e.what());
   }
 
   try {
     bcast_buf.get_entry(0);
+    exit(1);
   } catch (const std::out_of_range& e) {
     printf("correctly thrown: %s for index 0\n", e.what());
   }
@@ -64,7 +66,7 @@ void replay_buffer_write_test() {
     if (offset != std::get<2>(c)) {
       std::cerr << "[ERR] wrong offset, expected: " << std::get<2>(c)
                 << ", got: " << offset << std::endl;
-      throw;
+      exit(1);
     }
   }
 }
@@ -99,7 +101,7 @@ void replay_buffer_read_test() {
     if (offset != std::get<3>(c)) {
       std::cerr << "[ERR] wrong offset, expected: " << std::get<3>(c)
                 << ", got: " << offset << std::endl;
-      throw;
+      exit(1);
     }
   }
 }

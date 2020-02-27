@@ -114,4 +114,3 @@ std::unique_ptr<BufferEntry> ReplayBufferReader::get_entry(size_t origin_id,
       &ptr[get_byte_offset(origin_id, replayer_id, index)]);
 }
 
-/* -------------------------------------------------------------------------- */

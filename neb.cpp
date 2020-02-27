@@ -118,9 +118,10 @@ void NonEquivocatingBroadcast::broadcast(uint64_t k, Broadcastable &msg) {
 
     post_write(sg, i, bcast_buf[lgid]->get_byte_offset(next_idx));
   }
-
   // increase the message counter
   last[lgid] = next_idx;
+  // deliver to ourself
+  deliver_callback(k, reinterpret_cast<volatile uint8_t *>(addr), lgid);
 }
 
 /**
@@ -149,7 +150,6 @@ void NonEquivocatingBroadcast::start_poller() {
 
       auto replay_entry_w = replay_w_buf->get_entry(i, next_index);
 
-      // TODO(Kristian): make it a local RDMA write
       memcpy((void *)replay_entry_w->addr(), (void *)bcast_entry->addr(),
              BUFFER_ENTRY_SIZE);
 
@@ -204,7 +204,7 @@ void NonEquivocatingBroadcast::start_poller() {
 int NonEquivocatingBroadcast::post_write(ibv_sge sg, size_t dest_id,
                                          uint64_t msg_offset) {
   struct ibv_send_wr wr;
-  // struct ibv_wc wc;
+  struct ibv_wc wc;
   struct ibv_send_wr *bad_wr = nullptr;
 
   memset(&wr, 0, sizeof(wr));
@@ -213,7 +213,14 @@ int NonEquivocatingBroadcast::post_write(ibv_sge sg, size_t dest_id,
   wr.num_sge = 1;
   wr.opcode = IBV_WR_RDMA_WRITE;
   wr.next = nullptr;
-  // wr.send_flags = IBV_SEND_SIGNALED;
+  // A WR is considered outstanding until there is a Work Completion for it or
+  // for other WRs in that Work Queue.
+  // Without using a signaled wr we'd be only able to send max_send_wr (which
+  // we set to 128).
+  // Eventually, only every message with id % max_send_wr == 0 might be
+  // signalled for which we poll from the CQ. This will increase the
+  // performance.
+  wr.send_flags = IBV_SEND_SIGNALED;
   wr.wr.rdma.remote_addr = cb->get_r_qp(b_idx(dest_id))->buf_addr + msg_offset;
   wr.wr.rdma.rkey = cb->get_r_qp(b_idx(dest_id))->rkey;
 
@@ -229,7 +236,7 @@ int NonEquivocatingBroadcast::post_write(ibv_sge sg, size_t dest_id,
     printf("bad_wr is set!\n");
   }
 
-  // hrd_poll_cq(cb->conn_cq[i * 2], 1, &wc);
+  hrd_poll_cq(cb->get_cq(b_idx(dest_id)), 1, &wc);
   return 0;
 }
 
