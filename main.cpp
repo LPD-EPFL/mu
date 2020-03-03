@@ -2,11 +2,6 @@
 
 #include "neb.hpp"
 
-void deliver_callback(void *data) {
-  printf("Delivered:\n");
-  printf("%s", (char *)data);
-}
-
 class NebSampleMessage : public NonEquivocatingBroadcast::Broadcastable {
  public:
   uint64_t val;
@@ -19,8 +14,20 @@ class NebSampleMessage : public NonEquivocatingBroadcast::Broadcastable {
     return sizeof(val);
   };
 
+  void unmarshall(const volatile uint8_t &buf) {
+    val = reinterpret_cast<const volatile uint64_t &>(buf);
+  }
+
   size_t size() { return sizeof(val); }
 };
+
+void deliver_callback(uint64_t k, const volatile uint8_t &m, size_t proc_id) {
+  NebSampleMessage msg;
+
+  msg.unmarshall(m);
+
+  printf("main: delivered (%lu, %lu) by %lu \n", k, msg.val, proc_id);
+}
 
 /*
  * NOTE: we assume IDs starting from 0
@@ -43,12 +50,14 @@ int main(int argc, char *argv[]) {
                                                    deliver_callback);
 
   NebSampleMessage m;
+  for (int i = 1; i <= 200; i++) {
+    m.val = 1000 * lgid + i;
+    neb->broadcast(i, m);
+    usleep(20000);
+  }
 
-  m.val = 1000 + lgid;
-
-  neb->broadcast(1, m);
-
-  std::this_thread::sleep_for(std::chrono::seconds(10));
+  printf("main: sleep for 1 sec\n");
+  std::this_thread::sleep_for(std::chrono::seconds(1));
 
   return 0;
 }

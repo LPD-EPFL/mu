@@ -19,5 +19,5 @@ static constexpr auto ENV_REGISTRY_IP = "NEB_REGISTRY_IP";
 static constexpr size_t BUFFER_SIZE = 8 * 1024 * 1024;
 // fixed size for every entry in the buffer for quick access
 static constexpr int BUFFER_ENTRY_SIZE = 128;
-// 8 bytes for storing the message id and another 8 for storing the data size;
-static constexpr int NEB_MSG_OVERHEAD = 16;
+// 8 bytes for storing the message id
+static constexpr int NEB_MSG_OVERHEAD = 8;

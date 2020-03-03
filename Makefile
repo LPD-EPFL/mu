@@ -7,7 +7,7 @@ APPS    := main
 
 all: ${APPS}
 
-main: ctrl_block.o store_conn.o util.o neb.o main.o
+main: buffer_overlay.o ctrl_block.o store_conn.o util.o neb.o main.o
 	${LD} -o $@ $^ ${LDFLAGS}
 
 PHONY: clean
