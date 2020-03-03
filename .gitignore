@@ -34,3 +34,6 @@ main
 
 # MAC specific
 .DS_Store
+
+# Other
+build/

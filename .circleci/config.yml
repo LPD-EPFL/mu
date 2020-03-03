@@ -6,7 +6,7 @@ jobs:
     steps:
       - checkout
       - run: sudo apt-get update
-      - run: sudo apt-get install libibverbs-dev libmemcached-dev libnuma-dev
-      - run: g++ --version
-      - run: make
+      - run: sudo apt-get install libibverbs-dev libmemcached-dev
+      - run: sudo pip install --upgrade conan
+      - run: ./build.sh
 

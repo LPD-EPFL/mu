@@ -91,7 +91,7 @@ class BroadcastBuffer {
 
  private:
   volatile uint8_t& start;
-  size_t buf_size;
+  size_t buf_size;  
   uint64_t num_entries;
 };
 
