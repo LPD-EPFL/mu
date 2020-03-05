@@ -18,7 +18,7 @@
 
 - libmemcached-dev
 - libibverbs-dev
-- clang-format
+- clang-format v6.0.0
 
 
 
