@@ -35,5 +35,8 @@ main
 # MAC specific
 .DS_Store
 
+# Editor specific
+.vscode/
+
 # Other
 build/

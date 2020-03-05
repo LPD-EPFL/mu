@@ -1,27 +1,36 @@
-# Non-Equivocating Broadcast with RDMA
+# Dory
 
 [![CircleCI](https://circleci.com/gh/kristianmitk/neb-rdma.svg?style=shield&circle-token=8aee442f89261c33ece50901b09ef414a085ca9f)](https://circleci.com/gh/kristianmitk/neb-rdma)
 
 ## Requirements
 
-- [conan](https://conan.io/) package manager
-- ibverbs
-- memcached
+- ### [conan](https://conan.io/) package manager
+    ```sh 
+    pip3 install --user conan
+    ```
+
+    make sure to set the default ABI to C++11 with:
+
+    ```sh
+    conan profile new default --detect  # Generates default profile detecting GCC and sets old ABI
+    conan profile update settings.compiler.libcxx=libstdc++11 default  # Sets libcxx to C++11 ABI
+    ```
+
+- ### libmemcached-dev
+- ### libibverbs-dev
+
+
 
 ## Build
 
-From within root:
+Run from within the root:
 
 ```sh
 ./build.sh
 ```
 
+this will create all conan packages and build the executables.
+
 ## Usage
 
-From within root:
-
-```sh
-./build/bin/main <process-id> <numer-of-processes>
-```
-
-_Note:_ process IDs have to start from 0.
+Refer to the respective package READMEs.

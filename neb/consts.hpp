@@ -15,7 +15,7 @@ static constexpr size_t QP_NAME_LENGTH = 200;
 static constexpr auto RESERVED_NAME_PREFIX = "NEB__READY__";
 static constexpr size_t DEFAULT_NUM_PROCESSES = 4;
 static constexpr int DEFAULT_MEMCACHED_PORT = 11212;
-static constexpr auto ENV_REGISTRY_IP = "NEB_REGISTRY_IP";
+static constexpr auto ENV_REGISTRY_IP = "DORY_REGISTRY_IP";
 static constexpr size_t BUFFER_SIZE = 8 * 1024 * 1024;
 // fixed size for every entry in the buffer for quick access
 static constexpr int BUFFER_ENTRY_SIZE = 128;

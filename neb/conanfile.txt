@@ -1,5 +1,7 @@
 [requires]
 spdlog/1.5.0
+dory-memstore/0.0.1
+
 
 [generators]
 cmake

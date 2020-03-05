@@ -3,11 +3,16 @@
 set -e
 set -x
 
-rm -rf build
-mkdir build
-pushd build
+for p in shared memstore ctrl conn;
+do
+    pushd "$p"
+        conan create .
+    popd
+done
 
-conan install ..
-
-cmake ..
-cmake --build .
+for m in leader-election neb;
+do
+    pushd "$m"
+        ./build.sh
+    popd
+done

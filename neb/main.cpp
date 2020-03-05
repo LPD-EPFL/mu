@@ -1,5 +1,6 @@
 #include <cstdlib>
 
+#include <dory/store.hpp>
 #include "neb.hpp"
 
 class NebSampleMessage : public NonEquivocatingBroadcast::Broadcastable {
@@ -55,6 +56,10 @@ int main(int argc, char *argv[]) {
     neb->broadcast(i, m);
     usleep(20000);
   }
+
+  auto &store = dory::MemoryStore::getInstance();
+
+  store.set("Hello", "World");
 
   printf("main: sleep for 1 sec\n");
   std::this_thread::sleep_for(std::chrono::seconds(1));

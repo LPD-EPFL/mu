@@ -25,10 +25,14 @@ BroadcastBuffer::BroadcastBuffer(volatile uint8_t& start, size_t buf_size)
       num_entries(buf_size / BUFFER_ENTRY_SIZE) {}
 
 uint64_t BroadcastBuffer::get_byte_offset(uint64_t index) {
+  if (index == 0) {
+    throw std::out_of_range("Indexing starts at 1");
+  }
+
   // internally we start indexing from 0
   index -= 1;
 
-  if (index >= num_entries || index < 0) {
+  if (index >= num_entries) {
     throw std::out_of_range(
         "Attempt to access memory outside of the buffer space");
   }
@@ -64,10 +68,14 @@ ReplayBufferWriter::ReplayBufferWriter(const volatile uint8_t& start,
       num_entries_per_proc(buf_size / BUFFER_ENTRY_SIZE / num_proc) {}
 
 uint64_t ReplayBufferWriter::get_byte_offset(size_t proc_id, uint64_t index) {
+  if (index == 0) {
+    throw std::out_of_range("Indexing starts at 1");
+  }
+
   // internally we start indexing from 0
   index -= 1;
 
-  if (index >= num_entries_per_proc || index < 0) {
+  if (index >= num_entries_per_proc) {
     throw std::out_of_range(
         "Attempt to access memory outside of the buffer space");
   }
@@ -95,10 +103,14 @@ ReplayBufferReader::ReplayBufferReader(const volatile uint8_t& start,
 uint64_t ReplayBufferReader::get_byte_offset(size_t origin_id,
                                              size_t replayer_id,
                                              uint64_t index) {
+  if (index == 0) {
+    throw std::out_of_range("Indexing starts at 1");
+  }
+
   // internally we start indexing from 0
   index -= 1;
 
-  if (index >= num_entries_per_proc || index < 0) {
+  if (index >= num_entries_per_proc) {
     throw std::out_of_range(
         "Attempt to access memory outside of the buffer space");
   }

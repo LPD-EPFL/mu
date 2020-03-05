@@ -1,12 +1,14 @@
 version: 2
 jobs:
   build:
-    machine:
-      image: ubuntu-1604:201903-01
+    docker:
+      - image: circleci/buildpack-deps:bionic
     steps:
       - checkout
       - run: sudo apt-get update
-      - run: sudo apt-get install libibverbs-dev libmemcached-dev
-      - run: sudo pip install --upgrade conan
+      - run: sudo apt-get -y install libibverbs-dev libmemcached-dev python3 python3-pip cmake
+      - run: pip3 install --upgrade conan
+      - run: conan profile new default --detect
+      - run: conan profile update settings.compiler.libcxx=libstdc++11 default
       - run: ./build.sh
 
