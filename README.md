@@ -1,6 +1,6 @@
 # Dory
 
-[![CircleCI](https://circleci.com/gh/kristianmitk/neb-rdma.svg?style=shield&circle-token=8aee442f89261c33ece50901b09ef414a085ca9f)](https://circleci.com/gh/kristianmitk/neb-rdma)
+[![CircleCI](https://circleci.com/gh/kristianmitk/dory/tree/master.svg?style=svg&circle-token=8aee442f89261c33ece50901b09ef414a085ca9f)](https://circleci.com/gh/kristianmitk/dory/tree/master)
 
 ## Requirements
 
