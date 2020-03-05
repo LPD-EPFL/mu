@@ -6,7 +6,7 @@
 #include "consts.hpp"
 
 class ConnectionConfig {
-public:
+ public:
   // Builder class
   class builder;
 
@@ -38,8 +38,12 @@ public:
                    std::shared_ptr<volatile uint8_t[]> prealloc_buf,
                    size_t buf_size, int buf_shm_key, size_t sq_depth,
                    size_t max_rd_atomic)
-      : num_qps(num_qps), use_uc(use_uc), prealloc_buf(prealloc_buf),
-        buf_size(buf_size), buf_shm_key(buf_shm_key), sq_depth(sq_depth),
+      : num_qps(num_qps),
+        use_uc(use_uc),
+        prealloc_buf(prealloc_buf),
+        buf_size(buf_size),
+        buf_shm_key(buf_shm_key),
+        sq_depth(sq_depth),
         max_rd_atomic(max_rd_atomic) {}
 
   std::string to_string() {
@@ -54,7 +58,7 @@ public:
 };
 
 class ConnectionConfig::builder {
-public:
+ public:
   builder &num_qps(size_t v) {
     _num_qps = v;
     return *this;
@@ -95,7 +99,7 @@ public:
                             _buf_shm_key, _sq_depth, _max_rd_atomic};
   }
 
-private:
+ private:
   // num_qps > 0 is used as a validity check
   size_t _num_qps = 0;
   bool _use_uc = false;

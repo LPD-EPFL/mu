@@ -5,7 +5,8 @@
 #include <memory>
 
 namespace dory {
-template <class T> struct DeleteAligned {
+template <class T>
+struct DeleteAligned {
   void operator()(T *data) const { free(data); }
 };
 
@@ -22,4 +23,4 @@ std::unique_ptr<T[], DeleteAligned<T>> allocate_aligned(int alignment,
 
 template <typename T>
 using deleted_unique_ptr = std::unique_ptr<T, std::function<void(T *)>>;
-} // namespace dory
+}  // namespace dory

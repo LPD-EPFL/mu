@@ -9,12 +9,12 @@
 
 #include <infiniband/verbs.h>
 
-#include "device.hpp"
 #include <dory/shared/pointer-wrapper.hpp>
+#include "device.hpp"
 
 namespace dory {
 class ControlBlock {
-public:
+ public:
   enum MemoryRights {
     LOCAL_READ = 0,
     LOCAL_WRITE = IBV_ACCESS_LOCAL_WRITE,
@@ -29,10 +29,10 @@ public:
     uint32_t rkey;
   };
 
-private:
+ private:
   static constexpr int CQDepth = 128;
 
-public:
+ public:
   ControlBlock(ResolvedPort &resolved_port);
 
   void registerPD(std::string name);
@@ -55,7 +55,7 @@ public:
   bool pollCqIsOK(deleted_unique_ptr<struct ibv_cq> &cq,
                   std::vector<struct ibv_wc> &entries);
 
-private:
+ private:
   ResolvedPort resolved_port;
 
   std::vector<deleted_unique_ptr<struct ibv_pd>> pds;
@@ -76,4 +76,4 @@ inline ControlBlock::MemoryRights operator|(ControlBlock::MemoryRights a,
   return static_cast<ControlBlock::MemoryRights>(static_cast<int>(a) |
                                                  static_cast<int>(b));
 }
-} // namespace dory
+}  // namespace dory

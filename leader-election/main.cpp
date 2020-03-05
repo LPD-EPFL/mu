@@ -7,10 +7,10 @@
 #include <map>
 #include <sstream>
 
-#include "failure-detector.hpp"
 #include <dory/ctrl/block.hpp>
 #include <dory/ctrl/device.hpp>
 #include <dory/store.hpp>
+#include "failure-detector.hpp"
 
 int main(int argc, char *argv[]) {
   // uint64_t data[24];
@@ -39,20 +39,20 @@ int main(int argc, char *argv[]) {
   constexpr int minimum_id = 1;
   int id = 0;
   switch (argv[1][0]) {
-  case '1':
-    id = 1;
-    break;
-  case '2':
-    id = 2;
-    break;
-  case '3':
-    id = 3;
-    break;
-  case '4':
-    id = 4;
-    break;
-  default:
-    throw std::runtime_error("Invalid id");
+    case '1':
+      id = 1;
+      break;
+    case '2':
+      id = 2;
+      break;
+    case '3':
+      id = 3;
+      break;
+    case '4':
+      id = 4;
+      break;
+    default:
+      throw std::runtime_error("Invalid id");
   }
 
   // Build the list of remote ids

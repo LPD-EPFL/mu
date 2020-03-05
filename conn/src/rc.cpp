@@ -141,9 +141,9 @@ void ReliableConnection::init(ControlBlock::MemoryRights rights) {
   init_attr.port_num = cb.port();
   init_attr.qp_access_flags = static_cast<int>(rights);
 
-  auto ret = ibv_modify_qp(uniq_qp.get(), &init_attr,
-                           IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT |
-                               IBV_QP_ACCESS_FLAGS);
+  auto ret = ibv_modify_qp(
+      uniq_qp.get(), &init_attr,
+      IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS);
 
   if (ret != 0) {
     throw std::runtime_error("Failed to bring conn QP to INIT: " +
@@ -159,7 +159,7 @@ void ReliableConnection::connect(RemoteConnection &rc) {
   conn_attr.rq_psn = DefaultPSN;
 
   conn_attr.ah_attr.is_global = 0;
-  conn_attr.ah_attr.sl = 0; // TODO: Igor has it to 1
+  conn_attr.ah_attr.sl = 0;  // TODO: Igor has it to 1
   conn_attr.ah_attr.src_path_bits = 0;
   conn_attr.ah_attr.port_num = cb.port();
 
@@ -214,7 +214,7 @@ bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf,
   wr.wr_id = req_id;
   wr.sg_list = &sg;
   wr.num_sge = 1;
-  wr.opcode = static_cast<enum ibv_wr_opcode>(req); // TODO
+  wr.opcode = static_cast<enum ibv_wr_opcode>(req);  // TODO
 
   // if (signaled) {
   wr.send_flags |= IBV_SEND_SIGNALED;
@@ -248,14 +248,14 @@ bool ReliableConnection::pollCqIsOK(CQ cq,
   int num = 0;
 
   switch (cq) {
-  case RecvCQ:
-    num = ibv_poll_cq(create_attr.recv_cq, entries.size(), &entries[0]);
-    break;
-  case SendCQ:
-    num = ibv_poll_cq(create_attr.send_cq, entries.size(), &entries[0]);
-    break;
-  default:
-    throw std::runtime_error("Invalid CQ");
+    case RecvCQ:
+      num = ibv_poll_cq(create_attr.recv_cq, entries.size(), &entries[0]);
+      break;
+    case SendCQ:
+      num = ibv_poll_cq(create_attr.send_cq, entries.size(), &entries[0]);
+      break;
+    default:
+      throw std::runtime_error("Invalid CQ");
   }
 
   if (num >= 0) {
@@ -270,4 +270,4 @@ RemoteConnection ReliableConnection::remoteInfo() const {
   RemoteConnection rc(cb.lid(), uniq_qp->qp_num, mr.addr, mr.size, mr.rkey);
   return rc;
 }
-} // namespace dory
+}  // namespace dory

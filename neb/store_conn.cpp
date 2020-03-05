@@ -13,9 +13,9 @@ MemoryStore::MemoryStore() : memc(memcached_create(nullptr), memcached_free) {
                                    &rc),
       memcached_server_list_free);
 
-  rt_assert(memcached_server_push(memc.get(), servers.get()) ==
-                MEMCACHED_SUCCESS,
-            "mem: Couldn't add memcached server");
+  rt_assert(
+      memcached_server_push(memc.get(), servers.get()) == MEMCACHED_SUCCESS,
+      "mem: Couldn't add memcached server");
 }
 
 void MemoryStore::set(const char *key, void *value, size_t len) {
@@ -128,8 +128,7 @@ MemoryStore::QPAttr *MemoryStore::get_qp(const char *qp_name) {
   assert(strstr(qp_name, RESERVED_NAME_PREFIX) == nullptr);
 
   MemoryStore::QPAttr *ret;
-  for (size_t i = 0; i < strlen(qp_name); i++)
-    assert(qp_name[i] != ' ');
+  for (size_t i = 0; i < strlen(qp_name); i++) assert(qp_name[i] != ' ');
 
   int ret_len = get(qp_name, reinterpret_cast<void **>(&ret));
 

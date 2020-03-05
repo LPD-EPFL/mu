@@ -11,7 +11,10 @@
 namespace dory {
 FailureDetector::FailureDetector(int my_id, std::vector<int> remote_ids,
                                  ControlBlock &cb)
-    : my_id{my_id}, remote_ids{remote_ids}, cb{cb}, outstanding{0},
+    : my_id{my_id},
+      remote_ids{remote_ids},
+      cb{cb},
+      outstanding{0},
       heartbeat_started{false} {
   auto [valid, maximum_id] = valid_ids();
   if (!valid) {
@@ -238,4 +241,4 @@ std::pair<bool, int> FailureDetector::valid_ids() const {
 
   return std::make_pair(true, max);
 }
-} // namespace dory
+}  // namespace dory

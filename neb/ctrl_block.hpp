@@ -1,17 +1,17 @@
 #pragma once
 
-#include "conn_config.hpp"
-#include "store_conn.hpp"
-#include <cassert>
 #include <infiniband/verbs.h>
 #include <malloc.h>
-#include <memory>
 #include <unistd.h>
+#include <cassert>
+#include <memory>
+#include "conn_config.hpp"
+#include "store_conn.hpp"
 
 class ControlBlock {
-public:
+ public:
   class IBResolve {
-  public:
+   public:
     // Device index in list of verbs devices
     int device_id;
     // TODO: use smart pointer
@@ -54,7 +54,7 @@ public:
   // and connects the conn_qp[idx] to it
   void connect_remote_qp(size_t idx, const char *qp_name);
 
-private:
+ private:
   size_t lgid;
 
   size_t port_index;

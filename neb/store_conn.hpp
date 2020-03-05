@@ -1,8 +1,8 @@
 #pragma once
 
-#include "util.hpp"
 #include <libmemcached/memcached.h>
 #include <unistd.h>
+#include "util.hpp"
 
 /**
  * Acts as a central public registry for all processes.
@@ -11,13 +11,13 @@
  * accessed though `MemoryStore::getInstance()`.
  */
 class MemoryStore {
-public:
+ public:
   class QPAttr {
-  public:
+   public:
     char name[QP_NAME_LENGTH];
     uint16_t lid;
     uint32_t qpn;
-    union ibv_gid gid; //< GID, used for only RoCE
+    union ibv_gid gid;  //< GID, used for only RoCE
 
     // Info about the RDMA buffer associated with this QP
     uintptr_t buf_addr;
@@ -66,7 +66,7 @@ public:
    */
   void wait_till_ready(const char *qp_name);
 
-private:
+ private:
   MemoryStore();
   void operator=(MemoryStore const &);
 

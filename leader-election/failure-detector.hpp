@@ -21,7 +21,8 @@ struct OverlayAllocatorState {
   const std::type_info *type;
 };
 
-template <typename T> struct OverlayAllocator {
+template <typename T>
+struct OverlayAllocator {
   typedef T value_type;
 
   OverlayAllocator() : OverlayAllocator(nullptr, 0) {}
@@ -35,7 +36,8 @@ template <typename T> struct OverlayAllocator {
       : state(std::make_shared<OverlayAllocatorState, OverlayAllocatorState>(
             {buf, N, false, &typeid(T)})) {}
 
-  template <typename U> friend struct OverlayAllocator;
+  template <typename U>
+  friend struct OverlayAllocator;
 
   template <typename U>
   OverlayAllocator(OverlayAllocator<U> other) : state(other.state) {}
@@ -44,7 +46,8 @@ template <typename T> struct OverlayAllocator {
 
   void deallocate(T *p, std::size_t n) {}
 
-  template <typename... Args> void construct(T *c, Args... args) {}
+  template <typename... Args>
+  void construct(T *c, Args... args) {}
 
   void destroy(T *c) {}
 
@@ -56,7 +59,7 @@ template <typename T> struct OverlayAllocator {
     return a.state != b.state;
   }
 
-private:
+ private:
   std::shared_ptr<OverlayAllocatorState> state;
 };
 
@@ -64,11 +67,11 @@ private:
 // auto alloc = OverlayAllocator<uint8_t>((uint8_t *)data, len);
 // std::vector <uint8_t, OverlayAllocator<uint8_t>> p(len, alloc);
 // p.resize(len);
-} // namespace dory
+}  // namespace dory
 
 namespace dory {
 class FailureDetector {
-private:
+ private:
   static constexpr double gapFactor = 2;
   static constexpr std::chrono::nanoseconds heartbeatRefreshRate =
       std::chrono::nanoseconds(500);
@@ -77,11 +80,13 @@ private:
   static constexpr int outstanding_multiplier = 4;
   static constexpr int history_length = 10;
 
-private:
+ private:
   struct ReadingStatus {
     ReadingStatus()
-        : value{0}, consecutive_updates{0}, failed_attempts{0}, loop_modulo{0} {
-    }
+        : value{0},
+          consecutive_updates{0},
+          failed_attempts{0},
+          loop_modulo{0} {}
 
     uint64_t value;
     int consecutive_updates;
@@ -89,7 +94,7 @@ private:
     int loop_modulo;
   };
 
-public:
+ public:
   FailureDetector(int my_id, std::vector<int> remote_ids, ControlBlock &cb);
   ~FailureDetector();
 
@@ -108,10 +113,10 @@ public:
 
   int leaderPID();
 
-private:
+ private:
   std::pair<bool, int> valid_ids() const;
 
-private:
+ private:
   int my_id;
   std::vector<int> remote_ids;
   ControlBlock &cb;
@@ -131,4 +136,4 @@ private:
 
   std::vector<struct ibv_wc> entries;
 };
-} // namespace dory
+}  // namespace dory

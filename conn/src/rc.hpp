@@ -49,7 +49,7 @@ struct RemoteConnection {
 
     std::string res(str);
 
-    std::replace(res.begin(), res.end(), ':', ' '); // replace ':' by ' '
+    std::replace(res.begin(), res.end(), ':', ' ');  // replace ':' by ' '
 
     std::stringstream ss(res);
 
@@ -80,7 +80,7 @@ struct RemoteConnection {
 };
 
 class ReliableConnection {
-public:
+ public:
   enum CQ { SendCQ, RecvCQ };
 
   enum RdmaReq { RdmaRead = IBV_WR_RDMA_READ, RdmaWrite = IBV_WR_RDMA_WRITE };
@@ -113,7 +113,7 @@ public:
 
   uintptr_t remoteBuf() const { return rconn.rci.buf_addr; }
 
-private:
+ private:
   ControlBlock &cb;
   struct ibv_pd *pd;
   struct ibv_qp_init_attr create_attr;
@@ -122,4 +122,4 @@ private:
   ControlBlock::MemoryRegion mr;
   RemoteConnection rconn;
 };
-} // namespace dory
+}  // namespace dory

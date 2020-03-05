@@ -7,7 +7,7 @@
 
 namespace dory {
 class OpenDevice {
-public:
+ public:
   OpenDevice();
   OpenDevice(struct ibv_device *device);
 
@@ -83,30 +83,30 @@ public:
   // printf("    max_ah: %d\n", device_attr.max_ah);
   // printf("    phys_port_cnt: %u\n", device_attr.phys_port_cnt);
 
-private:
+ private:
   struct ibv_device *dev = nullptr;
   struct ibv_context *ctx = nullptr;
   struct ibv_device_attr device_attr;
 };
-} // namespace dory
+}  // namespace dory
 
 namespace dory {
 class Devices {
-public:
+ public:
   Devices();
   ~Devices();
 
   std::vector<OpenDevice> &list(bool force = false);
 
-private:
+ private:
   struct ibv_device **dev_list;
   std::vector<OpenDevice> devices;
 };
-} // namespace dory
+}  // namespace dory
 
 namespace dory {
 class ResolvedPort {
-public:
+ public:
   ResolvedPort(OpenDevice &od);
 
   bool bindTo(size_t index);
@@ -117,24 +117,24 @@ public:
 
   OpenDevice &device() { return open_dev; }
 
-private:
+ private:
   static std::string link_layer_str(uint8_t link_layer) {
     switch (link_layer) {
-    case IBV_LINK_LAYER_UNSPECIFIED:
-      return "[Unspecified]";
-    case IBV_LINK_LAYER_INFINIBAND:
-      return "[InfiniBand]";
-    case IBV_LINK_LAYER_ETHERNET:
-      return "[Ethernet]";
-    default:
-      return "[Invalid]";
+      case IBV_LINK_LAYER_UNSPECIFIED:
+        return "[Unspecified]";
+      case IBV_LINK_LAYER_INFINIBAND:
+        return "[InfiniBand]";
+      case IBV_LINK_LAYER_ETHERNET:
+        return "[Ethernet]";
+      default:
+        return "[Invalid]";
     }
   }
 
-private:
+ private:
   OpenDevice &open_dev;
   int port_index;
   uint8_t port_id;
   uint8_t port_lid;
 };
-} // namespace dory
+}  // namespace dory

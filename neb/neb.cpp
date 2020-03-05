@@ -21,7 +21,8 @@ NonEquivocatingBroadcast::~NonEquivocatingBroadcast() {
 NonEquivocatingBroadcast::NonEquivocatingBroadcast(
     size_t lgid, size_t num_proc,
     void (*deliver_cb)(uint64_t k, const volatile uint8_t &m, size_t proc_id))
-    : lgid(lgid), num_proc(num_proc),
+    : lgid(lgid),
+      num_proc(num_proc),
       last(std::make_unique<uint64_t[]>(num_proc)),
       deliver_callback(deliver_cb) {
   ConnectionConfig conn_config = ConnectionConfig::builder{}
@@ -39,8 +40,7 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(
 
   // Announce the QPs
   for (size_t i = 0; i < num_proc; i++) {
-    if (i == lgid)
-      continue;
+    if (i == lgid) continue;
 
     char srv_name[QP_NAME_LENGTH];
 
@@ -53,8 +53,7 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(
 
   // Connect to remote QPs
   for (size_t i = 0; i < num_proc; i++) {
-    if (i == lgid)
-      continue;
+    if (i == lgid) continue;
 
     char clt_name[QP_NAME_LENGTH];
 
@@ -67,8 +66,7 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(
 
   // Wait till qps are ready
   for (size_t i = 0; i < num_proc; i++) {
-    if (i == lgid)
-      continue;
+    if (i == lgid) continue;
 
     char clt_name[QP_NAME_LENGTH];
 
@@ -109,8 +107,7 @@ void NonEquivocatingBroadcast::broadcast(uint64_t k, Broadcastable &msg) {
 
   // Broadcast: write to every "broadcast-self-x" qp
   for (size_t i = 0; i < num_proc; i++) {
-    if (i == lgid)
-      continue;
+    if (i == lgid) continue;
 
     struct ibv_sge sg;
     memset(&sg, 0, sizeof(sg));
@@ -133,23 +130,20 @@ void NonEquivocatingBroadcast::broadcast(uint64_t k, Broadcastable &msg) {
 void NonEquivocatingBroadcast::start_poller() {
   printf("neb: poller thread running\n");
 
-  if (poller_running)
-    return;
+  if (poller_running) return;
 
   poller_running = true;
 
   while (poller_running) {
     for (size_t i = 0; i < num_proc; i++) {
-      if (i == lgid)
-        continue;
+      if (i == lgid) continue;
 
       uint64_t next_index = last[i] + 1;
 
       auto bcast_entry = bcast_buf[i]->get_entry(next_index);
 
       // TODO(Kristian): eventually check for matching signature
-      if (bcast_entry->id() == 0 || bcast_entry->id() != next_index)
-        continue;
+      if (bcast_entry->id() == 0 || bcast_entry->id() != next_index) continue;
 
       printf("neb: bcast from %zu = (%lu, %lu)\n", i, bcast_entry->id(),
              *reinterpret_cast<const volatile uint64_t *>(

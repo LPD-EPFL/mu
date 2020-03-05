@@ -20,7 +20,8 @@ const volatile uint8_t &BufferEntry::signature() {
 /* -------------------------------------------------------------------------- */
 
 BroadcastBuffer::BroadcastBuffer(volatile uint8_t &start, size_t buf_size)
-    : start(start), buf_size(buf_size),
+    : start(start),
+      buf_size(buf_size),
       num_entries(buf_size / BUFFER_ENTRY_SIZE) {}
 
 uint64_t BroadcastBuffer::get_byte_offset(uint64_t index) {
@@ -61,7 +62,9 @@ std::unique_ptr<BufferEntry> BroadcastBuffer::write(uint64_t index, uint64_t k,
 
 ReplayBufferWriter::ReplayBufferWriter(const volatile uint8_t &start,
                                        size_t buf_size, int num_proc)
-    : start(start), buf_size(buf_size), num_proc(num_proc),
+    : start(start),
+      buf_size(buf_size),
+      num_proc(num_proc),
       num_entries_per_proc(buf_size / BUFFER_ENTRY_SIZE / num_proc) {}
 
 uint64_t ReplayBufferWriter::get_byte_offset(size_t proc_id, uint64_t index) {
@@ -91,7 +94,9 @@ std::unique_ptr<BufferEntry> ReplayBufferWriter::get_entry(size_t proc_id,
 
 ReplayBufferReader::ReplayBufferReader(const volatile uint8_t &start,
                                        size_t buf_size, int num_proc)
-    : start(start), buf_size(buf_size), num_proc(num_proc),
+    : start(start),
+      buf_size(buf_size),
+      num_proc(num_proc),
       num_entries_per_proc(buf_size / BUFFER_ENTRY_SIZE / num_proc / num_proc) {
 }
 

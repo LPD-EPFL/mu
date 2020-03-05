@@ -43,7 +43,9 @@ ControlBlock::~ControlBlock() {
 
 ControlBlock::ControlBlock(size_t lgid, size_t port_index, size_t numa_node,
                            ConnectionConfig conn_config)
-    : lgid(lgid), port_index(port_index), numa_node(numa_node),
+    : lgid(lgid),
+      port_index(port_index),
+      numa_node(numa_node),
       conn_config(conn_config) {
   printf("ctb: Begin control path\n");
   printf("ctb: creating control block %zu: port %zu, socket %zu.\n", lgid,
@@ -125,8 +127,7 @@ void ControlBlock::publish_conn_qp(size_t idx, const char *qp_name) {
   assert(strstr(qp_name, RESERVED_NAME_PREFIX) == nullptr);
 
   size_t len = strlen(qp_name);
-  for (size_t i = 0; i < len; i++)
-    assert(qp_name[i] != ' ');
+  for (size_t i = 0; i < len; i++) assert(qp_name[i] != ' ');
 
   MemoryStore::QPAttr qp_attr;
   memset(&qp_attr, 0, sizeof(MemoryStore::QPAttr));
@@ -134,8 +135,7 @@ void ControlBlock::publish_conn_qp(size_t idx, const char *qp_name) {
   strcpy(qp_attr.name, qp_name);
   qp_attr.lid = resolve.port_lid;
   qp_attr.qpn = conn_qp[idx]->qp_num;
-  if (kRoCE)
-    qp_attr.gid = resolve.gid;
+  if (kRoCE) qp_attr.gid = resolve.gid;
 
   qp_attr.buf_addr = reinterpret_cast<uint64_t>(conn_buf[idx]);
   qp_attr.buf_size = conn_config.buf_size;
@@ -157,8 +157,7 @@ void ControlBlock::connect_remote_qp(size_t idx, const char *qp_name) {
   MemoryStore::QPAttr *remote_qp = nullptr;
   while (remote_qp == nullptr) {
     remote_qp = MemoryStore::getInstance().get_qp(qp_name);
-    if (remote_qp == nullptr)
-      usleep(200000);
+    if (remote_qp == nullptr) usleep(200000);
   }
 
   printf("ctb: Found server %s! Connecting..\n", qp_name);
@@ -176,7 +175,7 @@ void ControlBlock::connect_remote_qp(size_t idx, const char *qp_name) {
   conn_attr.ah_attr.dlid = kRoCE ? 0 : remote_qp->lid;
   conn_attr.ah_attr.sl = 0;
   conn_attr.ah_attr.src_path_bits = 0;
-  conn_attr.ah_attr.port_num = resolve.dev_port_id; // Local port!
+  conn_attr.ah_attr.port_num = resolve.dev_port_id;  // Local port!
 
   if (kRoCE) {
     auto &grh = conn_attr.ah_attr.grh;
@@ -243,7 +242,7 @@ void ControlBlock::create_conn_qps() {
     create_attr.qp_type = conn_config.use_uc ? IBV_QPT_UC : IBV_QPT_RC;
 
     create_attr.cap.max_send_wr = conn_config.sq_depth;
-    create_attr.cap.max_recv_wr = 1; // We don't do RECVs on conn QPs
+    create_attr.cap.max_recv_wr = 1;  // We don't do RECVs on conn QPs
     create_attr.cap.max_send_sge = 1;
     create_attr.cap.max_recv_sge = 1;
     create_attr.cap.max_inline_data = kHrdMaxInline;
@@ -283,7 +282,7 @@ MemoryStore::QPAttr *ControlBlock::get_r_qp(size_t idx) { return r_qps[idx]; }
 // Fills its device id and device-local port id (1-based) into the supplied
 // control block.
 ControlBlock::IBResolve ControlBlock::resolve_port_index(size_t phy_port) {
-  std::ostringstream xmsg; // The exception message
+  std::ostringstream xmsg;  // The exception message
 
   IBResolve resolve;
 

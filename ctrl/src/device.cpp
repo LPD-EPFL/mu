@@ -90,7 +90,7 @@ OpenDevice &OpenDevice::operator=(OpenDevice &&o) {
 struct ibv_device_attr const &OpenDevice::device_attributes() const {
   return device_attr;
 }
-} // namespace dory
+}  // namespace dory
 
 // Device definitions
 namespace dory {
@@ -119,7 +119,7 @@ std::vector<OpenDevice> &Devices::list(bool force) {
 
   return devices;
 }
-} // namespace dory
+}  // namespace dory
 
 namespace dory {
 ResolvedPort::ResolvedPort(OpenDevice &od) : open_dev{od}, port_index{-1} {}
@@ -158,4 +158,4 @@ bool ResolvedPort::bindTo(size_t index) {
 
   return false;
 }
-} // namespace dory
+}  // namespace dory

@@ -187,4 +187,4 @@ bool ControlBlock::pollCqIsOK(deleted_unique_ptr<struct ibv_cq> &cq,
     return false;
   }
 }
-} // namespace dory
+}  // namespace dory

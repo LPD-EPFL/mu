@@ -1,6 +1,6 @@
+#include <unistd.h>
 #include <cstring>
 #include <stdexcept>
-#include <unistd.h>
 
 #include "store.hpp"
 
@@ -162,4 +162,4 @@ char const *MemoryStore::env(char const *const name) const {
 //   return ret;
 // }
 
-} // namespace dory
+}  // namespace dory

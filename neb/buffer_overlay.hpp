@@ -1,6 +1,6 @@
+#include <stdint.h>
 #include <cstring>
 #include <memory>
-#include <stdint.h>
 
 #include "consts.hpp"
 
@@ -20,7 +20,7 @@
  *
  **/
 class BufferEntry {
-public:
+ public:
   /**
    * @param start: a reference to the the entry
    **/
@@ -46,7 +46,7 @@ public:
    **/
   uint64_t addr();
 
-private:
+ private:
   const volatile uint8_t &start;
 };
 
@@ -55,7 +55,7 @@ private:
  * processes. For every remote process there exist one broadcast buffer.
  **/
 class BroadcastBuffer {
-public:
+ public:
   /**
    * @param start: a reference to the buffer
    * @param buf_size: the buffer size in bytes
@@ -89,7 +89,7 @@ public:
   std::unique_ptr<BufferEntry> write(uint64_t index, uint64_t k,
                                      volatile uint8_t &buf, size_t len);
 
-private:
+ private:
   volatile uint8_t &start;
   size_t buf_size;
   uint64_t num_entries;
@@ -105,7 +105,7 @@ private:
  * to local RDMA write from the Broadcast buffer to this replay buffer.
  **/
 class ReplayBufferWriter {
-public:
+ public:
   /**
    * @param start: a reference to the buffer
    * @param buf_size: the size of the buffer in bytes
@@ -126,7 +126,7 @@ public:
    **/
   std::unique_ptr<BufferEntry> get_entry(size_t proc_id, uint64_t index);
 
-private:
+ private:
   const volatile uint8_t &start;
   size_t buf_size;
   uint64_t num_proc;
@@ -144,7 +144,7 @@ private:
  * this buffer.
  **/
 class ReplayBufferReader {
-public:
+ public:
   /**
    * @param start: a reference to the buffer
    * @param buf_size: the size of the buffer in bytes
@@ -169,7 +169,7 @@ public:
   std::unique_ptr<BufferEntry> get_entry(size_t origin_id, size_t replayer_id,
                                          uint64_t index);
 
-private:
+ private:
   const volatile uint8_t &start;
   size_t buf_size;
   uint64_t num_proc;
