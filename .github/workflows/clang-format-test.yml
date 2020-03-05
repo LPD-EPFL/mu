@@ -26,4 +26,4 @@ jobs:
         source: '.'
         exclude: 'none'
         extensions: 'hpp,cpp'
-        clangFormatVersion: 9
+        clangFormatVersion: 6
