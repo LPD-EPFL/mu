@@ -4,7 +4,7 @@
 
 ## Requirements
 
-- ### [conan](https://conan.io/) package manager
+- [conan](https://conan.io/) package manager
     ```sh 
     pip3 install --user conan
     ```
@@ -16,8 +16,9 @@
     conan profile update settings.compiler.libcxx=libstdc++11 default  # Sets libcxx to C++11 ABI
     ```
 
-- ### libmemcached-dev
-- ### libibverbs-dev
+- libmemcached-dev
+- libibverbs-dev
+- clang-format
 
 
 
