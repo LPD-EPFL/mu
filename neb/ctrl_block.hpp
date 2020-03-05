@@ -1,17 +1,17 @@
 #pragma once
 
-#include <infiniband/verbs.h>
-#include <malloc.h>
-#include <unistd.h>
-#include <cassert>
-#include <memory>
 #include "conn_config.hpp"
 #include "store_conn.hpp"
+#include <cassert>
+#include <infiniband/verbs.h>
+#include <malloc.h>
+#include <memory>
+#include <unistd.h>
 
 class ControlBlock {
- public:
+public:
   class IBResolve {
-   public:
+  public:
     // Device index in list of verbs devices
     int device_id;
     // TODO: use smart pointer
@@ -42,7 +42,7 @@ class ControlBlock {
 
   ibv_mr *get_mr(size_t idx);
 
-  std::tuple<volatile uint8_t*, volatile uint8_t*> get_replay_buf();
+  std::tuple<volatile uint8_t *, volatile uint8_t *> get_replay_buf();
 
   volatile uint8_t *get_buf(size_t idx);
 
@@ -54,7 +54,7 @@ class ControlBlock {
   // and connects the conn_qp[idx] to it
   void connect_remote_qp(size_t idx, const char *qp_name);
 
- private:
+private:
   size_t lgid;
 
   size_t port_index;

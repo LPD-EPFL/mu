@@ -7,12 +7,12 @@
 #include <map>
 #include <sstream>
 
+#include "failure-detector.hpp"
 #include <dory/ctrl/block.hpp>
 #include <dory/ctrl/device.hpp>
 #include <dory/store.hpp>
-#include "failure-detector.hpp"
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
   // uint64_t data[24];
   // int len = 24;
 
@@ -39,20 +39,20 @@ int main(int argc, char* argv[]) {
   constexpr int minimum_id = 1;
   int id = 0;
   switch (argv[1][0]) {
-    case '1':
-      id = 1;
-      break;
-    case '2':
-      id = 2;
-      break;
-    case '3':
-      id = 3;
-      break;
-    case '4':
-      id = 4;
-      break;
-    default:
-      throw std::runtime_error("Invalid id");
+  case '1':
+    id = 1;
+    break;
+  case '2':
+    id = 2;
+    break;
+  case '3':
+    id = 3;
+    break;
+  case '4':
+    id = 4;
+    break;
+  default:
+    throw std::runtime_error("Invalid id");
   }
 
   // Build the list of remote ids
@@ -66,7 +66,7 @@ int main(int argc, char* argv[]) {
   }
 
   // Exchange info using memcached
-  auto& store = dory::MemoryStore::getInstance();
+  auto &store = dory::MemoryStore::getInstance();
 
   dory::Devices d;
   dory::OpenDevice od;
@@ -78,7 +78,7 @@ int main(int argc, char* argv[]) {
     // TODO: The copy constructor is invoked here if we use auto and then
     // iterate on the dev_lst
     // auto dev_lst = d.list();
-    for (auto& dev : d.list()) {
+    for (auto &dev : d.list()) {
       od = std::move(dev);
     }
   }
@@ -121,11 +121,11 @@ int main(int argc, char* argv[]) {
 
   std::cout << "Incrementing the counter in addr " << std::hex
             << cb.mr("leader-election-mr").addr << std::endl;
-  uint64_t* local_counter =
-      reinterpret_cast<uint64_t*>(cb.mr("leader-election-mr").addr);
+  uint64_t *local_counter =
+      reinterpret_cast<uint64_t *>(cb.mr("leader-election-mr").addr);
   fd.heartbeatCounterStart(local_counter);
 
-  uint64_t* remote_counters = local_counter + 64 / sizeof(uint64_t);
+  uint64_t *remote_counters = local_counter + 64 / sizeof(uint64_t);
   fd.allocateCountersOverlay(remote_counters);
 
   // printf("Address raw = %llu, pointer=%p\n",
@@ -133,7 +133,7 @@ int main(int argc, char* argv[]) {
 
 #endif
 
-  auto& cq = cb.cq("cq-leader-election-counter-for-all");
+  auto &cq = cb.cq("cq-leader-election-counter-for-all");
 
   for (int i = 0; i < 10000000; i++) {
     // std::cout << "Running detection" << std::endl;

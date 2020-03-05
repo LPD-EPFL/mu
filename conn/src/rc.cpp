@@ -83,184 +83,191 @@
 // }
 
 namespace dory {
-  ReliableConnection::ReliableConnection(ControlBlock &cb) :
-    cb{ cb }, pd{ nullptr }
-  {
-    memset(&create_attr, 0, sizeof(struct ibv_qp_init_attr));
-    create_attr.qp_type = IBV_QPT_RC;
-    create_attr.cap.max_send_wr = WRDepth;
-    create_attr.cap.max_recv_wr = WRDepth;
-    create_attr.cap.max_send_sge = SGEDepth;
-    create_attr.cap.max_recv_sge = SGEDepth;
-    create_attr.cap.max_inline_data = MaxInlining;
+ReliableConnection::ReliableConnection(ControlBlock& cb) : cb{cb}, pd{nullptr} {
+  memset(&create_attr, 0, sizeof(struct ibv_qp_init_attr));
+  create_attr.qp_type = IBV_QPT_RC;
+  create_attr.cap.max_send_wr = WRDepth;
+  create_attr.cap.max_recv_wr = WRDepth;
+  create_attr.cap.max_send_sge = SGEDepth;
+  create_attr.cap.max_recv_sge = SGEDepth;
+  create_attr.cap.max_inline_data = MaxInlining;
+}
+
+void ReliableConnection::bindToPD(std::string pd_name) {
+  pd = cb.pd(pd_name).get();
+}
+
+void ReliableConnection::bindToMR(std::string mr_name) { mr = cb.mr(mr_name); }
+
+void ReliableConnection::associateWithCQ(std::string send_cp_name,
+                                         std::string recv_cp_name) {
+  create_attr.send_cq = cb.cq(send_cp_name).get();
+  create_attr.recv_cq = cb.cq(recv_cp_name).get();
+
+  auto qp = ibv_create_qp(pd, &create_attr);
+
+  if (qp == nullptr) {
+    throw std::runtime_error("Could not create the queue pair");
   }
 
-  void ReliableConnection::bindToPD(std::string pd_name) {
-    pd = cb.pd(pd_name).get();
-  }
-
-  void ReliableConnection::bindToMR(std::string mr_name) {
-    mr = cb.mr(mr_name);
-  }
-
-  void ReliableConnection::associateWithCQ(std::string send_cp_name, std::string recv_cp_name) {
-    create_attr.send_cq = cb.cq(send_cp_name).get();
-    create_attr.recv_cq = cb.cq(recv_cp_name).get();
-
-    auto qp = ibv_create_qp(pd, &create_attr);
-
-    if (qp == nullptr) {
-      throw std::runtime_error("Could not create the queue pair");
-    }
-
-    uniq_qp = deleted_unique_ptr<struct ibv_qp>(qp, [](struct ibv_qp* qp) {
-      auto ret = ibv_destroy_qp(qp);
-      if (ret != 0) {
-        throw std::runtime_error("Could not query device: " + std::string(std::strerror(errno)));
-      }
-    });
-  }
-
-  void ReliableConnection::reset() {
-    struct ibv_qp_attr attr;
-    memset(&attr, 0, sizeof(attr));
-
-    attr.qp_state = IBV_QPS_RESET;
-
-    auto ret = ibv_modify_qp(uniq_qp.get(), &attr, IBV_QP_STATE);
-
+  uniq_qp = deleted_unique_ptr<struct ibv_qp>(qp, [](struct ibv_qp* qp) {
+    auto ret = ibv_destroy_qp(qp);
     if (ret != 0) {
-      throw std::runtime_error("Could not modify QP to RESET: " + std::string(std::strerror(errno)));
+      throw std::runtime_error("Could not query device: " +
+                               std::string(std::strerror(errno)));
     }
-  }
+  });
+}
 
-  void ReliableConnection::init(ControlBlock::MemoryRights rights) {
-    struct ibv_qp_attr init_attr;
-    memset(&init_attr, 0, sizeof(struct ibv_qp_attr));
-    init_attr.qp_state = IBV_QPS_INIT;
-    init_attr.pkey_index = 0;
-    init_attr.port_num = cb.port();
-    init_attr.qp_access_flags = static_cast<int>(rights);
+void ReliableConnection::reset() {
+  struct ibv_qp_attr attr;
+  memset(&attr, 0, sizeof(attr));
 
-    auto ret = ibv_modify_qp(uniq_qp.get(), &init_attr,
-                  IBV_QP_STATE | IBV_QP_PKEY_INDEX |
-                  IBV_QP_PORT | IBV_QP_ACCESS_FLAGS);
+  attr.qp_state = IBV_QPS_RESET;
 
-    if (ret != 0) {
-      throw std::runtime_error("Failed to bring conn QP to INIT: " + std::string(std::strerror(errno)));
-    }
-  }
+  auto ret = ibv_modify_qp(uniq_qp.get(), &attr, IBV_QP_STATE);
 
-  void ReliableConnection::connect(RemoteConnection& rc) {
-    struct ibv_qp_attr conn_attr;
-    memset(&conn_attr, 0, sizeof(struct ibv_qp_attr));
-    conn_attr.qp_state = IBV_QPS_RTR;
-    conn_attr.path_mtu = IBV_MTU_4096;
-    conn_attr.rq_psn = DefaultPSN;
-
-    conn_attr.ah_attr.is_global = 0;
-    conn_attr.ah_attr.sl = 0; // TODO: Igor has it to 1
-    conn_attr.ah_attr.src_path_bits = 0;
-    conn_attr.ah_attr.port_num = cb.port();
-
-    conn_attr.dest_qp_num = rc.rci.qpn;
-    conn_attr.ah_attr.dlid = rc.rci.lid;
-
-    conn_attr.max_dest_rd_atomic = 16;
-    conn_attr.min_rnr_timer = 12;
-
-    int rtr_flags = IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN |
-                    IBV_QP_RQ_PSN | IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_MIN_RNR_TIMER;
-
-    auto ret = ibv_modify_qp(uniq_qp.get(), &conn_attr, rtr_flags);
-    if (ret != 0) {
-      throw std::runtime_error("Failed to bring conn QP to RTR: " + std::string(std::strerror(errno)));
-    }
-
-    memset(&conn_attr, 0, sizeof(struct ibv_qp_attr));
-    conn_attr.qp_state = IBV_QPS_RTS;
-    conn_attr.sq_psn = DefaultPSN;
-
-    conn_attr.timeout = 14;
-    conn_attr.retry_cnt = 7;
-    conn_attr.rnr_retry = 7;
-    conn_attr.max_rd_atomic = 16;
-    conn_attr.max_dest_rd_atomic = 16;
-
-    int rts_flags = IBV_QP_STATE | IBV_QP_SQ_PSN | IBV_QP_TIMEOUT |
-                    IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_MAX_QP_RD_ATOMIC;
-
-    ret = ibv_modify_qp(uniq_qp.get(), &conn_attr, rts_flags);
-    if (ret != 0) {
-      throw std::runtime_error("Failed to bring conn QP to RTS: " + std::string(std::strerror(errno)));
-    }
-
-    rconn = rc;
-  }
-
-  bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf, uint64_t len, uintptr_t remote_addr) {
-    struct ibv_sge sg;
-    memset(&sg, 0, sizeof(sg));
-    sg.addr = reinterpret_cast<uintptr_t>(buf);
-    sg.length = len;
-    sg.lkey = mr.lkey;
-
-    struct ibv_send_wr wr;
-    memset(&wr, 0, sizeof(wr));
-    wr.wr_id = req_id;
-    wr.sg_list = &sg;
-    wr.num_sge = 1;
-    wr.opcode = static_cast<enum ibv_wr_opcode>(req); // TODO
-
-    // if (signaled) {
-        wr.send_flags |= IBV_SEND_SIGNALED;
-    // }
-    if (wr.opcode == IBV_WR_RDMA_WRITE && len <= MaxInlining) {
-        wr.send_flags |= IBV_SEND_INLINE;
-    }
-
-    wr.wr.rdma.remote_addr = remote_addr;
-    wr.wr.rdma.rkey = rconn.rci.rkey;
-
-    struct ibv_send_wr *bad_wr = nullptr;
-    auto ret = ibv_post_send(uniq_qp.get(), &wr, &bad_wr);
-
-    if (bad_wr != nullptr) {
-      return false;
-      // throw std::runtime_error("Error encountered during posting in some work request");
-    }
-
-    if (ret != 0) {
-      throw std::runtime_error("Error due to driver misuse during posting: " + std::string(std::strerror(errno)));
-    }
-
-    return true;
-  }
-
-  bool ReliableConnection::pollCqIsOK(CQ cq, std::vector<struct ibv_wc>& entries) {
-    int num = 0;
-
-    switch (cq) {
-      case RecvCQ:
-        num = ibv_poll_cq(create_attr.recv_cq, entries.size(), &entries[0]);
-        break;
-      case SendCQ:
-        num = ibv_poll_cq(create_attr.send_cq, entries.size(), &entries[0]);
-        break;
-      default:
-        throw std::runtime_error("Invalid CQ");
-    }
-
-    if (num >= 0) {
-      entries.erase(entries.begin() + num, entries.end());
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  RemoteConnection ReliableConnection::remoteInfo() const {
-    RemoteConnection rc(cb.lid(), uniq_qp->qp_num, mr.addr, mr.size, mr.rkey);
-    return rc;
+  if (ret != 0) {
+    throw std::runtime_error("Could not modify QP to RESET: " +
+                             std::string(std::strerror(errno)));
   }
 }
+
+void ReliableConnection::init(ControlBlock::MemoryRights rights) {
+  struct ibv_qp_attr init_attr;
+  memset(&init_attr, 0, sizeof(struct ibv_qp_attr));
+  init_attr.qp_state = IBV_QPS_INIT;
+  init_attr.pkey_index = 0;
+  init_attr.port_num = cb.port();
+  init_attr.qp_access_flags = static_cast<int>(rights);
+
+  auto ret = ibv_modify_qp(
+      uniq_qp.get(), &init_attr,
+      IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS);
+
+  if (ret != 0) {
+    throw std::runtime_error("Failed to bring conn QP to INIT: " +
+                             std::string(std::strerror(errno)));
+  }
+}
+
+void ReliableConnection::connect(RemoteConnection& rc) {
+  struct ibv_qp_attr conn_attr;
+  memset(&conn_attr, 0, sizeof(struct ibv_qp_attr));
+  conn_attr.qp_state = IBV_QPS_RTR;
+  conn_attr.path_mtu = IBV_MTU_4096;
+  conn_attr.rq_psn = DefaultPSN;
+
+  conn_attr.ah_attr.is_global = 0;
+  conn_attr.ah_attr.sl = 0;  // TODO: Igor has it to 1
+  conn_attr.ah_attr.src_path_bits = 0;
+  conn_attr.ah_attr.port_num = cb.port();
+
+  conn_attr.dest_qp_num = rc.rci.qpn;
+  conn_attr.ah_attr.dlid = rc.rci.lid;
+
+  conn_attr.max_dest_rd_atomic = 16;
+  conn_attr.min_rnr_timer = 12;
+
+  int rtr_flags = IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN |
+                  IBV_QP_RQ_PSN | IBV_QP_MAX_DEST_RD_ATOMIC |
+                  IBV_QP_MIN_RNR_TIMER;
+
+  auto ret = ibv_modify_qp(uniq_qp.get(), &conn_attr, rtr_flags);
+  if (ret != 0) {
+    throw std::runtime_error("Failed to bring conn QP to RTR: " +
+                             std::string(std::strerror(errno)));
+  }
+
+  memset(&conn_attr, 0, sizeof(struct ibv_qp_attr));
+  conn_attr.qp_state = IBV_QPS_RTS;
+  conn_attr.sq_psn = DefaultPSN;
+
+  conn_attr.timeout = 14;
+  conn_attr.retry_cnt = 7;
+  conn_attr.rnr_retry = 7;
+  conn_attr.max_rd_atomic = 16;
+  conn_attr.max_dest_rd_atomic = 16;
+
+  int rts_flags = IBV_QP_STATE | IBV_QP_SQ_PSN | IBV_QP_TIMEOUT |
+                  IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_MAX_QP_RD_ATOMIC;
+
+  ret = ibv_modify_qp(uniq_qp.get(), &conn_attr, rts_flags);
+  if (ret != 0) {
+    throw std::runtime_error("Failed to bring conn QP to RTS: " +
+                             std::string(std::strerror(errno)));
+  }
+
+  rconn = rc;
+}
+
+bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void* buf,
+                                        uint64_t len, uintptr_t remote_addr) {
+  struct ibv_sge sg;
+  memset(&sg, 0, sizeof(sg));
+  sg.addr = reinterpret_cast<uintptr_t>(buf);
+  sg.length = len;
+  sg.lkey = mr.lkey;
+
+  struct ibv_send_wr wr;
+  memset(&wr, 0, sizeof(wr));
+  wr.wr_id = req_id;
+  wr.sg_list = &sg;
+  wr.num_sge = 1;
+  wr.opcode = static_cast<enum ibv_wr_opcode>(req);  // TODO
+
+  // if (signaled) {
+  wr.send_flags |= IBV_SEND_SIGNALED;
+  // }
+  if (wr.opcode == IBV_WR_RDMA_WRITE && len <= MaxInlining) {
+    wr.send_flags |= IBV_SEND_INLINE;
+  }
+
+  wr.wr.rdma.remote_addr = remote_addr;
+  wr.wr.rdma.rkey = rconn.rci.rkey;
+
+  struct ibv_send_wr* bad_wr = nullptr;
+  auto ret = ibv_post_send(uniq_qp.get(), &wr, &bad_wr);
+
+  if (bad_wr != nullptr) {
+    return false;
+    // throw std::runtime_error("Error encountered during posting in some work
+    // request");
+  }
+
+  if (ret != 0) {
+    throw std::runtime_error("Error due to driver misuse during posting: " +
+                             std::string(std::strerror(errno)));
+  }
+
+  return true;
+}
+
+bool ReliableConnection::pollCqIsOK(CQ cq,
+                                    std::vector<struct ibv_wc>& entries) {
+  int num = 0;
+
+  switch (cq) {
+    case RecvCQ:
+      num = ibv_poll_cq(create_attr.recv_cq, entries.size(), &entries[0]);
+      break;
+    case SendCQ:
+      num = ibv_poll_cq(create_attr.send_cq, entries.size(), &entries[0]);
+      break;
+    default:
+      throw std::runtime_error("Invalid CQ");
+  }
+
+  if (num >= 0) {
+    entries.erase(entries.begin() + num, entries.end());
+    return true;
+  } else {
+    return false;
+  }
+}
+
+RemoteConnection ReliableConnection::remoteInfo() const {
+  RemoteConnection rc(cb.lid(), uniq_qp->qp_num, mr.addr, mr.size, mr.rkey);
+  return rc;
+}
+}  // namespace dory

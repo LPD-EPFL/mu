@@ -7,38 +7,38 @@
 
 namespace dory {
 class OpenDevice {
- public:
+public:
   OpenDevice();
-  OpenDevice(struct ibv_device* device);
+  OpenDevice(struct ibv_device *device);
 
   ~OpenDevice();
 
   // Copy constructor
-  OpenDevice(OpenDevice const& o);
+  OpenDevice(OpenDevice const &o);
 
   // Move constructor
-  OpenDevice(OpenDevice&& o);
+  OpenDevice(OpenDevice &&o);
 
   // Copy assignment operator
-  OpenDevice& operator=(OpenDevice const& o);
+  OpenDevice &operator=(OpenDevice const &o);
 
   // Move assignment operator
-  OpenDevice& operator=(OpenDevice&& o);
+  OpenDevice &operator=(OpenDevice &&o);
 
-  struct ibv_context* context() {
+  struct ibv_context *context() {
     return ctx;
   }
 
-  char* name() const { return dev->name; }
+  char *name() const { return dev->name; }
 
-  char* dev_name() const { return dev->dev_name; }
+  char *dev_name() const { return dev->dev_name; }
 
   size_t guid() const { return static_cast<size_t>(ibv_get_device_guid(dev)); }
 
   enum NodeType : int8_t { UNKNOWN_NODE = -1, CA = 1, RNIC = 4 };
 
-  static const char* type_str(NodeType t) {
-    const std::map<NodeType, const char*> MyEnumStrings{
+  static const char *type_str(NodeType t) {
+    const std::map<NodeType, const char *> MyEnumStrings{
         {NodeType::UNKNOWN_NODE, "NodeType::UNKNOWN"},
         {NodeType::CA, "NodeType::CA"},
         {NodeType::RNIC, "NodeType::RNIC"}};
@@ -50,8 +50,8 @@ class OpenDevice {
 
   enum TransportType : int8_t { UNKNOWN_TRANSPORT = -1, IB = 0, IWARP = 1 };
 
-  static const char* type_str(TransportType t) {
-    const std::map<TransportType, const char*> MyEnumStrings{
+  static const char *type_str(TransportType t) {
+    const std::map<TransportType, const char *> MyEnumStrings{
         {TransportType::UNKNOWN_TRANSPORT, "TransportType::UNKNOWN"},
         {TransportType::IB, "TransportType::IB"},
         {TransportType::IWARP, "TransportType::IWARP"}};
@@ -63,7 +63,7 @@ class OpenDevice {
     return static_cast<TransportType>(dev->transport_type);
   }
 
-  struct ibv_device_attr const& device_attributes() const;
+  struct ibv_device_attr const &device_attributes() const;
 
   // printf("IB device %d:\n", dev_i);
   // printf("    Name: %s\n", dev_list[dev_i]->name);
@@ -83,31 +83,31 @@ class OpenDevice {
   // printf("    max_ah: %d\n", device_attr.max_ah);
   // printf("    phys_port_cnt: %u\n", device_attr.phys_port_cnt);
 
- private:
-  struct ibv_device* dev = nullptr;
-  struct ibv_context* ctx = nullptr;
+private:
+  struct ibv_device *dev = nullptr;
+  struct ibv_context *ctx = nullptr;
   struct ibv_device_attr device_attr;
 };
-}  // namespace dory
+} // namespace dory
 
 namespace dory {
 class Devices {
- public:
+public:
   Devices();
   ~Devices();
 
-  std::vector<OpenDevice>& list(bool force = false);
+  std::vector<OpenDevice> &list(bool force = false);
 
- private:
-  struct ibv_device** dev_list;
+private:
+  struct ibv_device **dev_list;
   std::vector<OpenDevice> devices;
 };
-}  // namespace dory
+} // namespace dory
 
 namespace dory {
 class ResolvedPort {
- public:
-  ResolvedPort(OpenDevice& od);
+public:
+  ResolvedPort(OpenDevice &od);
 
   bool bindTo(size_t index);
 
@@ -115,26 +115,26 @@ class ResolvedPort {
 
   uint8_t portLID() const { return port_lid; }
 
-  OpenDevice& device() { return open_dev; }
+  OpenDevice &device() { return open_dev; }
 
- private:
+private:
   static std::string link_layer_str(uint8_t link_layer) {
     switch (link_layer) {
-      case IBV_LINK_LAYER_UNSPECIFIED:
-        return "[Unspecified]";
-      case IBV_LINK_LAYER_INFINIBAND:
-        return "[InfiniBand]";
-      case IBV_LINK_LAYER_ETHERNET:
-        return "[Ethernet]";
-      default:
-        return "[Invalid]";
+    case IBV_LINK_LAYER_UNSPECIFIED:
+      return "[Unspecified]";
+    case IBV_LINK_LAYER_INFINIBAND:
+      return "[InfiniBand]";
+    case IBV_LINK_LAYER_ETHERNET:
+      return "[Ethernet]";
+    default:
+      return "[Invalid]";
     }
   }
 
- private:
-  OpenDevice& open_dev;
+private:
+  OpenDevice &open_dev;
   int port_index;
   uint8_t port_id;
   uint8_t port_lid;
 };
-}  // namespace dory
+} // namespace dory

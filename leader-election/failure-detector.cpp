@@ -10,11 +10,8 @@
 
 namespace dory {
 FailureDetector::FailureDetector(int my_id, std::vector<int> remote_ids,
-                                 ControlBlock& cb)
-    : my_id{my_id},
-      remote_ids{remote_ids},
-      cb{cb},
-      outstanding{0},
+                                 ControlBlock &cb)
+    : my_id{my_id}, remote_ids{remote_ids}, cb{cb}, outstanding{0},
       heartbeat_started{false} {
   auto [valid, maximum_id] = valid_ids();
   if (!valid) {
@@ -38,24 +35,24 @@ FailureDetector::~FailureDetector() {
   }
 }
 
-void FailureDetector::configure(std::string const& pd, std::string const& mr,
+void FailureDetector::configure(std::string const &pd, std::string const &mr,
                                 std::string send_cp_name,
                                 std::string recv_cp_name) {
   // Configure the connections
-  for (auto const& id : remote_ids) {
+  for (auto const &id : remote_ids) {
     rcs.insert(std::pair<int, dory::ReliableConnection>(
         id, dory::ReliableConnection(cb)));
 
-    auto& rc = rcs.find(id)->second;
+    auto &rc = rcs.find(id)->second;
     rc.bindToPD(pd);
     rc.bindToMR(mr);
     rc.associateWithCQ(send_cp_name, recv_cp_name);
   }
 }
 
-void FailureDetector::announce(dory::MemoryStore& store) {
+void FailureDetector::announce(dory::MemoryStore &store) {
   // Announce the connections
-  for (auto& [pid, rc] : rcs) {
+  for (auto &[pid, rc] : rcs) {
     std::stringstream name;
     name << "qp-le-from-" << my_id << "-to-" << pid;
     auto infoForRemoteParty = rc.remoteInfo();
@@ -63,9 +60,9 @@ void FailureDetector::announce(dory::MemoryStore& store) {
   }
 }
 
-void FailureDetector::connect(dory::MemoryStore& store) {
+void FailureDetector::connect(dory::MemoryStore &store) {
   // Establish the connections
-  for (auto& [pid, rc] : rcs) {
+  for (auto &[pid, rc] : rcs) {
     std::stringstream name;
     name << "qp-le-from-" << pid << "-to-" << my_id;
 
@@ -82,7 +79,7 @@ void FailureDetector::connect(dory::MemoryStore& store) {
   }
 }
 
-void FailureDetector::heartbeatCounterStart(uint64_t* counter_address) {
+void FailureDetector::heartbeatCounterStart(uint64_t *counter_address) {
   std::future<void> futureObj = exit_signal.get_future();
   heartbeat_started = true;
 
@@ -92,7 +89,7 @@ void FailureDetector::heartbeatCounterStart(uint64_t* counter_address) {
         // std::atomic<uint64_t> *counter = new(buf) std::atomic<uint64_t>;
         // volatile uint64_t* counter = reinterpret_cast<volatile
         // uint64_t*>(counter_address);
-        uint64_t* counter = reinterpret_cast<uint64_t*>(counter_address);
+        uint64_t *counter = reinterpret_cast<uint64_t *>(counter_address);
 
         for (int i = 0;; i = (i + 1) % 1024) {
           *counter += 1;
@@ -110,7 +107,7 @@ void FailureDetector::heartbeatCounterStart(uint64_t* counter_address) {
       });
 }
 
-void* FailureDetector::allocateCountersOverlay(void* start_addr) {
+void *FailureDetector::allocateCountersOverlay(void *start_addr) {
   auto length = (max_id + 1);
   // alloc = OverlayAllocator<uint64_t>((uint64_t *)start_addr, length *
   // sizeof(uint64_t)); memset(alloc.allocate(1), 0, length * sizeof(uint64_t));
@@ -123,16 +120,16 @@ void* FailureDetector::allocateCountersOverlay(void* start_addr) {
 
   // counters_overlay = p;
 
-  counters_overlay = reinterpret_cast<uint64_t*>(start_addr);
+  counters_overlay = reinterpret_cast<uint64_t *>(start_addr);
 
   // Return the address after the allocated space
-  return (void*)(reinterpret_cast<uintptr_t>(start_addr) +
-                 length * sizeof(uint64_t));
+  return (void *)(reinterpret_cast<uintptr_t>(start_addr) +
+                  length * sizeof(uint64_t));
 }
 
-void FailureDetector::detect(deleted_unique_ptr<struct ibv_cq>& cq) {
+void FailureDetector::detect(deleted_unique_ptr<struct ibv_cq> &cq) {
   uint64_t read_seq = 0;
-  for (auto& [pid, rc] : rcs) {
+  for (auto &[pid, rc] : rcs) {
     status[pid].loop_modulo =
         (status[pid].loop_modulo + 1) % fail_retry_interval;
 
@@ -170,12 +167,12 @@ void FailureDetector::detect(deleted_unique_ptr<struct ibv_cq>& cq) {
 
       outstanding -= entries.size();
 
-      for (auto const& entry : entries) {
+      for (auto const &entry : entries) {
         int pid = entry.wr_id >> 48;
         uint64_t seq = (entry.wr_id << 16) >> 16;
         (void)seq;
-        volatile uint64_t* val =
-            reinterpret_cast<uint64_t*>(&counters_overlay[pid]);
+        volatile uint64_t *val =
+            reinterpret_cast<uint64_t *>(&counters_overlay[pid]);
 
         if (status[pid].value < *val) {
           status[pid].consecutive_updates =
@@ -191,7 +188,7 @@ void FailureDetector::detect(deleted_unique_ptr<struct ibv_cq>& cq) {
 
       // Reduce everything by one. The slow processes with eventually go to
       // zero.
-      for (auto& [pid, rc] : rcs) {
+      for (auto &[pid, rc] : rcs) {
         (void)rc;
         status[pid].consecutive_updates =
             std::max(status[pid].consecutive_updates - 1, 0);
@@ -214,7 +211,7 @@ int FailureDetector::leaderPID() {
 
   int leader_id = my_id;
 
-  for (auto& pid : remote_ids) {
+  for (auto &pid : remote_ids) {
     // std::cout << pid << " " << status[pid].consecutive_updates << std::endl;
     if (status[pid].consecutive_updates > 2) {
       leader_id = pid;
@@ -241,4 +238,4 @@ std::pair<bool, int> FailureDetector::valid_ids() const {
 
   return std::make_pair(true, max);
 }
-}  // namespace dory
+} // namespace dory

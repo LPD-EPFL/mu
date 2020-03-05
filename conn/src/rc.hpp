@@ -44,12 +44,12 @@ struct RemoteConnection {
     return os.str();
   }
 
-  static RemoteConnection fromStr(std::string const& str) {
+  static RemoteConnection fromStr(std::string const &str) {
     RemoteConnectionInfo rci;
 
     std::string res(str);
 
-    std::replace(res.begin(), res.end(), ':', ' ');  // replace ':' by ' '
+    std::replace(res.begin(), res.end(), ':', ' '); // replace ':' by ' '
 
     std::stringstream ss(res);
 
@@ -80,7 +80,7 @@ struct RemoteConnection {
 };
 
 class ReliableConnection {
- public:
+public:
   enum CQ { SendCQ, RecvCQ };
 
   enum RdmaReq { RdmaRead = IBV_WR_RDMA_READ, RdmaWrite = IBV_WR_RDMA_WRITE };
@@ -90,7 +90,7 @@ class ReliableConnection {
   static constexpr int MaxInlining = 16;
   static constexpr uint32_t DefaultPSN = 3185;
 
-  ReliableConnection(ControlBlock& cb);
+  ReliableConnection(ControlBlock &cb);
 
   void bindToPD(std::string pd_name);
 
@@ -102,24 +102,24 @@ class ReliableConnection {
 
   void init(ControlBlock::MemoryRights rights);
 
-  void connect(RemoteConnection& rci);
+  void connect(RemoteConnection &rci);
 
-  bool postSendSingle(RdmaReq req, uint64_t req_id, void* buf, uint64_t len,
+  bool postSendSingle(RdmaReq req, uint64_t req_id, void *buf, uint64_t len,
                       uintptr_t remote_addr);
 
-  bool pollCqIsOK(CQ cq, std::vector<struct ibv_wc>& entries);
+  bool pollCqIsOK(CQ cq, std::vector<struct ibv_wc> &entries);
 
   RemoteConnection remoteInfo() const;
 
   uintptr_t remoteBuf() const { return rconn.rci.buf_addr; }
 
- private:
-  ControlBlock& cb;
-  struct ibv_pd* pd;
+private:
+  ControlBlock &cb;
+  struct ibv_pd *pd;
   struct ibv_qp_init_attr create_attr;
   struct ibv_qp_attr conn_attr;
   deleted_unique_ptr<struct ibv_qp> uniq_qp;
   ControlBlock::MemoryRegion mr;
   RemoteConnection rconn;
 };
-}  // namespace dory
+} // namespace dory

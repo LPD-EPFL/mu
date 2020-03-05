@@ -5,7 +5,7 @@
 #include "device.hpp"
 
 namespace dory {
-ControlBlock::ControlBlock(ResolvedPort& resolved_port)
+ControlBlock::ControlBlock(ResolvedPort &resolved_port)
     : resolved_port{resolved_port} {}
 
 void ControlBlock::registerPD(std::string name) {
@@ -16,7 +16,7 @@ void ControlBlock::registerPD(std::string name) {
                              name);
   }
 
-  deleted_unique_ptr<struct ibv_pd> uniq_pd(pd, [](struct ibv_pd* pd) {
+  deleted_unique_ptr<struct ibv_pd> uniq_pd(pd, [](struct ibv_pd *pd) {
     auto ret = ibv_dealloc_pd(pd);
     if (ret != 0) {
       throw std::runtime_error("Could not query device: " +
@@ -34,7 +34,7 @@ void ControlBlock::registerPD(std::string name) {
   pd_map.insert(std::pair<std::string, size_t>(name, pds.size() - 1));
 }
 
-deleted_unique_ptr<struct ibv_pd>& ControlBlock::pd(std::string name) {
+deleted_unique_ptr<struct ibv_pd> &ControlBlock::pd(std::string name) {
   auto pd = pd_map.find(name);
   if (pd == pd_map.end()) {
     throw std::runtime_error("Protection domain named " + name +
@@ -82,7 +82,7 @@ void ControlBlock::registerMR(std::string name, std::string pd_name,
     throw std::runtime_error("Could not register the memory region " + name);
   }
 
-  deleted_unique_ptr<struct ibv_mr> uniq_mr(mr, [](struct ibv_mr* mr) {
+  deleted_unique_ptr<struct ibv_mr> uniq_mr(mr, [](struct ibv_mr *mr) {
     auto ret = ibv_dereg_mr(mr);
     if (ret != 0) {
       throw std::runtime_error("Could not query device: " +
@@ -106,7 +106,7 @@ ControlBlock::MemoryRegion ControlBlock::mr(std::string name) const {
     throw std::runtime_error("Memory region named " + name + " does not exist");
   }
 
-  auto const& region = mrs[mr->second];
+  auto const &region = mrs[mr->second];
 
   MemoryRegion m;
   m.addr = reinterpret_cast<uintptr_t>(region->addr);
@@ -144,7 +144,7 @@ void ControlBlock::registerCQ(std::string name) {
     throw std::runtime_error("Could not register the completion queue " + name);
   }
 
-  deleted_unique_ptr<struct ibv_cq> uniq_cq(cq, [](struct ibv_cq* cq) {
+  deleted_unique_ptr<struct ibv_cq> uniq_cq(cq, [](struct ibv_cq *cq) {
     auto ret = ibv_destroy_cq(cq);
     if (ret != 0) {
       throw std::runtime_error("Could not query device: " +
@@ -162,7 +162,7 @@ void ControlBlock::registerCQ(std::string name) {
   cq_map.insert(std::pair<std::string, size_t>(name, cqs.size() - 1));
 }
 
-deleted_unique_ptr<struct ibv_cq>& ControlBlock::cq(std::string name) {
+deleted_unique_ptr<struct ibv_cq> &ControlBlock::cq(std::string name) {
   auto cq = cq_map.find(name);
   if (cq == cq_map.end()) {
     throw std::runtime_error("Completion queue named " + name +
@@ -176,8 +176,8 @@ int ControlBlock::port() const { return resolved_port.portID(); }
 
 int ControlBlock::lid() const { return resolved_port.portLID(); }
 
-bool ControlBlock::pollCqIsOK(deleted_unique_ptr<struct ibv_cq>& cq,
-                              std::vector<struct ibv_wc>& entries) {
+bool ControlBlock::pollCqIsOK(deleted_unique_ptr<struct ibv_cq> &cq,
+                              std::vector<struct ibv_wc> &entries) {
   auto num = ibv_poll_cq(cq.get(), entries.size(), &entries[0]);
 
   if (num >= 0) {
@@ -187,4 +187,4 @@ bool ControlBlock::pollCqIsOK(deleted_unique_ptr<struct ibv_cq>& cq,
     return false;
   }
 }
-}  // namespace dory
+} // namespace dory

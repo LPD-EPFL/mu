@@ -1,10 +1,10 @@
 #include <cstdlib>
 
-#include <dory/store.hpp>
 #include "neb.hpp"
+#include <dory/store.hpp>
 
 class NebSampleMessage : public NonEquivocatingBroadcast::Broadcastable {
- public:
+public:
   uint64_t val;
 
   size_t marshall(volatile uint8_t *buf) {

@@ -1,6 +1,6 @@
-#include <unistd.h>
 #include <cstring>
 #include <stdexcept>
+#include <unistd.h>
 
 #include "store.hpp"
 
@@ -33,7 +33,7 @@ MemoryStore::MemoryStore() : memc(memcached_create(nullptr), memcached_free) {
   }
 }
 
-void MemoryStore::set(std::string const& key, std::string const& value) {
+void MemoryStore::set(std::string const &key, std::string const &value) {
   if (key.length() == 0 || value.length() == 0) {
     throw std::runtime_error("Empty key or value");
   }
@@ -57,7 +57,7 @@ void MemoryStore::set(std::string const& key, std::string const& value) {
 // are no memory leaks or unterminated memcached connections! We don't need
 // to free() the resul of getenv() since it points to a string in the process
 // environment.
-bool MemoryStore::get(std::string const& key, std::string& value) {
+bool MemoryStore::get(std::string const &key, std::string &value) {
   if (key.length() == 0) {
     throw std::runtime_error("Empty key");
   }
@@ -66,7 +66,7 @@ bool MemoryStore::get(std::string const& key, std::string& value) {
   size_t value_length;
   uint32_t flags;
 
-  char* ret_value = memcached_get(memc.get(), key.c_str(), key.length(),
+  char *ret_value = memcached_get(memc.get(), key.c_str(), key.length(),
                                   &value_length, &flags, &rc);
   deleted_unique_ptr<char> ret_value_uniq(ret_value, free);
 
@@ -84,8 +84,8 @@ bool MemoryStore::get(std::string const& key, std::string& value) {
   return false;
 }
 
-char const* MemoryStore::env(char const* const name) const {
-  char const* env = getenv(name);
+char const *MemoryStore::env(char const *const name) const {
+  char const *env = getenv(name);
   if (env == nullptr) {
     throw std::runtime_error("Environment variable " + std::string(name) +
                              " not set");
@@ -162,4 +162,4 @@ char const* MemoryStore::env(char const* const name) const {
 //   return ret;
 // }
 
-}  // namespace dory
+} // namespace dory

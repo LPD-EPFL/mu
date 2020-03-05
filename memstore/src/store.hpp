@@ -1,8 +1,8 @@
 #pragma once
 
-#include <libmemcached/memcached.h>
 #include <dory/shared/pointer-wrapper.hpp>
 #include <functional>
+#include <libmemcached/memcached.h>
 #include <memory>
 
 namespace dory {
@@ -13,8 +13,8 @@ namespace dory {
  * accessed though `MemoryStore::getInstance()`.
  */
 class MemoryStore {
- public:
-  static MemoryStore& getInstance() {
+public:
+  static MemoryStore &getInstance() {
     static MemoryStore instance;
 
     return instance;
@@ -25,7 +25,7 @@ class MemoryStore {
    * @param key
    * @param value
    */
-  void set(std::string const& key, std::string const& value);
+  void set(std::string const &key, std::string const &value);
 
   // /**
   //  * TODO(Kristian): DOC
@@ -39,7 +39,7 @@ class MemoryStore {
    * @param value
    * @return
    */
-  bool get(std::string const& key, std::string& value);
+  bool get(std::string const &key, std::string &value);
 
   // /**
   //  * TODO(Kristian): DOC
@@ -54,17 +54,17 @@ class MemoryStore {
   //  */
   // void wait_till_ready(const char *qp_name);
 
- private:
+private:
   MemoryStore();
   // void operator=(MemoryStore const &);
 
-  char const* env(char const* const name) const;
+  char const *env(char const *const name) const;
   static constexpr auto RegIP = "DORY_REGISTRY_IP";
-  static constexpr auto MemcacheDPort = MEMCACHED_DEFAULT_PORT;  // 11211
+  static constexpr auto MemcacheDPort = MEMCACHED_DEFAULT_PORT; // 11211
 
   /**
    * TODO(Krsitian): DOC
    */
   deleted_unique_ptr<memcached_st> memc;
 };
-}  // namespace dory
+} // namespace dory

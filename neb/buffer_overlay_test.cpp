@@ -9,14 +9,14 @@ void boradcast_buffer_test() {
   const auto buf_size = 2048;
   const char str[100] = "Hello World!";
 
-  std::unique_ptr<uint8_t[]> buf((uint8_t*)calloc(buf_size, sizeof(uint8_t)));
+  std::unique_ptr<uint8_t[]> buf((uint8_t *)calloc(buf_size, sizeof(uint8_t)));
   auto bcast_buf = BroadcastBuffer(*buf.get(), buf_size);
 
   auto e = bcast_buf.get_entry(1);
   printf("ID: %lu, Content: %s\n", e->id(), &e->content());
 
-  bcast_buf.write(1, 1, *(uint8_t*)&str, strlen(str));
-  bcast_buf.write(10, 10, *(uint8_t*)&str, strlen(str));
+  bcast_buf.write(1, 1, *(uint8_t *)&str, strlen(str));
+  bcast_buf.write(10, 10, *(uint8_t *)&str, strlen(str));
 
   e = bcast_buf.get_entry(1);
   printf("ID: %lu, Content: %s\n", e->id(), &e->content());
@@ -27,14 +27,14 @@ void boradcast_buffer_test() {
   try {
     bcast_buf.get_entry(1000);
     exit(1);
-  } catch (const std::exception& e) {
+  } catch (const std::exception &e) {
     printf("correctly thrown: %s for index 1000\n", e.what());
   }
 
   try {
     bcast_buf.get_entry(0);
     exit(1);
-  } catch (const std::out_of_range& e) {
+  } catch (const std::out_of_range &e) {
     printf("correctly thrown: %s for index 0\n", e.what());
   }
 }
@@ -45,7 +45,7 @@ void replay_buffer_write_test() {
   const auto num_proc = 4;
   const auto process_space = 512;
 
-  std::unique_ptr<uint8_t[]> buf((uint8_t*)calloc(buf_size, sizeof(uint8_t)));
+  std::unique_ptr<uint8_t[]> buf((uint8_t *)calloc(buf_size, sizeof(uint8_t)));
 
   auto replay_buf_w = ReplayBufferWriter(*buf.get(), buf_size, num_proc);
 
@@ -77,7 +77,7 @@ void replay_buffer_read_test() {
   const auto process_space = 4096 * 4 * BUFFER_ENTRY_SIZE;
   const auto entry_space = BUFFER_ENTRY_SIZE * num_proc;
 
-  std::unique_ptr<uint8_t[]> buf((uint8_t*)calloc(buf_size, sizeof(uint8_t)));
+  std::unique_ptr<uint8_t[]> buf((uint8_t *)calloc(buf_size, sizeof(uint8_t)));
 
   auto replay_buf_r = ReplayBufferReader(*buf.get(), buf_size, num_proc);
 

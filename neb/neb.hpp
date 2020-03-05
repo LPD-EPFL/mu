@@ -7,9 +7,9 @@
 #include "store_conn.hpp"
 
 class NonEquivocatingBroadcast {
- public:
+public:
   class Broadcastable {
-   public:
+  public:
     virtual size_t marshall(volatile uint8_t *buf) = 0;
   };
   /**
@@ -31,7 +31,7 @@ class NonEquivocatingBroadcast {
    */
   void broadcast(uint64_t k, Broadcastable &msg);
 
- private:
+private:
   NonEquivocatingBroadcast() = default;
   void operator=(MemoryStore const &);
 

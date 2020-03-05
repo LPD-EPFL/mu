@@ -10,7 +10,7 @@
 namespace dory {
 OpenDevice::OpenDevice() {}
 
-OpenDevice::OpenDevice(struct ibv_device* device)
+OpenDevice::OpenDevice(struct ibv_device *device)
     : dev{device}, device_attr{ibv_device_attr()} {
   ctx = ibv_open_device(device);
   if (ctx == nullptr) {
@@ -32,7 +32,7 @@ OpenDevice::~OpenDevice() {
 }
 
 // Copy constructor
-OpenDevice::OpenDevice(OpenDevice const& o) : dev{o.dev} {
+OpenDevice::OpenDevice(OpenDevice const &o) : dev{o.dev} {
   ctx = ibv_open_device(dev);
   if (ctx == nullptr) {
     throw std::runtime_error("Could not get device list: " +
@@ -47,13 +47,13 @@ OpenDevice::OpenDevice(OpenDevice const& o) : dev{o.dev} {
 }
 
 // Move constructor
-OpenDevice::OpenDevice(OpenDevice&& o)
+OpenDevice::OpenDevice(OpenDevice &&o)
     : dev{o.dev}, ctx{o.ctx}, device_attr(o.device_attr) {
   o.ctx = nullptr;
 }
 
 // Copy assignment operator
-OpenDevice& OpenDevice::operator=(OpenDevice const& o) {
+OpenDevice &OpenDevice::operator=(OpenDevice const &o) {
   if (&o == this) {
     return *this;
   }
@@ -74,7 +74,7 @@ OpenDevice& OpenDevice::operator=(OpenDevice const& o) {
 }
 
 // Move assignment operator
-OpenDevice& OpenDevice::operator=(OpenDevice&& o) {
+OpenDevice &OpenDevice::operator=(OpenDevice &&o) {
   if (&o == this) {
     return *this;
   }
@@ -87,10 +87,10 @@ OpenDevice& OpenDevice::operator=(OpenDevice&& o) {
   return *this;
 }
 
-struct ibv_device_attr const& OpenDevice::device_attributes() const {
+struct ibv_device_attr const &OpenDevice::device_attributes() const {
   return device_attr;
 }
-}  // namespace dory
+} // namespace dory
 
 // Device definitions
 namespace dory {
@@ -102,7 +102,7 @@ Devices::~Devices() {
   }
 }
 
-std::vector<OpenDevice>& Devices::list(bool force) {
+std::vector<OpenDevice> &Devices::list(bool force) {
   if (force || dev_list == nullptr) {
     int num_devices = 0;
     dev_list = ibv_get_device_list(&num_devices);
@@ -119,10 +119,10 @@ std::vector<OpenDevice>& Devices::list(bool force) {
 
   return devices;
 }
-}  // namespace dory
+} // namespace dory
 
 namespace dory {
-ResolvedPort::ResolvedPort(OpenDevice& od) : open_dev{od}, port_index{-1} {}
+ResolvedPort::ResolvedPort(OpenDevice &od) : open_dev{od}, port_index{-1} {}
 
 bool ResolvedPort::bindTo(size_t index) {
   size_t skipped_active_ports = 0;
@@ -158,4 +158,4 @@ bool ResolvedPort::bindTo(size_t index) {
 
   return false;
 }
-}  // namespace dory
+} // namespace dory

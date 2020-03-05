@@ -2,14 +2,14 @@
 
 std::string link_layer_str(uint8_t link_layer) {
   switch (link_layer) {
-    case IBV_LINK_LAYER_UNSPECIFIED:
-      return "[Unspecified]";
-    case IBV_LINK_LAYER_INFINIBAND:
-      return "[InfiniBand]";
-    case IBV_LINK_LAYER_ETHERNET:
-      return "[Ethernet]";
-    default:
-      return "[Invalid]";
+  case IBV_LINK_LAYER_UNSPECIFIED:
+    return "[Unspecified]";
+  case IBV_LINK_LAYER_INFINIBAND:
+    return "[InfiniBand]";
+  case IBV_LINK_LAYER_ETHERNET:
+    return "[Ethernet]";
+  default:
+    return "[Invalid]";
   }
 }
 

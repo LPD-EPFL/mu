@@ -1,6 +1,6 @@
-#include <stdint.h>
 #include <cstring>
 #include <memory>
+#include <stdint.h>
 
 #include "consts.hpp"
 
@@ -20,11 +20,11 @@
  *
  **/
 class BufferEntry {
- public:
+public:
   /**
    * @param start: a reference to the the entry
    **/
-  BufferEntry(const volatile uint8_t& start);
+  BufferEntry(const volatile uint8_t &start);
 
   /**
    * @returns: the message id
@@ -34,20 +34,20 @@ class BufferEntry {
   /**
    * @returns: a reference to the content
    **/
-  const volatile uint8_t& content();
+  const volatile uint8_t &content();
 
   /**
    * @returns: a reference to the signature
    **/
-  const volatile uint8_t& signature();
+  const volatile uint8_t &signature();
 
   /**
    * @returns: the address of the entry
    **/
   uint64_t addr();
 
- private:
-  const volatile uint8_t& start;
+private:
+  const volatile uint8_t &start;
 };
 
 /**
@@ -55,12 +55,12 @@ class BufferEntry {
  * processes. For every remote process there exist one broadcast buffer.
  **/
 class BroadcastBuffer {
- public:
+public:
   /**
    * @param start: a reference to the buffer
    * @param buf_size: the buffer size in bytes
    **/
-  BroadcastBuffer(volatile uint8_t& start, size_t buf_size);
+  BroadcastBuffer(volatile uint8_t &start, size_t buf_size);
 
   /**
    * @param index: index of the entry
@@ -87,11 +87,11 @@ class BroadcastBuffer {
    * @thorws: std::out_of_range
    **/
   std::unique_ptr<BufferEntry> write(uint64_t index, uint64_t k,
-                                     volatile uint8_t& buf, size_t len);
+                                     volatile uint8_t &buf, size_t len);
 
- private:
-  volatile uint8_t& start;
-  size_t buf_size;  
+private:
+  volatile uint8_t &start;
+  size_t buf_size;
   uint64_t num_entries;
 };
 
@@ -105,13 +105,13 @@ class BroadcastBuffer {
  * to local RDMA write from the Broadcast buffer to this replay buffer.
  **/
 class ReplayBufferWriter {
- public:
+public:
   /**
    * @param start: a reference to the buffer
    * @param buf_size: the size of the buffer in bytes
    * @param num_proc: the total number of processes in the cluster
    **/
-  ReplayBufferWriter(const volatile uint8_t& start, size_t buf_size,
+  ReplayBufferWriter(const volatile uint8_t &start, size_t buf_size,
                      int num_proc);
 
   /**
@@ -126,8 +126,8 @@ class ReplayBufferWriter {
    **/
   std::unique_ptr<BufferEntry> get_entry(size_t proc_id, uint64_t index);
 
- private:
-  const volatile uint8_t& start;
+private:
+  const volatile uint8_t &start;
   size_t buf_size;
   uint64_t num_proc;
   uint64_t num_entries_per_proc;
@@ -144,13 +144,13 @@ class ReplayBufferWriter {
  * this buffer.
  **/
 class ReplayBufferReader {
- public:
+public:
   /**
    * @param start: a reference to the buffer
    * @param buf_size: the size of the buffer in bytes
    * @param num_proc: the total number of processes in the cluster
    **/
-  ReplayBufferReader(const volatile uint8_t& start, size_t buf_size,
+  ReplayBufferReader(const volatile uint8_t &start, size_t buf_size,
                      int num_proc);
 
   /**
@@ -169,8 +169,8 @@ class ReplayBufferReader {
   std::unique_ptr<BufferEntry> get_entry(size_t origin_id, size_t replayer_id,
                                          uint64_t index);
 
- private:
-  const volatile uint8_t& start;
+private:
+  const volatile uint8_t &start;
   size_t buf_size;
   uint64_t num_proc;
   uint64_t num_entries_per_proc;
