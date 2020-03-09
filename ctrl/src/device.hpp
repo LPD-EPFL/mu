@@ -109,8 +109,14 @@ class ResolvedPort {
  public:
   ResolvedPort(OpenDevice &od);
 
+  /**
+   * @param index: 0-based
+   **/
   bool bindTo(size_t index);
 
+  /**
+   * @returns 1-based port id
+   **/
   uint8_t portID() const { return port_id; }
 
   uint8_t portLID() const { return port_lid; }

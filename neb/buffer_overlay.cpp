@@ -1,30 +1,32 @@
 #include "buffer_overlay.hpp"
 
-BufferEntry::BufferEntry(const volatile uint8_t &start) : start(start) {}
+BufferEntry::BufferEntry(volatile const uint8_t *const buf) : buf(buf) {}
 
-uint64_t BufferEntry::id() {
-  return *reinterpret_cast<const volatile uint64_t *>(&start);
+uint64_t BufferEntry::id() const {
+  return *reinterpret_cast<volatile const uint64_t *>(buf);
 }
 
-uint64_t BufferEntry::addr() { return reinterpret_cast<uint64_t>(&start); }
+uintptr_t BufferEntry::addr() const { return reinterpret_cast<uint64_t>(buf); }
 
-const volatile uint8_t &BufferEntry::content() {
-  return *reinterpret_cast<const volatile uint8_t *>(
-      &reinterpret_cast<const volatile uint64_t *>(&start)[1]);
+volatile const uint8_t *BufferEntry::content() const {
+  return reinterpret_cast<const volatile uint8_t *>(
+      &reinterpret_cast<const volatile uint64_t *>(buf)[1]);
 }
 
-const volatile uint8_t &BufferEntry::signature() {
+volatile const uint8_t *BufferEntry::signature() const {
   throw std::logic_error("Signatures are not supported yet");
 }
 
 /* -------------------------------------------------------------------------- */
 
-BroadcastBuffer::BroadcastBuffer(volatile uint8_t &start, size_t buf_size)
-    : start(start),
+BroadcastBuffer::BroadcastBuffer(uintptr_t addr, uint64_t buf_size,
+                                 uint32_t lkey)
+    : lkey(lkey),
+      buf(reinterpret_cast<volatile const uint8_t *const>(addr)),
       buf_size(buf_size),
       num_entries(buf_size / BUFFER_ENTRY_SIZE) {}
 
-uint64_t BroadcastBuffer::get_byte_offset(uint64_t index) {
+uint64_t BroadcastBuffer::get_byte_offset(uint64_t index) const {
   if (index == 0) {
     throw std::out_of_range("Indexing starts at 1");
   }
@@ -40,34 +42,21 @@ uint64_t BroadcastBuffer::get_byte_offset(uint64_t index) {
   return index * BUFFER_ENTRY_SIZE;
 }
 
-std::unique_ptr<BufferEntry> BroadcastBuffer::get_entry(uint64_t index) {
-  return std::make_unique<BufferEntry>(*(&start + get_byte_offset(index)));
-}
-
-// TODO(Kristian): Eventually, rather pass an object with a marshall interface
-// and save creating an intermediary buffer and a copy cycle
-std::unique_ptr<BufferEntry> BroadcastBuffer::write(uint64_t index, uint64_t k,
-                                                    volatile uint8_t &buf,
-                                                    size_t len) {
-  auto r = (&start + get_byte_offset(index));
-  auto _ptr = reinterpret_cast<volatile uint64_t *>(r);
-
-  _ptr[0] = k;
-  memcpy((void *)&_ptr[1], (void *)&buf, len);
-
-  return std::make_unique<BufferEntry>(*r);
+std::unique_ptr<BufferEntry> BroadcastBuffer::get_entry(uint64_t index) const {
+  return std::make_unique<BufferEntry>(&buf[get_byte_offset(index)]);
 }
 
 /* -------------------------------------------------------------------------- */
 
-ReplayBufferWriter::ReplayBufferWriter(const volatile uint8_t &start,
-                                       size_t buf_size, int num_proc)
-    : start(start),
+ReplayBufferWriter::ReplayBufferWriter(uintptr_t addr, size_t buf_size,
+                                       int num_proc)
+    : buf(reinterpret_cast<volatile const uint8_t *const>(addr)),
       buf_size(buf_size),
       num_proc(num_proc),
       num_entries_per_proc(buf_size / BUFFER_ENTRY_SIZE / num_proc) {}
 
-uint64_t ReplayBufferWriter::get_byte_offset(size_t proc_id, uint64_t index) {
+uint64_t ReplayBufferWriter::get_byte_offset(int proc_id,
+                                             uint64_t index) const {
   if (index == 0) {
     throw std::out_of_range("Indexing starts at 1");
   }
@@ -84,25 +73,24 @@ uint64_t ReplayBufferWriter::get_byte_offset(size_t proc_id, uint64_t index) {
          index * BUFFER_ENTRY_SIZE;
 }
 
-std::unique_ptr<BufferEntry> ReplayBufferWriter::get_entry(size_t proc_id,
-                                                           uint64_t index) {
-  return std::make_unique<BufferEntry>(
-      *(&start + get_byte_offset(proc_id, index)));
+std::unique_ptr<BufferEntry> ReplayBufferWriter::get_entry(
+    int proc_id, uint64_t index) const {
+  return std::make_unique<BufferEntry>(&buf[get_byte_offset(proc_id, index)]);
 }
 
 /* -------------------------------------------------------------------------- */
 
-ReplayBufferReader::ReplayBufferReader(const volatile uint8_t &start,
-                                       size_t buf_size, int num_proc)
-    : start(start),
+ReplayBufferReader::ReplayBufferReader(uintptr_t addr, size_t buf_size,
+                                       uint32_t lkey, int num_proc)
+    : lkey(lkey),
+      buf(reinterpret_cast<volatile const uint8_t *const>(addr)),
       buf_size(buf_size),
       num_proc(num_proc),
       num_entries_per_proc(buf_size / BUFFER_ENTRY_SIZE / num_proc / num_proc) {
 }
 
-uint64_t ReplayBufferReader::get_byte_offset(size_t origin_id,
-                                             size_t replayer_id,
-                                             uint64_t index) {
+uint64_t ReplayBufferReader::get_byte_offset(int origin_id, int replayer_id,
+                                             uint64_t index) const {
   if (index == 0) {
     throw std::out_of_range("Indexing starts at 1");
   }
@@ -123,9 +111,8 @@ uint64_t ReplayBufferReader::get_byte_offset(size_t origin_id,
   return origin_offset + index_offset + replayer_offset;
 }
 
-std::unique_ptr<BufferEntry> ReplayBufferReader::get_entry(size_t origin_id,
-                                                           size_t replayer_id,
-                                                           uint64_t index) {
+std::unique_ptr<BufferEntry> ReplayBufferReader::get_entry(
+    int origin_id, int replayer_id, uint64_t index) const {
   return std::make_unique<BufferEntry>(
-      *(&start + get_byte_offset(origin_id, replayer_id, index)));
+      &buf[get_byte_offset(origin_id, replayer_id, index)]);
 }

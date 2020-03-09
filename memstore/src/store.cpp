@@ -13,14 +13,6 @@ MemoryStore::MemoryStore() : memc(memcached_create(nullptr), memcached_free) {
   auto registry_ip = env(RegIP);
   memcached_return rc;
 
-  // // TODO(Kristian): this code looks really ugly, can we minimize it by using
-  // // infering the type for exampe?
-  // std::unique_ptr<memcached_server_st, void (*)(memcached_server_st *)>
-  // servers(
-  //     memcached_server_list_append(nullptr, registry_ip, MemcacheDPort,
-  //                                 &rc),
-  //     memcached_server_list_free);
-
   deleted_unique_ptr<memcached_server_st> servers(
       memcached_server_list_append(nullptr, registry_ip, MemcacheDPort, &rc),
       memcached_server_list_free);
@@ -49,14 +41,6 @@ void MemoryStore::set(std::string const &key, std::string const &value) {
   }
 }
 
-// Get the value associated with "key" into "value", and return the length
-// of the value. If the key is not found, return nullptr and len -1. For all
-// other errors, terminate.
-//
-// This function sometimes gets called in a polling loop - ensure that there
-// are no memory leaks or unterminated memcached connections! We don't need
-// to free() the resul of getenv() since it points to a string in the process
-// environment.
 bool MemoryStore::get(std::string const &key, std::string &value) {
   if (key.length() == 0) {
     throw std::runtime_error("Empty key");

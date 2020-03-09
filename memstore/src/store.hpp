@@ -7,64 +7,44 @@
 
 namespace dory {
 /**
- * Acts as a central public registry for all processes.
- *
- * The `MemoryStore` is a lazy initialized singleton instance and can get
- * accessed though `MemoryStore::getInstance()`.
+ * This class acts as a central public registry for all processes.
+ * It provides a lazy initialized singleton instance.
  */
 class MemoryStore {
  public:
+  /**
+   * Getter for the signleton instance.
+   * @return  MemoryStore
+   * */
   static MemoryStore &getInstance() {
     static MemoryStore instance;
 
     return instance;
   }
-
   /**
-   * TODO(Kristian): DOC
+   * Stores the provided string `value` under `key`.
    * @param key
    * @param value
+   * @throw `runtime_error`
    */
   void set(std::string const &key, std::string const &value);
 
-  // /**
-  //  * TODO(Kristian): DOC
-  //  * @param qp_name
-  //  */
-  // void set_qp_ready(const char *qp_name);
-
   /**
-   * TODO(Kristian): DOC
+   * Gets the value associated with `key` into `value`.
    * @param key
    * @param value
-   * @return
+   * @return bool indicating the success
+   * @throw `runtime_error`
    */
   bool get(std::string const &key, std::string &value);
 
-  // /**
-  //  * TODO(Kristian): DOC
-  //  * @param qp_name
-  //  */
-  // hrd_qp_attr_t *get_qp(const char *qp_name);
-
-  // /**
-  //  * TODO(Kristian): DOC
-  //  * @param qp_name
-  //  * @param
-  //  */
-  // void wait_till_ready(const char *qp_name);
-
  private:
   MemoryStore();
-  // void operator=(MemoryStore const &);
 
   char const *env(char const *const name) const;
+  // env variable holind the IP of the machine running the memory store
   static constexpr auto RegIP = "DORY_REGISTRY_IP";
   static constexpr auto MemcacheDPort = MEMCACHED_DEFAULT_PORT;  // 11211
-
-  /**
-   * TODO(Krsitian): DOC
-   */
   deleted_unique_ptr<memcached_st> memc;
 };
 }  // namespace dory

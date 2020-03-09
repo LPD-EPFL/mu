@@ -10,19 +10,8 @@ void boradcast_buffer_test() {
   const char str[100] = "Hello World!";
 
   std::unique_ptr<uint8_t[]> buf((uint8_t *)calloc(buf_size, sizeof(uint8_t)));
-  auto bcast_buf = BroadcastBuffer(*buf.get(), buf_size);
-
-  auto e = bcast_buf.get_entry(1);
-  printf("ID: %lu, Content: %s\n", e->id(), &e->content());
-
-  bcast_buf.write(1, 1, *(uint8_t *)&str, strlen(str));
-  bcast_buf.write(10, 10, *(uint8_t *)&str, strlen(str));
-
-  e = bcast_buf.get_entry(1);
-  printf("ID: %lu, Content: %s\n", e->id(), &e->content());
-
-  e = bcast_buf.get_entry(10);
-  printf("ID: %lu, Content: %s\n", e->id(), &e->content());
+  auto bcast_buf =
+      BroadcastBuffer(reinterpret_cast<uintptr_t>(buf.get()), buf_size, 1337);
 
   try {
     bcast_buf.get_entry(1000);
@@ -47,7 +36,8 @@ void replay_buffer_write_test() {
 
   std::unique_ptr<uint8_t[]> buf((uint8_t *)calloc(buf_size, sizeof(uint8_t)));
 
-  auto replay_buf_w = ReplayBufferWriter(*buf.get(), buf_size, num_proc);
+  auto replay_buf_w = ReplayBufferWriter(reinterpret_cast<uintptr_t>(buf.get()),
+                                         buf_size, num_proc);
 
   // origin_id, entry_index, expected_offset
   typedef std::tuple<uint64_t, uint64_t, uint64_t> test_case;
@@ -79,7 +69,8 @@ void replay_buffer_read_test() {
 
   std::unique_ptr<uint8_t[]> buf((uint8_t *)calloc(buf_size, sizeof(uint8_t)));
 
-  auto replay_buf_r = ReplayBufferReader(*buf.get(), buf_size, num_proc);
+  auto replay_buf_r = ReplayBufferReader(reinterpret_cast<uintptr_t>(buf.get()),
+                                         buf_size, 1337, num_proc);
 
   // origin_id, replayer_id, entry_index, expected_offset
   typedef std::tuple<uint64_t, uint64_t, uint64_t, uint64_t> test_case;

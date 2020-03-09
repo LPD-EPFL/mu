@@ -1,70 +1,110 @@
+#pragma once
+
 #include <cstring>
 #include <thread>
 #include <vector>
 
+#include <dory/conn/rc.hpp>
+#include <dory/ctrl/block.hpp>
 #include "buffer_overlay.hpp"
-#include "ctrl_block.hpp"
-#include "store_conn.hpp"
+#include "spdlog/spdlog.h"
 
+namespace dory {
 class NonEquivocatingBroadcast {
  public:
+  typedef void (*deliver_callback)(uint64_t k, volatile const void *m,
+                                   size_t proc_id);
+
+  /**
+   * Required interface to implement for messages to get broadcasted by this
+   * module
+   **/
   class Broadcastable {
    public:
-    virtual size_t marshall(volatile uint8_t *buf) = 0;
+    /**
+     * @param: pointer to buffer where to marshall the contents of the message
+     * @return: size of the written bytes
+     **/
+    virtual size_t marshall(volatile void *buf) const = 0;
   };
+
   /**
-   * TODO(Kristian): doc
    * @param id: of the local process
    * @param num_proc: number of processes in the cluster
+   * @param cb: reference to the control block
+   * @param deliver_cb: callback to call upon delivery of a message
    *
    */
-  NonEquivocatingBroadcast(size_t id, size_t num_proc,
-                           void (*deliver_cb)(uint64_t k,
-                                              const volatile uint8_t &m,
-                                              size_t proc_id));
+  NonEquivocatingBroadcast(int self_id, std::vector<int> remote_ids,
+                           ControlBlock &cb, deliver_callback dc);
   ~NonEquivocatingBroadcast();
 
   /**
-   * TODO(Kristian): doc
-   * @param msg_id: id of the message
-   * @param val: value of the message
+   * @param uint64_t: message key
+   * @param msg: message to broadcast
    */
   void broadcast(uint64_t k, Broadcastable &msg);
 
- private:
-  NonEquivocatingBroadcast() = default;
-  void operator=(MemoryStore const &);
+  /**
+   * Connects to the remote QPs published to the memory store.
+   **/
+  void connect_to_remote_qps();
 
-  // local id
-  size_t lgid;
+  /**
+   * Begin operation. Needs to be called after connecting to remote qps.
+   **/
+  void start();
+
+  static constexpr auto PD_NAME = "neb-primary";
+  static constexpr auto REPLAY_W_NAME = "neb-replay-w";
+  static constexpr auto REPLAY_R_NAME = "neb-replay-r";
+
+ private:
+  // process id
+  int self_id;
+
+  // ids of the remote processes;
+  std::vector<int> remote_ids;
 
   // number of processes in the cluster
-  size_t num_proc;
+  int num_proc;
 
-  // last received message counter for every process
-  std::unique_ptr<uint64_t[]> last;
+  // callback to call for delivery of a message
+  deliver_callback deliver;
 
-  std::vector<std::unique_ptr<BroadcastBuffer>> bcast_buf;
+  // RDMA control
+  ControlBlock &cb;
+
+  // next expected message counter for every process
+  std::map<int, uint64_t> next;
+
+  // broadcast reliable connections
+  std::map<int, ReliableConnection> bcast_conn;
+
+  // replay reliable connections
+  std::map<int, ReliableConnection> replay_conn;
+
+  // Broadcast buffer overlays
+  std::map<int, BroadcastBuffer> bcast_bufs;
+
+  // Replay buffer overlay where to write
   std::unique_ptr<ReplayBufferWriter> replay_w_buf;
+
+  // Replay buffer overlay where to store remote replay reads
   std::unique_ptr<ReplayBufferReader> replay_r_buf;
 
-  // RDMA connector
-  std::unique_ptr<ControlBlock> cb;
+  // beautiful logger
+  std::shared_ptr<spdlog::logger> logger;
 
   // thread that tries to poll
   std::thread poller_thread;
 
-  // starts the poller
   void start_poller();
 
-  void (*deliver_callback)(uint64_t k, const volatile uint8_t &m,
-                           size_t proc_id);
-
-  // ensures only one thread loops endlessly
   // TODO(Kristian): make atomic
-  bool poller_running = false;
-
-  int post_write(ibv_sge sg, size_t dest_id, uint64_t msg_offset);
-
-  int post_replay_read(ibv_sge sg, size_t r_id, uint64_t msg_offset);
+  volatile bool connected = false;
+  volatile bool started = false;
+  volatile bool poller_running = false;
+  volatile bool poller_finished = false;
 };
+}  // namespace dory

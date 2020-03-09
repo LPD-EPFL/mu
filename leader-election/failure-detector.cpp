@@ -3,6 +3,7 @@
 #include <array>
 #include <atomic>
 #include <sstream>
+#include <vector>
 
 #include <x86intrin.h> /* for clflush */
 

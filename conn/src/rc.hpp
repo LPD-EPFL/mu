@@ -107,6 +107,9 @@ class ReliableConnection {
   bool postSendSingle(RdmaReq req, uint64_t req_id, void *buf, uint64_t len,
                       uintptr_t remote_addr);
 
+  bool postSendSingle(RdmaReq req, uint64_t req_id, void *buf, uint64_t len,
+                      uint32_t lkey, uintptr_t remote_addr);
+
   bool pollCqIsOK(CQ cq, std::vector<struct ibv_wc> &entries);
 
   RemoteConnection remoteInfo() const;

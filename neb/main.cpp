@@ -1,68 +1,95 @@
-#include <cstdlib>
+#include "spdlog/sinks/stdout_color_sinks.h"
+#include "spdlog/spdlog.h"
 
+#include <dory/ctrl/block.hpp>
+#include <dory/ctrl/device.hpp>
 #include <dory/store.hpp>
+#include "consts.hpp"
 #include "neb.hpp"
 
-class NebSampleMessage : public NonEquivocatingBroadcast::Broadcastable {
+static auto logger = spdlog::stdout_color_mt("MAIN");
+
+class NebSampleMessage : public dory::NonEquivocatingBroadcast::Broadcastable {
  public:
   uint64_t val;
 
-  size_t marshall(volatile uint8_t *buf) {
+  size_t marshall(volatile void *buf) const {
     auto b = reinterpret_cast<volatile uint64_t *>(buf);
 
     b[0] = val;
 
     return sizeof(val);
-  };
-
-  void unmarshall(const volatile uint8_t &buf) {
-    val = reinterpret_cast<const volatile uint64_t &>(buf);
   }
 
-  size_t size() { return sizeof(val); }
+  void unmarshall(volatile const void *buf) {
+    val = *reinterpret_cast<volatile const uint64_t *>(buf);
+  }
 };
 
-void deliver_callback(uint64_t k, const volatile uint8_t &m, size_t proc_id) {
+void deliver_callback(uint64_t k, volatile const void *m, size_t proc_id) {
   NebSampleMessage msg;
 
   msg.unmarshall(m);
 
-  printf("main: delivered (%lu, %lu) by %lu \n", k, msg.val, proc_id);
+  logger->info("Delivered ({}, {}) by {}", k, msg.val, proc_id);
 }
 
-/*
- * NOTE: we assume IDs starting from 0
- */
 int main(int argc, char *argv[]) {
-  rt_assert(argc > 1);
+  logger->set_pattern(SPD_FORMAT_STR);
 
-  size_t num_proc = DEFAULT_NUM_PROCESSES;
-  size_t lgid = atoi(argv[1]);
+  if (argc < 2) {
+    logger->error("Provide the process id as first argument!");
+    exit(1);
+  }
 
-  // otherwise default is 4
+  int num_proc = DEFAULT_NUM_PROCESSES;
+  int self_id = atoi(argv[1]);
+
   if (argc > 2) {
     num_proc = atoi(argv[2]);
-    rt_assert(num_proc > 1, "at least two nodes are required!");
+    if (num_proc < 2) {
+      logger->error("At least two processes are required!");
+      exit(1);
+    }
   }
 
-  std::unique_ptr<NonEquivocatingBroadcast> neb;
+  std::vector<int> remote_ids;
 
-  neb = std::make_unique<NonEquivocatingBroadcast>(lgid, num_proc,
-                                                   deliver_callback);
+  for (int i = 0; i < num_proc; i++) {
+    if (i == self_id) continue;
+
+    remote_ids.push_back(i);
+  }
+
+  dory::Devices d;
+
+  auto &dev_l = d.list();
+  auto &od = dev_l[0];
+
+  dory::ResolvedPort rp(od);
+
+  rp.bindTo(0);
+
+  dory::ControlBlock cb(rp);
+
+  dory::NonEquivocatingBroadcast neb(self_id, remote_ids, cb, deliver_callback);
+
+  logger->info("Sleeping for 5 sec");
+  std::this_thread::sleep_for(std::chrono::seconds(5));
+
+  neb.connect_to_remote_qps();
+
+  neb.start();
 
   NebSampleMessage m;
-  for (int i = 1; i <= 200; i++) {
-    m.val = 1000 * lgid + i;
-    neb->broadcast(i, m);
-    usleep(20000);
+  for (int i = 1; i <= 135; i++) {
+    m.val = 1000 * self_id + i;
+    neb.broadcast(i, m);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
-  auto &store = dory::MemoryStore::getInstance();
-
-  store.set("Hello", "World");
-
-  printf("main: sleep for 1 sec\n");
-  std::this_thread::sleep_for(std::chrono::seconds(1));
+  logger->info("Sleeping for 3 sec");
+  std::this_thread::sleep_for(std::chrono::seconds(3));
 
   return 0;
 }

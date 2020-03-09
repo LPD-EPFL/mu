@@ -1,3 +1,5 @@
+#pragma once
+
 #include <stdint.h>
 #include <cstring>
 #include <memory>
@@ -22,32 +24,32 @@
 class BufferEntry {
  public:
   /**
-   * @param start: a reference to the the entry
+   * @param start: reference to the the entry
    **/
-  BufferEntry(const volatile uint8_t &start);
+  BufferEntry(volatile const uint8_t *const buf);
 
   /**
    * @returns: the message id
    **/
-  uint64_t id();
+  uint64_t id() const;
 
   /**
-   * @returns: a reference to the content
+   * @returns: a pointer to the content
    **/
-  const volatile uint8_t &content();
+  volatile const uint8_t *content() const;
 
   /**
-   * @returns: a reference to the signature
+   * @returns: a pointer to the signature
    **/
-  const volatile uint8_t &signature();
+  volatile const uint8_t *signature() const;
 
   /**
    * @returns: the address of the entry
    **/
-  uint64_t addr();
+  uintptr_t addr() const;
 
  private:
-  const volatile uint8_t &start;
+  volatile const uint8_t *const buf;
 };
 
 /**
@@ -56,42 +58,32 @@ class BufferEntry {
  **/
 class BroadcastBuffer {
  public:
+  uint32_t lkey;
+
   /**
-   * @param start: a reference to the buffer
-   * @param buf_size: the buffer size in bytes
+   * @param addr: address of the buffer
+   * @param buf_size: buffer size in bytes
+   * @param lkey: local key for the memory region
    **/
-  BroadcastBuffer(volatile uint8_t &start, size_t buf_size);
+  BroadcastBuffer(uintptr_t addr, uint64_t buf_size, uint32_t lkey);
 
   /**
    * @param index: index of the entry
    * @returns: the offset in bytes where this entry resides in the buffer
    * @thorws: std::out_of_range
    **/
-  uint64_t get_byte_offset(uint64_t index);
+  uint64_t get_byte_offset(uint64_t index) const;
 
   /**
    * @param index: index of the entry
    * @returns: the entry associated with the provided index
    * @thorws: std::out_of_range
    **/
-  std::unique_ptr<BufferEntry> get_entry(uint64_t index);
-
-  /**
-   * This function is only used initially when broadcasting a message to write
-   *it into a memory region accessible by the RNIC
-   * @param index: index of the entry
-   * @param k: message key
-   * @param buf: a reference to the buffer to copy into the `content` field of
-   * the entry
-   * @param len: the length of the buffer to copy
-   * @thorws: std::out_of_range
-   **/
-  std::unique_ptr<BufferEntry> write(uint64_t index, uint64_t k,
-                                     volatile uint8_t &buf, size_t len);
+  std::unique_ptr<BufferEntry> get_entry(uint64_t index) const;
 
  private:
-  volatile uint8_t &start;
-  size_t buf_size;
+  volatile const uint8_t *const buf;
+  uint64_t buf_size;
   uint64_t num_entries;
 };
 
@@ -107,27 +99,26 @@ class BroadcastBuffer {
 class ReplayBufferWriter {
  public:
   /**
-   * @param start: a reference to the buffer
+   * @param addr: address of the buffer
    * @param buf_size: the size of the buffer in bytes
    * @param num_proc: the total number of processes in the cluster
    **/
-  ReplayBufferWriter(const volatile uint8_t &start, size_t buf_size,
-                     int num_proc);
+  ReplayBufferWriter(uintptr_t addr, size_t buf_size, int num_proc);
 
   /**
    * @param proc_id: the process id
    * @param index: index of the entry
    **/
-  uint64_t get_byte_offset(size_t proc_id, uint64_t index);
+  uint64_t get_byte_offset(int proc_id, uint64_t index) const;
 
   /**
    * @param proc_id: the process id
    * @param index: index of the entry
    **/
-  std::unique_ptr<BufferEntry> get_entry(size_t proc_id, uint64_t index);
+  std::unique_ptr<BufferEntry> get_entry(int proc_id, uint64_t index) const;
 
  private:
-  const volatile uint8_t &start;
+  volatile const uint8_t *const buf;
   size_t buf_size;
   uint64_t num_proc;
   uint64_t num_entries_per_proc;
@@ -145,32 +136,34 @@ class ReplayBufferWriter {
  **/
 class ReplayBufferReader {
  public:
+  uint32_t lkey;
   /**
-   * @param start: a reference to the buffer
+   * @param addr: address of the buffer
    * @param buf_size: the size of the buffer in bytes
+   * @param lkey: local key for the memory region
    * @param num_proc: the total number of processes in the cluster
    **/
-  ReplayBufferReader(const volatile uint8_t &start, size_t buf_size,
+  ReplayBufferReader(uintptr_t addr, size_t buf_size, uint32_t lkey,
                      int num_proc);
 
   /**
-   * @param origin_id: the id of the process who's value is replayed
-   * @param replayer_id: the id of the process who replayed the value
-   * @param index: the index of the entry
+   * @param origin_id: id of the process who's value is replayed
+   * @param replayer_id: id of the process who replayed the value
+   * @param index: index of the entry
    **/
-  uint64_t get_byte_offset(size_t origin_id, size_t replayer_id,
-                           uint64_t index);
+  uint64_t get_byte_offset(int origin_id, int replayer_id,
+                           uint64_t index) const;
 
   /**
-   * @param origin_id: the id of the process who's value is replayed
-   * @param replayer_id: the id of the process who replayed the value
-   * @param index: the index of the entry
+   * @param origin_id: id of the process who's value is replayed
+   * @param replayer_id: id of the process who replayed the value
+   * @param index: index of the entry
    **/
-  std::unique_ptr<BufferEntry> get_entry(size_t origin_id, size_t replayer_id,
-                                         uint64_t index);
+  std::unique_ptr<BufferEntry> get_entry(int origin_id, int replayer_id,
+                                         uint64_t index) const;
 
  private:
-  const volatile uint8_t &start;
+  volatile const uint8_t *const buf;
   size_t buf_size;
   uint64_t num_proc;
   uint64_t num_entries_per_proc;

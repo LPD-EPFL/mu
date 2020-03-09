@@ -99,6 +99,7 @@ void ReliableConnection::bindToPD(std::string pd_name) {
 
 void ReliableConnection::bindToMR(std::string mr_name) { mr = cb.mr(mr_name); }
 
+// TODO(Kristian): creation of qp should be rather separated?
 void ReliableConnection::associateWithCQ(std::string send_cp_name,
                                          std::string recv_cp_name) {
   create_attr.send_cq = cb.cq(send_cp_name).get();
@@ -203,11 +204,17 @@ void ReliableConnection::connect(RemoteConnection &rc) {
 
 bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf,
                                         uint64_t len, uintptr_t remote_addr) {
+  return postSendSingle(req, req_id, buf, len, mr.lkey, remote_addr);
+}
+
+bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf,
+                                        uint64_t len, uint32_t lkey,
+                                        uintptr_t remote_addr) {
   struct ibv_sge sg;
   memset(&sg, 0, sizeof(sg));
   sg.addr = reinterpret_cast<uintptr_t>(buf);
   sg.length = len;
-  sg.lkey = mr.lkey;
+  sg.lkey = lkey;
 
   struct ibv_send_wr wr;
   memset(&wr, 0, sizeof(wr));

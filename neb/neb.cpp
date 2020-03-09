@@ -1,280 +1,286 @@
-#include "neb.hpp"
-/**
- * Returns the index for the `broadcast-lgid-p_idx` QP
- * * @param p_id: id of the process
- */
-static inline size_t b_idx(size_t p_id) { return 2 * p_id; }
+#include "spdlog/sinks/stdout_color_sinks.h"
 
-/**
- * Returns the index for the `replay-lgid-p_idx` QP
- * @param p_id: id of the process
- */
-static inline size_t r_idx(size_t p_id) { return 2 * p_id + 1; }
+#include <dory/store.hpp>
+#include "neb.hpp"
+
+namespace dory {
+
+static inline void connect_remote(ReliableConnection &rc, std::string r_qp_name,
+                                  ControlBlock::MemoryRights rights,
+                                  spdlog::logger &logger) {
+  std::string ret_val;
+
+  if (!MemoryStore::getInstance().get(r_qp_name, ret_val)) {
+    throw std::runtime_error("Could not retrieve key " + r_qp_name);
+  }
+
+  rc.init(rights);
+  auto remote_conn = RemoteConnection::fromStr(ret_val);
+
+  rc.connect(remote_conn);
+  logger.debug("Connected with remote {} qp", r_qp_name);
+}
+
+static inline std::string replay_str(int at, int from) {
+  std::stringstream s;
+  s << "neb-replay-" << at << "-" << from;
+  return s.str();
+}
+
+static inline std::string bcast_str(int from, int to) {
+  std::stringstream s;
+  s << "neb-broadcast-" << from << "-" << to;
+  return s.str();
+}
+
+static inline ControlBlock::MemoryRegion create_and_get_mr(
+    ControlBlock &cb, std::string name, std::string pd_name,
+    ControlBlock::MemoryRights rights) {
+  cb.allocateBuffer(name, BUFFER_SIZE, 64);
+
+  cb.registerMR(name, pd_name, name, rights);
+
+  return cb.mr(name);
+}
+
+static inline void configure_and_publish_qp(ReliableConnection &rc,
+                                            std::string PD_NAME,
+                                            std::string qp_name,
+                                            std::string mr_name,
+                                            spdlog::logger &logger) {
+  rc.bindToPD(PD_NAME);
+  rc.bindToMR(mr_name);
+  rc.associateWithCQ(qp_name, qp_name);
+
+  MemoryStore::getInstance().set(qp_name, rc.remoteInfo().serialize());
+  logger.debug("Publishing {} qp", qp_name);
+}
+
+/* -------------------------------------------------------------------------- */
 
 NonEquivocatingBroadcast::~NonEquivocatingBroadcast() {
   poller_running = false;
+  // while (!poller_finished) {
+  // }
+  logger->info("Poller thread finished\n");
 }
 
-/**
- * TODO(Kristian): DOC
- */
-NonEquivocatingBroadcast::NonEquivocatingBroadcast(
-    size_t lgid, size_t num_proc,
-    void (*deliver_cb)(uint64_t k, const volatile uint8_t &m, size_t proc_id))
-    : lgid(lgid),
-      num_proc(num_proc),
-      last(std::make_unique<uint64_t[]>(num_proc)),
-      deliver_callback(deliver_cb) {
-  ConnectionConfig conn_config = ConnectionConfig::builder{}
-                                     .max_rd_atomic(16)
-                                     .sq_depth(kHrdSQDepth)
-                                     .num_qps(num_proc * 2)
-                                     .use_uc(0)
-                                     .prealloc_buf(nullptr)
-                                     .buf_size(BUFFER_SIZE)
-                                     .buf_shm_key(-1)
-                                     .build();
+NonEquivocatingBroadcast::NonEquivocatingBroadcast(int self_id,
+                                                   std::vector<int> remote_ids,
+                                                   dory::ControlBlock &cb,
+                                                   deliver_callback deliver)
+    : self_id(self_id),
+      remote_ids{remote_ids},
+      num_proc(remote_ids.size() + 1),
+      deliver(deliver),
+      cb(cb),
+      logger(spdlog::stdout_color_mt("NEB")) {
+  logger->set_pattern(SPD_FORMAT_STR);
+  logger->set_level(spdlog::level::debug);
+  logger->info("Initializing");
 
-  cb = std::make_unique<ControlBlock>(lgid, ib_port_index, kHrdInvalidNUMANode,
-                                      conn_config);
+  next.insert(std::pair<int, uint64_t>(self_id, 1));
 
-  // Announce the QPs
-  for (size_t i = 0; i < num_proc; i++) {
-    if (i == lgid) continue;
+  cb.registerPD(PD_NAME);
 
-    char srv_name[QP_NAME_LENGTH];
+  auto r_mr_w =
+      create_and_get_mr(cb, REPLAY_W_NAME, PD_NAME,
+                        ControlBlock::LOCAL_WRITE | ControlBlock::REMOTE_READ);
+  replay_w_buf =
+      std::make_unique<ReplayBufferWriter>(r_mr_w.addr, r_mr_w.size, num_proc);
 
-    sprintf(srv_name, "broadcast-%zu-%zu", i, lgid);
-    cb->publish_conn_qp(b_idx(i), srv_name);
+  auto r_mr_r =
+      create_and_get_mr(cb, REPLAY_R_NAME, PD_NAME, ControlBlock::LOCAL_WRITE);
+  replay_r_buf = std::make_unique<ReplayBufferReader>(r_mr_r.addr, r_mr_r.size,
+                                                      r_mr_r.lkey, num_proc);
 
-    sprintf(srv_name, "replay-%zu-%zu", lgid, i);
-    cb->publish_conn_qp(r_idx(i), srv_name);
+  // Insert a buffer which will be used as scatter when post sending writes
+  auto b_mr =
+      create_and_get_mr(cb, bcast_str(self_id, self_id), PD_NAME,
+                        ControlBlock::LOCAL_WRITE | ControlBlock::REMOTE_WRITE);
+  bcast_bufs.insert(std::pair<int, BroadcastBuffer>(
+      self_id, BroadcastBuffer(b_mr.addr, b_mr.size, b_mr.lkey)));
+
+  // Create ressources for remote processes
+  for (auto &id : remote_ids) {
+    next.insert(std::pair<int, uint64_t>(id, 1));
+
+    auto b_name = bcast_str(id, self_id);
+    auto b_mr = create_and_get_mr(
+        cb, b_name, PD_NAME,
+        ControlBlock::LOCAL_WRITE | ControlBlock::REMOTE_WRITE);
+
+    bcast_bufs.insert(std::pair<int, BroadcastBuffer>(
+        id, BroadcastBuffer(b_mr.addr, b_mr.size, b_mr.lkey)));
+
+    cb.registerCQ(b_name);
+
+    bcast_conn.insert(
+        std::pair<int, ReliableConnection>(id, ReliableConnection(cb)));
+
+    auto &b_rc = bcast_conn.find(id)->second;
+
+    configure_and_publish_qp(b_rc, PD_NAME, b_name, b_name, *logger.get());
+
+    auto r_name = replay_str(self_id, id);
+
+    cb.registerCQ(r_name);
+
+    replay_conn.insert(
+        std::pair<int, ReliableConnection>(id, ReliableConnection(cb)));
+
+    auto &r_rc = replay_conn.find(id)->second;
+
+    configure_and_publish_qp(r_rc, PD_NAME, r_name, REPLAY_W_NAME,
+                             *logger.get());
+  }
+}
+
+void NonEquivocatingBroadcast::connect_to_remote_qps() {
+  if (connected) return;
+
+  // connect to remote broadcast QPs
+  for (auto &[id, rc] : bcast_conn) {
+    try {
+      connect_remote(rc, bcast_str(self_id, id),
+                     ControlBlock::LOCAL_READ | ControlBlock::REMOTE_WRITE,
+                     *logger.get());
+    } catch (std::runtime_error e) {
+      logger->critical("While connecting to remote QP:" +
+                       std::string(e.what()));
+      return;
+    }
   }
 
-  // Connect to remote QPs
-  for (size_t i = 0; i < num_proc; i++) {
-    if (i == lgid) continue;
-
-    char clt_name[QP_NAME_LENGTH];
-
-    sprintf(clt_name, "broadcast-%zu-%zu", lgid, i);
-    cb->connect_remote_qp(b_idx(i), clt_name);
-
-    sprintf(clt_name, "replay-%zu-%zu", i, lgid);
-    cb->connect_remote_qp(r_idx(i), clt_name);
+  // connect to remote replay QPs
+  for (auto &[id, rc] : replay_conn) {
+    try {
+      connect_remote(rc, replay_str(id, self_id),
+                     ControlBlock::LOCAL_WRITE | ControlBlock::REMOTE_READ,
+                     *logger.get());
+    } catch (std::runtime_error e) {
+      logger->critical("While connecting to remote QP: " +
+                       std::string(e.what()));
+      return;
+    }
   }
 
-  // Wait till qps are ready
-  for (size_t i = 0; i < num_proc; i++) {
-    if (i == lgid) continue;
+  connected = true;
+  logger->info("Connected");
+}
 
-    char clt_name[QP_NAME_LENGTH];
+void NonEquivocatingBroadcast::start() {
+  if (started) return;
 
-    sprintf(clt_name, "broadcast-%zu-%zu", i, lgid);
-    MemoryStore::getInstance().wait_till_ready(clt_name);
-
-    sprintf(clt_name, "replay-%zu-%zu", lgid, i);
-    MemoryStore::getInstance().wait_till_ready(clt_name);
+  if (!connected) {
+    throw std::runtime_error(
+        "Not connected to remote QPs, cannot start serving");
   }
-
-  for (size_t i = 0; i < num_proc; i++) {
-    bcast_buf.push_back(
-        std::make_unique<BroadcastBuffer>(*cb->get_buf(b_idx(i)), BUFFER_SIZE));
-  }
-
-  replay_w_buf = std::make_unique<ReplayBufferWriter>(*cb->get_buf(r_idx(lgid)),
-                                                      BUFFER_SIZE, num_proc);
-
-  replay_r_buf = std::make_unique<ReplayBufferReader>(
-      cb->get_buf(r_idx(lgid))[BUFFER_SIZE], BUFFER_SIZE, num_proc);
-
-  printf("neb: Begin data path!\n");
 
   poller_thread = std::thread([=] { start_poller(); });
   poller_thread.detach();
+
+  started = true;
+  logger->info("Started");
 }
 
-/**
- * TODO(Kristian): DOC
- */
 void NonEquivocatingBroadcast::broadcast(uint64_t k, Broadcastable &msg) {
-  const auto next_idx = last[lgid] + 1;
+  const auto next_idx = next[self_id];
 
-  // TODO(Kristian): ideally directly write to the bcast_buf
-  auto tmp = std::make_unique<volatile uint8_t[]>(BUFFER_ENTRY_SIZE);
-  auto msg_size = msg.marshall(tmp.get());
-  auto entry = bcast_buf[lgid]->write(next_idx, k, *(tmp.get()), msg_size);
+  // write to own broadcast buffer and use it as the scatter element for writes
+  auto bcast_buf = bcast_bufs.find(self_id)->second;
+  auto entry = bcast_buf.get_entry(next_idx);
+  auto buf = reinterpret_cast<uint64_t *>(entry->addr());
 
-  // Broadcast: write to every "broadcast-self-x" qp
-  for (size_t i = 0; i < num_proc; i++) {
-    if (i == lgid) continue;
+  buf[0] = k;
 
-    struct ibv_sge sg;
-    memset(&sg, 0, sizeof(sg));
+  auto msg_size = msg.marshall(reinterpret_cast<void *>(&buf[1]));
 
-    sg.addr = entry->addr();
-    sg.length = msg_size + NEB_MSG_OVERHEAD;
-    sg.lkey = cb->get_mr(b_idx(lgid))->lkey;
+  for (auto &it : bcast_conn) {
+    auto &rc = it.second;
+    auto ret = rc.postSendSingle(
+        ReliableConnection::RdmaWrite, next_idx,
+        reinterpret_cast<void *>(entry->addr()), msg_size + NEB_MSG_OVERHEAD,
+        bcast_buf.lkey, rc.remoteBuf() + bcast_buf.get_byte_offset(next_idx));
 
-    post_write(sg, i, bcast_buf[lgid]->get_byte_offset(next_idx));
+    if (!ret) {
+      std::cout << "Post returned " << ret << std::endl;
+    }
   }
+
   // increase the message counter
-  last[lgid] = next_idx;
+  next[self_id]++;
   // deliver to ourself
-  deliver_callback(k, entry->content(), lgid);
+  deliver(k, entry->content(), self_id);
 }
 
-/**
- * TODO(Kristian): DOC
- */
 void NonEquivocatingBroadcast::start_poller() {
-  printf("neb: poller thread running\n");
+  logger->info("Poller thread running");
 
   if (poller_running) return;
 
   poller_running = true;
 
   while (poller_running) {
-    for (size_t i = 0; i < num_proc; i++) {
-      if (i == lgid) continue;
+    for (int &id : remote_ids) {
+      uint64_t next_index = next[id];
 
-      uint64_t next_index = last[i] + 1;
-
-      auto bcast_entry = bcast_buf[i]->get_entry(next_index);
+      auto bcast_entry = bcast_bufs.find(id)->second.get_entry(next_index);
 
       // TODO(Kristian): eventually check for matching signature
       if (bcast_entry->id() == 0 || bcast_entry->id() != next_index) continue;
 
-      printf("neb: bcast from %zu = (%lu, %lu)\n", i, bcast_entry->id(),
-             *reinterpret_cast<const volatile uint64_t *>(
-                 &bcast_entry->content()));
+      logger->debug(
+          "Bcast from {} = ({}, {})", id, bcast_entry->id(),
+          *reinterpret_cast<volatile const uint64_t *>(bcast_entry->content()));
 
-      auto replay_entry_w = replay_w_buf->get_entry(i, next_index);
+      auto replay_entry_w = replay_w_buf->get_entry(id, next_index);
 
       memcpy((void *)replay_entry_w->addr(), (void *)bcast_entry->addr(),
              BUFFER_ENTRY_SIZE);
 
-      printf("neb: repl for %zu = (%lu, %lu)\n", i, replay_entry_w->id(),
-             *reinterpret_cast<const volatile uint64_t *>(
-                 &replay_entry_w->content()));
+      logger->debug("Replay for {} = ({}, {})", id, replay_entry_w->id(),
+                    *reinterpret_cast<volatile const uint64_t *>(
+                        replay_entry_w->content()));
 
       bool is_valid = true;
-      // read replay slots for origin i
-      // for now in every loop we trigger a blocking (until local senq queue has
-      // processed the wr) read request.
-      for (size_t j = 0; j < num_proc; j++) {
-        if (j == lgid || j == i) {
-          continue;
+
+      for (auto &[j, rc] : replay_conn) {
+        if (j == id) continue;
+
+        auto replay_entry_r = replay_r_buf->get_entry(id, j, next_index);
+
+        auto ret = rc.postSendSingle(
+            ReliableConnection::RdmaRead, next_index,
+            reinterpret_cast<void *>(replay_entry_r->addr()), BUFFER_ENTRY_SIZE,
+            replay_r_buf->lkey,
+            rc.remoteBuf() + replay_w_buf->get_byte_offset(id, next_index));
+
+        if (!ret) {
+          std::cout << "Post returned " << ret << std::endl;
         }
 
-        auto replay_entry_r = replay_r_buf->get_entry(i, j, next_index);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-        struct ibv_sge sg;
-        memset(&sg, 0, sizeof(sg));
+        logger->debug("Replay entry for {} at {} = ({},{})", id, j,
+                      replay_entry_r->id(),
+                      *reinterpret_cast<volatile const uint64_t *>(
+                          replay_entry_r->content()));
 
-        sg.addr = replay_entry_r->addr();
-        sg.length = BUFFER_ENTRY_SIZE;
-        sg.lkey = cb->get_mr(r_idx(lgid))->lkey;
-
-        post_replay_read(sg, j, replay_w_buf->get_byte_offset(i, next_index));
-
+        // TODO(Kristian): split the reading from writing
         if (replay_entry_r->id() != 0 &&
             memcmp((void *)bcast_entry->addr(), (void *)replay_entry_r->addr(),
                    BUFFER_ENTRY_SIZE)) {
           is_valid = false;
         }
-
-        printf("neb: replay entry for %zu at %zu = (%lu,%lu)\n", i, j,
-               replay_entry_r->id(),
-               *reinterpret_cast<const volatile uint64_t *>(
-                   &replay_entry_r->content()));
       }
 
       if (is_valid) {
-        deliver_callback(bcast_entry->id(), bcast_entry->content(), i);
-        last[i] = next_index;
+        deliver(bcast_entry->id(), bcast_entry->content(), id);
+        next[id]++;
       }
     }
   }
-
-  printf("neb: poller thread finishing\n");
+  poller_finished = true;
 }
-
-/**
- * TODO(Kristian): DOC
- */
-int NonEquivocatingBroadcast::post_write(ibv_sge sg, size_t dest_id,
-                                         uint64_t msg_offset) {
-  struct ibv_send_wr wr;
-  struct ibv_wc wc;
-  struct ibv_send_wr *bad_wr = nullptr;
-
-  memset(&wr, 0, sizeof(wr));
-  wr.wr_id = 0;
-  wr.sg_list = &sg;
-  wr.num_sge = 1;
-  wr.opcode = IBV_WR_RDMA_WRITE;
-  wr.next = nullptr;
-  // A WR is considered outstanding until there is a Work Completion for it or
-  // for other WRs in that Work Queue.
-  // Without using a signaled wr we'd be only able to send max_send_wr (which
-  // we set to 128).
-  // Eventually, only every message with id % max_send_wr == 0 might be
-  // signalled for which we poll from the CQ. This will increase the
-  // performance.
-  wr.send_flags = IBV_SEND_SIGNALED;
-  wr.wr.rdma.remote_addr = cb->get_r_qp(b_idx(dest_id))->buf_addr + msg_offset;
-  wr.wr.rdma.rkey = cb->get_r_qp(b_idx(dest_id))->rkey;
-
-  printf("neb: Write over broadcast QP to %lu \n", dest_id);
-
-  if (ibv_post_send(cb->get_qp(b_idx(dest_id)), &wr, &bad_wr)) {
-    fprintf(stderr, "Error, ibv_post_send() failed\n");
-    // TODO(Krisitan): properly handle err
-    return -1;
-  }
-
-  if (bad_wr != nullptr) {
-    printf("bad_wr is set!\n");
-  }
-
-  hrd_poll_cq(cb->get_cq(b_idx(dest_id)), 1, &wc);
-  return 0;
-}
-
-/**
- * TODO(Kristian): DOC
- */
-int NonEquivocatingBroadcast::post_replay_read(ibv_sge sg, size_t r_id,
-                                               uint64_t msg_offset) {
-  struct ibv_send_wr wr;
-  struct ibv_send_wr *bad_wr = nullptr;
-  struct ibv_wc wc;
-  memset(&wr, 0, sizeof(wr));
-
-  wr.sg_list = &sg;
-  wr.num_sge = 1;
-  wr.opcode = IBV_WR_RDMA_READ;
-  // for now we want a signal so we don't flood the send queue with read
-  // requests since the poller_thread is reading infinitelly until it sees a
-  // value.
-  wr.send_flags = IBV_SEND_SIGNALED;
-  wr.wr.rdma.remote_addr = cb->get_r_qp(r_idx(r_id))->buf_addr + msg_offset;
-  wr.wr.rdma.rkey = cb->get_r_qp(r_idx(r_id))->rkey;
-
-  printf("neb: Posting replay read at %lu\n", r_id);
-
-  if (ibv_post_send(cb->get_qp(r_idx(r_id)), &wr, &bad_wr)) {
-    fprintf(stderr, "Error, ibv_post_send() failed\n");
-    // TODO(Kristian): properly handle
-    return -1;
-  }
-
-  hrd_poll_cq(cb->get_cq(r_idx(r_id)), 1, &wc);
-
-  if (bad_wr != nullptr) {
-    printf("bad_wr is set!\n");
-  }
-
-  return 0;
-}
+}  // namespace dory

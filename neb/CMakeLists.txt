@@ -7,13 +7,10 @@ include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 conan_basic_setup()
 
 add_executable(
-    main 
+    main
     buffer_overlay.cpp
-    ctrl_block.cpp
-    store_conn.cpp
-    util.cpp
     neb.cpp
     main.cpp
 )
 
-target_link_libraries(main ${CONAN_LIBS} pthread ibverbs memcached)
+target_link_libraries(main ${CONAN_LIBS} pthread)
