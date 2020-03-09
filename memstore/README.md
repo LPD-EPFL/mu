@@ -17,12 +17,16 @@ Which will create this package in the local conan cache.
 
 ## Usage
 
-First, make sure to have the memcached server running under the default port `11211` and export the IP of the VM running the server under `DORY_REGISTRY_IP` at every client node.
-
-E.g. when the memcached server is running on `lpdquatro1` you need to:
+First, make sure to have the memcached server running. If not specified otherwise, the memcached server is running under the default port `11211`. Export the IP or domain name of the VM running the server under `DORY_REGISTRY_IP` at every client node. The general syntax is:
 
 ```sh
-export DORY_REGISTRY_IP=128.178.154.41
+export DORY_REGISTRY_IP=DomainOrIP[:Port]
+```
+
+E.g. when the memcached server is running on `example.com`, port `9999` you need to:
+
+```sh
+export DORY_REGISTRY_IP=example.com:9999
 ```
 
 Then, inside a `conanfile.txt` specify:

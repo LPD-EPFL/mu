@@ -28,5 +28,6 @@ dory-crtl/0.0.1
 and use the lib in the source files as follows:
 
 ```cpp
+#include <dory/ctrl/device.hpp>
 #include <dory/ctrl/block.hpp>
 ```

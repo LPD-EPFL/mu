@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <cstring>
+#include <regex>
 #include <stdexcept>
 
 #include "store.hpp"
@@ -10,11 +11,11 @@ MemoryStore::MemoryStore() : memc(memcached_create(nullptr), memcached_free) {
     throw std::runtime_error("Failed to create memcached handle");
   }
 
-  auto registry_ip = env(RegIP);
+  auto [ip, port] = ip_port_from_env_var(RegIPName);
   memcached_return rc;
 
   deleted_unique_ptr<memcached_server_st> servers(
-      memcached_server_list_append(nullptr, registry_ip, MemcacheDPort, &rc),
+      memcached_server_list_append(nullptr, ip.c_str(), port, &rc),
       memcached_server_list_free);
 
   auto push_ret = memcached_server_push(memc.get(), servers.get());
@@ -68,14 +69,39 @@ bool MemoryStore::get(std::string const &key, std::string &value) {
   return false;
 }
 
-char const *MemoryStore::env(char const *const name) const {
+std::pair<std::string, unsigned> MemoryStore::ip_port_from_env_var(
+    char const *const name) const {
   char const *env = getenv(name);
   if (env == nullptr) {
     throw std::runtime_error("Environment variable " + std::string(name) +
                              " not set");
   }
 
-  return env;
+  std::string s(env);
+  std::regex regex(":");
+
+  std::vector<std::string> split_string(
+      std::sregex_token_iterator(s.begin(), s.end(), regex, -1),
+      std::sregex_token_iterator());
+
+  switch (split_string.size()) {
+    case 0:
+      throw std::runtime_error("Environment variable " + std::string(name) +
+                               " contains insufficient data");
+      break;
+
+    case 1:
+      return std::make_pair(split_string[0], MemcacheDDefaultPort);
+    case 2:
+      return std::make_pair(split_string[0], stoi(split_string[1]));
+
+    default:
+      throw std::runtime_error("Environment variable " + std::string(name) +
+                               " contains excessive data");
+  }
+
+  // Unreachable
+  return std::make_pair("", 0);
 }
 
 // // To check if a queue pair with name qp_name is ready, we check if this

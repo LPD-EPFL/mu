@@ -10,8 +10,7 @@
 namespace dory {
 OpenDevice::OpenDevice() {}
 
-OpenDevice::OpenDevice(struct ibv_device *device)
-    : dev{device}, device_attr{ibv_device_attr()} {
+OpenDevice::OpenDevice(struct ibv_device *device) : dev{device} {
   ctx = ibv_open_device(device);
   if (ctx == nullptr) {
     throw std::runtime_error("Could not get device list: " +

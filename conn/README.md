@@ -27,4 +27,5 @@ and use the lib in the source files as follows:
 
 ```cpp
 #include <dory/conn/rc.hpp>
+#include <dory/conn/exchanger.hpp>
 ```

@@ -16,8 +16,19 @@ std::unique_ptr<T[], DeleteAligned<T>> allocate_aligned(int alignment,
   // omitted: check minimum alignment, check error
   T *raw = 0;
   // using posix_memalign as an example, could be made platform dependent...
-  int err = posix_memalign((void **)&raw, alignment, sizeof(T) * length);
-  (void)err;
+  int error = posix_memalign((void **)&raw, alignment, sizeof(T) * length);
+  switch (error) {
+    case EINVAL:
+      throw std::runtime_error(
+          "Tried to allocate with improper alignment request");
+      break;
+    case ENOMEM:
+      throw std::runtime_error("Insufficient memory");
+      break;
+    default:
+      break;
+  }
+
   return std::unique_ptr<T[], DeleteAligned<T>>{raw};
 }
 

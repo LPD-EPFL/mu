@@ -250,6 +250,8 @@ bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf,
   return true;
 }
 
+void ReliableConnection::reconnect() { connect(rconn); }
+
 bool ReliableConnection::pollCqIsOK(CQ cq,
                                     std::vector<struct ibv_wc> &entries) {
   int num = 0;

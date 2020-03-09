@@ -4,6 +4,7 @@
 #include <dory/shared/pointer-wrapper.hpp>
 #include <functional>
 #include <memory>
+#include <utility>
 
 namespace dory {
 /**
@@ -41,10 +42,14 @@ class MemoryStore {
  private:
   MemoryStore();
 
-  char const *env(char const *const name) const;
-  // env variable holind the IP of the machine running the memory store
-  static constexpr auto RegIP = "DORY_REGISTRY_IP";
-  static constexpr auto MemcacheDPort = MEMCACHED_DEFAULT_PORT;  // 11211
+  std::pair<std::string, unsigned> ip_port_from_env_var(
+      char const *const name) const;
+  static constexpr auto RegIPName = "DORY_REGISTRY_IP";
+  static constexpr auto MemcacheDDefaultPort = MEMCACHED_DEFAULT_PORT;  // 11211
+
+  /**
+   * TODO(Krsitian): DOC
+   */
   deleted_unique_ptr<memcached_st> memc;
 };
 }  // namespace dory

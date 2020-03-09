@@ -103,6 +103,7 @@ class ReliableConnection {
   void init(ControlBlock::MemoryRights rights);
 
   void connect(RemoteConnection &rci);
+  void reconnect();
 
   bool postSendSingle(RdmaReq req, uint64_t req_id, void *buf, uint64_t len,
                       uintptr_t remote_addr);

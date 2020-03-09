@@ -14,6 +14,7 @@ class HelloConan(ConanFile):
 
     def requirements(self):
         self.requires("dory-ctrl/0.0.1")
+        self.requires("dory-memstore/0.0.1")
 
     def build(self):
         cmake = CMake(self)
