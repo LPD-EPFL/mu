@@ -29,5 +29,9 @@ and use in source files as follows:
 
 ```cpp
 #include <dory/shared/pointer-wrapper.hpp>
+#include <dory/shared/unused-suppressor.hpp>
+#include <dory/shared/units.hpp>
 
+// For the units:
+using namespace dory::units;
 ```
