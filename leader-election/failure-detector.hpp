@@ -11,6 +11,7 @@
 #include <dory/conn/rc.hpp>
 #include <dory/ctrl/block.hpp>
 #include <dory/shared/pointer-wrapper.hpp>
+#include <dory/shared/unused-suppressor.hpp>
 #include <dory/store.hpp>
 
 namespace dory {
@@ -42,14 +43,23 @@ struct OverlayAllocator {
   template <typename U>
   OverlayAllocator(OverlayAllocator<U> other) : state(other.state) {}
 
-  T *allocate(std::size_t n) { return static_cast<T *>(state->buf); }
+  T *allocate(std::size_t n) {
+    return static_cast<T *>(state->buf);
+    IGNORE(n);
+  }
 
-  void deallocate(T *p, std::size_t n) {}
+  void deallocate(T *p, std::size_t n) {
+    IGNORE(p);
+    IGNORE(n);
+  }
 
   template <typename... Args>
-  void construct(T *c, Args... args) {}
+  void construct(T *c, Args... args) {
+    IGNORE(c);
+    IGNORE(args...);
+  }
 
-  void destroy(T *c) {}
+  void destroy(T *c) { IGNORE(c); }
 
   friend bool operator==(const OverlayAllocator &a, const OverlayAllocator &b) {
     return a.state == b.state;

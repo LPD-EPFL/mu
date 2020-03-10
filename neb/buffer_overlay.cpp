@@ -23,7 +23,6 @@ BroadcastBuffer::BroadcastBuffer(uintptr_t addr, uint64_t buf_size,
                                  uint32_t lkey)
     : lkey(lkey),
       buf(reinterpret_cast<volatile const uint8_t *const>(addr)),
-      buf_size(buf_size),
       num_entries(buf_size / BUFFER_ENTRY_SIZE) {}
 
 uint64_t BroadcastBuffer::get_byte_offset(uint64_t index) const {
@@ -51,8 +50,6 @@ std::unique_ptr<BufferEntry> BroadcastBuffer::get_entry(uint64_t index) const {
 ReplayBufferWriter::ReplayBufferWriter(uintptr_t addr, size_t buf_size,
                                        int num_proc)
     : buf(reinterpret_cast<volatile const uint8_t *const>(addr)),
-      buf_size(buf_size),
-      num_proc(num_proc),
       num_entries_per_proc(buf_size / BUFFER_ENTRY_SIZE / num_proc) {}
 
 uint64_t ReplayBufferWriter::get_byte_offset(int proc_id,
@@ -84,7 +81,6 @@ ReplayBufferReader::ReplayBufferReader(uintptr_t addr, size_t buf_size,
                                        uint32_t lkey, int num_proc)
     : lkey(lkey),
       buf(reinterpret_cast<volatile const uint8_t *const>(addr)),
-      buf_size(buf_size),
       num_proc(num_proc),
       num_entries_per_proc(buf_size / BUFFER_ENTRY_SIZE / num_proc / num_proc) {
 }

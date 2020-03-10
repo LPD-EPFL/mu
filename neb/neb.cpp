@@ -1,5 +1,6 @@
 #include "spdlog/sinks/stdout_color_sinks.h"
 
+#include <dory/shared/unused-suppressor.hpp>
 #include <dory/store.hpp>
 #include "neb.hpp"
 
@@ -75,6 +76,8 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(int self_id,
       deliver(deliver),
       cb(cb),
       logger(spdlog::stdout_color_mt("NEB")) {
+  IGNORE(this->cb);
+
   logger->set_pattern(SPD_FORMAT_STR);
   logger->set_level(spdlog::level::debug);
   logger->info("Initializing");

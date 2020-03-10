@@ -112,7 +112,7 @@ std::vector<OpenDevice> &Devices::list(bool force) {
     }
 
     for (int i = 0; i < num_devices; i++) {
-      devices.push_back(std::move(OpenDevice(dev_list[i])));
+      devices.push_back(OpenDevice(dev_list[i]));
     }
   }
 
@@ -121,7 +121,9 @@ std::vector<OpenDevice> &Devices::list(bool force) {
 }  // namespace dory
 
 namespace dory {
-ResolvedPort::ResolvedPort(OpenDevice &od) : open_dev{od}, port_index{-1} {}
+ResolvedPort::ResolvedPort(OpenDevice &od) : open_dev{od}, port_index{-1} {
+  (void)port_index;
+}
 
 bool ResolvedPort::bindTo(size_t index) {
   size_t skipped_active_ports = 0;

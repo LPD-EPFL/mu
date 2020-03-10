@@ -153,7 +153,6 @@ void ReliableConnection::init(ControlBlock::MemoryRights rights) {
 }
 
 void ReliableConnection::connect(RemoteConnection &rc) {
-  struct ibv_qp_attr conn_attr;
   memset(&conn_attr, 0, sizeof(struct ibv_qp_attr));
   conn_attr.qp_state = IBV_QPS_RTR;
   conn_attr.path_mtu = IBV_MTU_4096;

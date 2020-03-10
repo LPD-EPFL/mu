@@ -83,7 +83,7 @@ class BroadcastBuffer {
 
  private:
   volatile const uint8_t *const buf;
-  uint64_t buf_size;
+  // uint64_t buf_size;
   uint64_t num_entries;
 };
 
@@ -119,8 +119,8 @@ class ReplayBufferWriter {
 
  private:
   volatile const uint8_t *const buf;
-  size_t buf_size;
-  uint64_t num_proc;
+  // size_t buf_size;
+  // uint64_t num_proc;
   uint64_t num_entries_per_proc;
 };
 
@@ -164,7 +164,7 @@ class ReplayBufferReader {
 
  private:
   volatile const uint8_t *const buf;
-  size_t buf_size;
+  // size_t buf_size;
   uint64_t num_proc;
   uint64_t num_entries_per_proc;
 };
