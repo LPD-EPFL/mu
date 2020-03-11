@@ -80,7 +80,7 @@ class NonEquivocatingBroadcast {
   // process id
   int self_id;
 
-  // ids of the remote processes;
+  // ids of the remote processes
   std::vector<int> remote_ids;
 
   // number of processes in the cluster

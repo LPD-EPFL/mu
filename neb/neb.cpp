@@ -24,8 +24,6 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(int self_id,
       logger(std_out_logger("NEB")) {
   IGNORE(this->cb);
 
-  logger->set_pattern(SPD_FORMAT_STR);
-  logger->set_level(spdlog::level::debug);
   logger->info("Creating instance");
 
   auto proc_ids = remote_ids;

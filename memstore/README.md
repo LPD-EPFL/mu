@@ -3,7 +3,6 @@
 ## Requirements
 
 - [conan](https://conan.io/) package manager
-- `libmemcached-dev` installed in the system libs
 
 ## Install
 

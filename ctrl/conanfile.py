@@ -15,6 +15,7 @@ class HelloConan(ConanFile):
 
     def requirements(self):
         self.requires("dory-shared/0.0.1")
+        self.requires("dory-external/0.0.1")
 
     def build(self):
         cmake = CMake(self)

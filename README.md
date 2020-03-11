@@ -19,18 +19,28 @@
     ```
 - cmake
 - clang-format v6.0.0
-- libmemcached-dev
-- libibverbs-dev
 
 ## Build
 
-Run from within the root:
+Run (with `gcc` as default compiler) from within the root:
 
 ```sh
 ./build.sh
 ```
 
 this will create all conan packages and build the executables.
+
+---
+
+You can also build with `clang` (fixed to v6.0) by calling `build.sh clang`.
+Make sure to have:
+
+```sh
+export CC=/path/to/clang
+export CXX=/path/to/clang++
+```
+
+in the env (required by cmake), otherwise the script will exit.
 
 ## Usage
 

@@ -15,6 +15,7 @@ class HelloConan(ConanFile):
 
     def requirements(self):
         self.requires("dory-shared/0.0.1")
+        self.requires("dory-external/0.0.1")
 
     def build(self):
         cmake = CMake(self)
@@ -27,6 +28,4 @@ class HelloConan(ConanFile):
 
     def package_info(self):
         self.cpp_info.libs = ["memstore"]
-        self.cpp_info.system_libs = ["memcached"]
-        self.cpp_info.libdirs = ['lib']
         self.cpp_info.cxxflags = ["-std=c++17", "-g", "-O3", "-Wall", "-Wextra", "-Wpedantic", "-Werror", "-Wno-unused-result"]

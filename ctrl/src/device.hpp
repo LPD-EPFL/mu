@@ -3,7 +3,7 @@
 #include <map>
 #include <vector>
 
-#include <infiniband/verbs.h>
+#include <dory/extern/ibverbs.hpp>
 
 namespace dory {
 class OpenDevice {

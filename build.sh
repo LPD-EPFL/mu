@@ -68,7 +68,7 @@ fi
 echo "Building dory source with $COMPILER"
 
 echo "Starting off with creating conan packages"
-for p in shared memstore ctrl conn;
+for p in extern shared memstore ctrl conn;
 do
     pushd "$p"
         if [ "$COMPILER" == "clang" ]; then

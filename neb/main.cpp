@@ -36,8 +36,6 @@ void deliver_callback(uint64_t k, volatile const void *m, size_t proc_id) {
 }
 
 int main(int argc, char *argv[]) {
-  logger->set_pattern(SPD_FORMAT_STR);
-
   if (argc < 2) {
     logger->error("Provide the process id as first argument!");
     exit(1);

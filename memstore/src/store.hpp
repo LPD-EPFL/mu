@@ -1,6 +1,6 @@
 #pragma once
 
-#include <libmemcached/memcached.h>
+#include <dory/extern/memcached.hpp>
 #include <dory/shared/pointer-wrapper.hpp>
 #include <functional>
 #include <memory>

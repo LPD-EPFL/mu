@@ -7,8 +7,7 @@
 #include <string>
 #include <vector>
 
-#include <infiniband/verbs.h>
-
+#include <dory/extern/ibverbs.hpp>
 #include <dory/shared/pointer-wrapper.hpp>
 #include "device.hpp"
 
