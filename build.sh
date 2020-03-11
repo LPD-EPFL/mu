@@ -72,7 +72,7 @@ for p in shared memstore ctrl conn;
 do
     pushd "$p"
         if [ "$COMPILER" == "clang" ]; then
-            conan create . -s compiler=clang -s compiler.version="6.0" -s compiler.libcxx="libstdc++11"
+            conan create . --build missing -s compiler=clang -s compiler.version="6.0" -s compiler.libcxx="libstdc++11"
         else
             conan create .
         fi

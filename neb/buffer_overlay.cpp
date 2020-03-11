@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "buffer_overlay.hpp"
 
 BufferEntry::BufferEntry(volatile const uint8_t *const buf) : buf(buf) {}
@@ -48,9 +50,15 @@ std::unique_ptr<BufferEntry> BroadcastBuffer::get_entry(uint64_t index) const {
 /* -------------------------------------------------------------------------- */
 
 ReplayBufferWriter::ReplayBufferWriter(uintptr_t addr, size_t buf_size,
-                                       int num_proc)
+                                       std::vector<int> procs)
     : buf(reinterpret_cast<volatile const uint8_t *const>(addr)),
-      num_entries_per_proc(buf_size / BUFFER_ENTRY_SIZE / num_proc) {}
+      num_entries_per_proc(buf_size / BUFFER_ENTRY_SIZE / procs.size()) {
+  std::sort(std::begin(procs), std::end(procs));
+
+  for (size_t i = 0; i < procs.size(); i++) {
+    process_index.insert(std::pair<int, size_t>(procs[i], i));
+  }
+}
 
 uint64_t ReplayBufferWriter::get_byte_offset(int proc_id,
                                              uint64_t index) const {
@@ -66,7 +74,9 @@ uint64_t ReplayBufferWriter::get_byte_offset(int proc_id,
         "Attempt to access memory outside of the buffer space");
   }
 
-  return proc_id * num_entries_per_proc * BUFFER_ENTRY_SIZE +
+  auto p_index = process_index.find(proc_id)->second;
+
+  return p_index * num_entries_per_proc * BUFFER_ENTRY_SIZE +
          index * BUFFER_ENTRY_SIZE;
 }
 
@@ -78,11 +88,17 @@ std::unique_ptr<BufferEntry> ReplayBufferWriter::get_entry(
 /* -------------------------------------------------------------------------- */
 
 ReplayBufferReader::ReplayBufferReader(uintptr_t addr, size_t buf_size,
-                                       uint32_t lkey, int num_proc)
+                                       uint32_t lkey, std::vector<int> procs)
     : lkey(lkey),
       buf(reinterpret_cast<volatile const uint8_t *const>(addr)),
-      num_proc(num_proc),
-      num_entries_per_proc(buf_size / BUFFER_ENTRY_SIZE / num_proc / num_proc) {
+      num_proc(procs.size()),
+      num_entries_per_proc(buf_size / BUFFER_ENTRY_SIZE / procs.size() /
+                           procs.size()) {
+  std::sort(std::begin(procs), std::end(procs));
+
+  for (size_t i = 0; i < procs.size(); i++) {
+    process_index.insert(std::pair<int, size_t>(procs[i], i));
+  }
 }
 
 uint64_t ReplayBufferReader::get_byte_offset(int origin_id, int replayer_id,
@@ -99,10 +115,13 @@ uint64_t ReplayBufferReader::get_byte_offset(int origin_id, int replayer_id,
         "Attempt to access memory outside of the buffer space");
   }
 
+  auto o_index = process_index.find(origin_id)->second;
+  auto r_index = process_index.find(replayer_id)->second;
+
   auto origin_offset =
-      origin_id * num_entries_per_proc * num_proc * BUFFER_ENTRY_SIZE;
+      o_index * num_entries_per_proc * num_proc * BUFFER_ENTRY_SIZE;
   auto index_offset = index * num_proc * BUFFER_ENTRY_SIZE;
-  auto replayer_offset = replayer_id * BUFFER_ENTRY_SIZE;
+  auto replayer_offset = r_index * BUFFER_ENTRY_SIZE;
 
   return origin_offset + index_offset + replayer_offset;
 }

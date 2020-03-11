@@ -2,7 +2,9 @@
 
 #include <stdint.h>
 #include <cstring>
+#include <map>
 #include <memory>
+#include <vector>
 
 #include "consts.hpp"
 
@@ -83,7 +85,6 @@ class BroadcastBuffer {
 
  private:
   volatile const uint8_t *const buf;
-  // uint64_t buf_size;
   uint64_t num_entries;
 };
 
@@ -101,9 +102,9 @@ class ReplayBufferWriter {
   /**
    * @param addr: address of the buffer
    * @param buf_size: the size of the buffer in bytes
-   * @param num_proc: the total number of processes in the cluster
+   * @param procs: a vector holding all process ids
    **/
-  ReplayBufferWriter(uintptr_t addr, size_t buf_size, int num_proc);
+  ReplayBufferWriter(uintptr_t addr, size_t buf_size, std::vector<int> procs);
 
   /**
    * @param proc_id: the process id
@@ -119,9 +120,8 @@ class ReplayBufferWriter {
 
  private:
   volatile const uint8_t *const buf;
-  // size_t buf_size;
-  // uint64_t num_proc;
   uint64_t num_entries_per_proc;
+  std::map<int, size_t> process_index;
 };
 
 /**
@@ -141,10 +141,10 @@ class ReplayBufferReader {
    * @param addr: address of the buffer
    * @param buf_size: the size of the buffer in bytes
    * @param lkey: local key for the memory region
-   * @param num_proc: the total number of processes in the cluster
+   * @param procs: a vector holding all process ids
    **/
   ReplayBufferReader(uintptr_t addr, size_t buf_size, uint32_t lkey,
-                     int num_proc);
+                     std::vector<int> procs);
 
   /**
    * @param origin_id: id of the process who's value is replayed
@@ -164,7 +164,7 @@ class ReplayBufferReader {
 
  private:
   volatile const uint8_t *const buf;
-  // size_t buf_size;
   uint64_t num_proc;
   uint64_t num_entries_per_proc;
+  std::map<int, size_t> process_index;
 };

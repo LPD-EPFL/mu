@@ -6,8 +6,9 @@
 
 #include <dory/conn/rc.hpp>
 #include <dory/ctrl/block.hpp>
+#include <dory/shared/logger.hpp>
+
 #include "buffer_overlay.hpp"
-#include "spdlog/spdlog.h"
 
 namespace dory {
 class NonEquivocatingBroadcast {
@@ -30,7 +31,7 @@ class NonEquivocatingBroadcast {
 
   /**
    * @param id: of the local process
-   * @param num_proc: number of processes in the cluster
+   * @param remote_ids: vector holding all remote process ids
    * @param cb: reference to the control block
    * @param deliver_cb: callback to call upon delivery of a message
    *
@@ -55,9 +56,25 @@ class NonEquivocatingBroadcast {
    **/
   void start();
 
+  void set_connections(ConnectionExchanger &bcast_conn,
+                       ConnectionExchanger &replay_conn);
+
   static constexpr auto PD_NAME = "neb-primary";
   static constexpr auto REPLAY_W_NAME = "neb-replay-w";
   static constexpr auto REPLAY_R_NAME = "neb-replay-r";
+  static constexpr auto BCAST_W_NAME = "neb-bcast-w";
+
+  static inline std::string replay_str(int at, int from) {
+    std::stringstream s;
+    s << "neb-replay-" << at << "-" << from;
+    return s.str();
+  }
+
+  static inline std::string bcast_str(int from, int to) {
+    std::stringstream s;
+    s << "neb-broadcast-" << from << "-" << to;
+    return s.str();
+  }
 
  private:
   // process id

@@ -1,14 +1,17 @@
-#include "exchanger.hpp"
-
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <sstream>
 
+#include "exchanger.hpp"
+
 namespace dory {
 ConnectionExchanger::ConnectionExchanger(int my_id, std::vector<int> remote_ids,
                                          ControlBlock& cb)
-    : my_id{my_id}, remote_ids{remote_ids}, cb{cb} {
+    : my_id{my_id},
+      remote_ids{remote_ids},
+      cb{cb},
+      logger(std_out_logger("CE")) {
   auto [valid, maximum_id] = valid_ids();
   if (!valid) {
     throw std::runtime_error(
@@ -18,49 +21,74 @@ ConnectionExchanger::ConnectionExchanger(int my_id, std::vector<int> remote_ids,
   max_id = maximum_id;
 }
 
-void ConnectionExchanger::configure(std::string const& pd,
+void ConnectionExchanger::configure(int proc_id, std::string const& pd,
                                     std::string const& mr,
                                     std::string send_cp_name,
                                     std::string recv_cp_name) {
-  // Configure the connections
+  rcs.insert(
+      std::pair<int, ReliableConnection>(proc_id, ReliableConnection(cb)));
+
+  auto& rc = rcs.find(proc_id)->second;
+
+  rc.bindToPD(pd);
+  rc.bindToMR(mr);
+  rc.associateWithCQ(send_cp_name, recv_cp_name);
+}
+
+void ConnectionExchanger::configure_all(std::string const& pd,
+                                        std::string const& mr,
+                                        std::string send_cq_name,
+                                        std::string recv_cq_name) {
   for (auto const& id : remote_ids) {
-    rcs.insert(std::pair<int, dory::ReliableConnection>(
-        id, dory::ReliableConnection(cb)));
-
-    auto& rc = rcs.find(id)->second;
-    rc.bindToPD(pd);
-    rc.bindToMR(mr);
-    rc.associateWithCQ(send_cp_name, recv_cp_name);
+    configure(id, pd, mr, send_cq_name, recv_cq_name);
   }
 }
 
-void ConnectionExchanger::announce(MemoryStore& store,
+void ConnectionExchanger::announce(int proc_id, MemoryStore& store,
                                    std::string const& prefix) {
-  // Announce the connections
-  for (auto& [pid, rc] : rcs) {
-    std::stringstream name;
-    name << prefix << "-" << my_id << "-to-" << pid;
-    auto infoForRemoteParty = rc.remoteInfo();
-    store.set(name.str(), infoForRemoteParty.serialize());
+  auto& rc = rcs.find(proc_id)->second;
+
+  std::stringstream name;
+  name << prefix << "-" << my_id << "-for-" << proc_id;
+  auto infoForRemoteParty = rc.remoteInfo();
+  store.set(name.str(), infoForRemoteParty.serialize());
+  logger->info("Publishing qp {}", name.str());
+}
+
+void ConnectionExchanger::announce_all(MemoryStore& store,
+                                       std::string const& prefix) {
+  for (int pid : remote_ids) {
+    announce(pid, store, prefix);
   }
 }
 
-void ConnectionExchanger::connect(MemoryStore& store, std::string const& prefix,
+void ConnectionExchanger::connect(int proc_id, MemoryStore& store,
+                                  std::string const& prefix,
                                   ControlBlock::MemoryRights rights) {
-  // Establish the connections
-  for (auto& [pid, rc] : rcs) {
-    std::stringstream name;
-    name << prefix << "-" << pid << "-to-" << my_id;
+  auto& rc = rcs.find(proc_id)->second;
 
-    std::string ret_val;
-    if (!store.get(name.str(), ret_val)) {
-      std::cout << "Could not retrieve key " << name.str() << std::endl;
-    }
+  std::stringstream name;
+  name << prefix << "-" << proc_id << "-for-" << my_id;
 
-    auto remoteRC = dory::RemoteConnection::fromStr(ret_val);
+  std::string ret_val;
+  if (!store.get(name.str(), ret_val)) {
+    logger->debug("Could not retrieve key {}", name.str());
 
-    rc.init(rights);
-    rc.connect(remoteRC);
+    throw std::runtime_error("Cannot connect to remote qp" + name.str());
+  }
+
+  auto remoteRC = dory::RemoteConnection::fromStr(ret_val);
+
+  rc.init(rights);
+  rc.connect(remoteRC);
+  logger->info("Connected with {}", name.str());
+}
+
+void ConnectionExchanger::connect_all(MemoryStore& store,
+                                      std::string const& prefix,
+                                      ControlBlock::MemoryRights rights) {
+  for (int pid : remote_ids) {
+    connect(pid, store, prefix, rights);
   }
 }
 

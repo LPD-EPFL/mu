@@ -15,6 +15,12 @@
 namespace dory {
 class ControlBlock {
  public:
+  /**
+   * Memory access attributes by the RDMA device.
+   *
+   * If `REMOTE_WRITE` is set, then `LOCAL_WRITE` must be set too,
+   * since remote write should be allowed only if local write is allowed.
+   **/
   enum MemoryRights {
     LOCAL_READ = 0,
     LOCAL_WRITE = IBV_ACCESS_LOCAL_WRITE,

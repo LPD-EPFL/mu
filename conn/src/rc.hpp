@@ -117,6 +117,8 @@ class ReliableConnection {
 
   uintptr_t remoteBuf() const { return rconn.rci.buf_addr; }
 
+  const ControlBlock::MemoryRegion &get_mr() const { return mr; }
+
  private:
   ControlBlock &cb;
   struct ibv_pd *pd;
