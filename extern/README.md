@@ -22,7 +22,7 @@ Inside a `conanfile.txt` specify:
 
 ```toml
 [requires]
-dory-extern/0.0.1
+dory-external/0.0.1
 ```
 
 and use in source files as follows:
