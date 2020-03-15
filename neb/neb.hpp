@@ -1,33 +1,30 @@
 #pragma once
 
+#include <cstdint>
 #include <cstring>
+#include <memory>
+#include <set>
 #include <thread>
 #include <vector>
 
+#include <dory/conn/exchanger.hpp>
 #include <dory/conn/rc.hpp>
 #include <dory/ctrl/block.hpp>
 #include <dory/shared/logger.hpp>
+#include <dory/shared/pointer-wrapper.hpp>
 
+#include "broadcastable.hpp"
 #include "buffer_overlay.hpp"
+#include "message_tracker.hpp"
 
 namespace dory {
+
+using namespace neb;
+
 class NonEquivocatingBroadcast {
  public:
-  typedef void (*deliver_callback)(uint64_t k, volatile const void *m,
-                                   size_t proc_id);
-
-  /**
-   * Required interface to implement for messages to get broadcasted by this
-   * module
-   **/
-  class Broadcastable {
-   public:
-    /**
-     * @param: pointer to buffer where to marshall the contents of the message
-     * @return: size of the written bytes
-     **/
-    virtual size_t marshall(volatile void *buf) const = 0;
-  };
+  using deliver_callback =
+      std::function<void(uint64_t k, volatile const void *m, size_t proc_id)>;
 
   /**
    * @param id: of the local process
@@ -41,28 +38,32 @@ class NonEquivocatingBroadcast {
   ~NonEquivocatingBroadcast();
 
   /**
+   * Provides the reliable connected QPs. Requires the number of QPs to equal
+   * the number of remote processes for each exchanger.
+   *
+   * @param bcast_conn: exchanger holding the broadcast QPs
+   * @param replay_conn: exchanger holding the replay QPs
+   **/
+  void set_connections(ConnectionExchanger &bcast_conn,
+                       ConnectionExchanger &replay_conn);
+
+  /**
    * @param uint64_t: message key
    * @param msg: message to broadcast
    */
   void broadcast(uint64_t k, Broadcastable &msg);
 
   /**
-   * Connects to the remote QPs published to the memory store.
-   **/
-  void connect_to_remote_qps();
-
-  /**
-   * Begin operation. Needs to be called after connecting to remote qps.
+   * Begin operation. Needs to be called after providing the RC connected QPs.
    **/
   void start();
-
-  void set_connections(ConnectionExchanger &bcast_conn,
-                       ConnectionExchanger &replay_conn);
 
   static constexpr auto PD_NAME = "neb-primary";
   static constexpr auto REPLAY_W_NAME = "neb-replay-w";
   static constexpr auto REPLAY_R_NAME = "neb-replay-r";
   static constexpr auto BCAST_W_NAME = "neb-bcast-w";
+  static constexpr auto BCAST_CQ_NAME = "neb-bacst-cq";
+  static constexpr auto REPLAY_CQ_NAME = "neb-replay-cq";
 
   static inline std::string replay_str(int at, int from) {
     std::stringstream s;
@@ -77,23 +78,17 @@ class NonEquivocatingBroadcast {
   }
 
  private:
-  // process id
+  // process id of the local process
   int self_id;
 
   // ids of the remote processes
   std::vector<int> remote_ids;
-
-  // number of processes in the cluster
-  int num_proc;
 
   // callback to call for delivery of a message
   deliver_callback deliver;
 
   // RDMA control
   ControlBlock &cb;
-
-  // next expected message counter for every process
-  std::map<int, uint64_t> next;
 
   // broadcast reliable connections
   std::map<int, ReliableConnection> bcast_conn;
@@ -113,15 +108,60 @@ class NonEquivocatingBroadcast {
   // beautiful logger
   std::shared_ptr<spdlog::logger> logger;
 
-  // thread that tries to poll
+  // own next message index;
+  uint64_t own_next;
+
+  // work completion vector for read CQ polls
+  std::vector<struct ibv_wc> read_wcs;
+
+  // work completion vector for write CQ polls
+  std::vector<struct ibv_wc> write_wcs;
+
+  // thread that polls the broadcast buffers and replays read values as well
+  // as triggers rdma replay reads.
   std::thread poller_thread;
 
-  void start_poller();
+  // thread that polls replay read responses and tries to deliver messages
+  // from remote processes.
+  std::thread replay_reader_thread;
+
+  // tracks the current state of the next messages to be delivered by remote
+  // processes
+  std::map<int, MessageTracker> next;
+
+  // tracks the pending number of rdma reads at any time
+  size_t pending_reads;
+
+  /**
+   * Starts the replayer thread which tries to deliver messages by remote
+   * processes
+   **/
+  void start_replayer(std::shared_future<void> f);
+
+  /**
+   * Starts the reader thread which consumes WC by the replay read CQ.
+   **/
+  void start_reader(std::shared_future<void> f);
+
+  /**
+   * Consumes and handles the work completion of the replay buffer read CQ.
+   * Upon successful and matching replay read of all relevant remote processes
+   * this routine also delivers messages by calling the deliver callback.
+   **/
+  inline void consume(dory::deleted_unique_ptr<ibv_cq> &cq);
+  /**
+   * Polls the broacast buffers and replays written values to the replay buffer.
+   * Also it triggers rdma reads of remote replay buffers which get handled by
+   * the consumer of the replay buffer completion queue in a separate routine.
+   **/
+  inline void poll_bcast_bufs();
 
   // TODO(Kristian): make atomic
   volatile bool connected = false;
   volatile bool started = false;
   volatile bool poller_running = false;
-  volatile bool poller_finished = false;
+  volatile bool reader_running = false;
+
+  std::promise<void> exit_signal;
 };
 }  // namespace dory

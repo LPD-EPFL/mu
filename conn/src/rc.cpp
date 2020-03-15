@@ -2,6 +2,7 @@
 #include <stdexcept>
 
 #include "rc.hpp"
+#include "wr_builder.hpp"
 
 // namespace dory {
 //   /**
@@ -83,7 +84,8 @@
 // }
 
 namespace dory {
-ReliableConnection::ReliableConnection(ControlBlock &cb) : cb{cb}, pd{nullptr} {
+ReliableConnection::ReliableConnection(ControlBlock &cb)
+    : cb{cb}, pd{nullptr}, logger(std_out_logger("RC")) {
   memset(&create_attr, 0, sizeof(struct ibv_qp_init_attr));
   create_attr.qp_type = IBV_QPT_RC;
   create_attr.cap.max_send_wr = WRDepth;
@@ -201,41 +203,13 @@ void ReliableConnection::connect(RemoteConnection &rc) {
   rconn = rc;
 }
 
-bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf,
-                                        uint64_t len, uintptr_t remote_addr) {
-  return postSendSingle(req, req_id, buf, len, mr.lkey, remote_addr);
-}
-
-bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf,
-                                        uint64_t len, uint32_t lkey,
-                                        uintptr_t remote_addr) {
-  struct ibv_sge sg;
-  memset(&sg, 0, sizeof(sg));
-  sg.addr = reinterpret_cast<uintptr_t>(buf);
-  sg.length = len;
-  sg.lkey = lkey;
-
-  struct ibv_send_wr wr;
-  memset(&wr, 0, sizeof(wr));
-  wr.wr_id = req_id;
-  wr.sg_list = &sg;
-  wr.num_sge = 1;
-  wr.opcode = static_cast<enum ibv_wr_opcode>(req);  // TODO
-
-  // if (signaled) {
-  wr.send_flags |= IBV_SEND_SIGNALED;
-  // }
-  if (wr.opcode == IBV_WR_RDMA_WRITE && len <= MaxInlining) {
-    wr.send_flags |= IBV_SEND_INLINE;
-  }
-
-  wr.wr.rdma.remote_addr = remote_addr;
-  wr.wr.rdma.rkey = rconn.rci.rkey;
-
+bool ReliableConnection::post_send(ibv_send_wr &wr) {
   struct ibv_send_wr *bad_wr = nullptr;
+
   auto ret = ibv_post_send(uniq_qp.get(), &wr, &bad_wr);
 
   if (bad_wr != nullptr) {
+    logger->debug("Got bad wr with id: {}", bad_wr->wr_id);
     return false;
     // throw std::runtime_error("Error encountered during posting in some work
     // request");
@@ -247,6 +221,31 @@ bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf,
   }
 
   return true;
+}
+
+bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf,
+                                        uint64_t len, uintptr_t remote_addr) {
+  return postSendSingle(req, req_id, buf, len, mr.lkey, remote_addr);
+}
+
+bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf,
+                                        uint64_t len, uint32_t lkey,
+                                        uintptr_t remote_addr) {
+  struct ibv_send_wr wr;
+  struct ibv_sge sg;
+
+  SendWrBuilder()
+      .req(req)
+      .signaled(true)
+      .req_id(req_id)
+      .buf(buf)
+      .len(len)
+      .lkey(lkey)
+      .remote_addr(remote_addr)
+      .rkey(rconn.rci.rkey)
+      .build(wr, sg);
+
+  return post_send(wr);
 }
 
 void ReliableConnection::reconnect() { connect(rconn); }

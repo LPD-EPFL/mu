@@ -13,6 +13,7 @@ class HelloConan(ConanFile):
     exports_sources = "src/*"
 
     def requirements(self):
+        self.requires("dory-shared/0.0.1")
         self.requires("dory-ctrl/0.0.1")
         self.requires("dory-memstore/0.0.1")
 

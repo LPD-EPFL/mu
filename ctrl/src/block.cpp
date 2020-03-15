@@ -6,9 +6,14 @@
 
 namespace dory {
 ControlBlock::ControlBlock(ResolvedPort &resolved_port)
-    : resolved_port{resolved_port} {}
+    : resolved_port{resolved_port}, logger(std_out_logger("CB")) {}
 
 void ControlBlock::registerPD(std::string name) {
+  if (pd_map.find(name) != pd_map.end()) {
+    throw std::runtime_error("Already registered protection domain named " +
+                             name);
+  }
+
   auto pd = ibv_alloc_pd(resolved_port.device().context());
 
   if (pd == nullptr) {
@@ -25,13 +30,8 @@ void ControlBlock::registerPD(std::string name) {
   });
 
   pds.push_back(std::move(uniq_pd));
-
-  if (pd_map.find(name) != pd_map.end()) {
-    throw std::runtime_error("Already registered protection domain named " +
-                             name);
-  }
-
   pd_map.insert(std::pair<std::string, size_t>(name, pds.size() - 1));
+  logger->info("PD '{}' registered", name);
 }
 
 deleted_unique_ptr<struct ibv_pd> &ControlBlock::pd(std::string name) {
@@ -46,25 +46,30 @@ deleted_unique_ptr<struct ibv_pd> &ControlBlock::pd(std::string name) {
 
 void ControlBlock::allocateBuffer(std::string name, size_t length,
                                   int alignment) {
+  if (buf_map.find(name) != buf_map.end()) {
+    throw std::runtime_error("Already registered protection domain named " +
+                             name);
+  }
+
   std::unique_ptr<uint8_t[], DeleteAligned<uint8_t>> data(
       allocate_aligned<uint8_t>(alignment, length));
   memset(data.get(), 0, length);
 
   raw_bufs.push_back(std::move(data));
 
-  if (buf_map.find(name) != buf_map.end()) {
-    throw std::runtime_error("Already registered protection domain named " +
-                             name);
-  }
-
   std::pair<size_t, size_t> index_length(raw_bufs.size() - 1, length);
 
   buf_map.insert(
       std::pair<std::string, std::pair<size_t, size_t>>(name, index_length));
+  logger->info("Buffer '{}' of size {} allocated", name, length);
 }
 
 void ControlBlock::registerMR(std::string name, std::string pd_name,
                               std::string buffer_name, MemoryRights rights) {
+  if (mr_map.find(name) != mr_map.end()) {
+    throw std::runtime_error("Already registered protection domain named " +
+                             name);
+  }
   auto pd = pd_map.find(pd_name);
   if (pd == pd_map.end()) {
     throw std::runtime_error("No PD exists with name " + pd_name);
@@ -91,13 +96,9 @@ void ControlBlock::registerMR(std::string name, std::string pd_name,
   });
 
   mrs.push_back(std::move(uniq_mr));
-
-  if (mr_map.find(name) != mr_map.end()) {
-    throw std::runtime_error("Already registered protection domain named " +
-                             name);
-  }
-
   mr_map.insert(std::pair<std::string, size_t>(name, mrs.size() - 1));
+  logger->info("MR '{}' under PD '{}' registered with buf '{}' and rights {}",
+               name, pd_name, buffer_name, rights);
 }
 
 ControlBlock::MemoryRegion ControlBlock::mr(std::string name) const {
@@ -137,6 +138,11 @@ ControlBlock::MemoryRegion ControlBlock::mr(std::string name) const {
 // }
 
 void ControlBlock::registerCQ(std::string name) {
+  if (cq_map.find(name) != cq_map.end()) {
+    throw std::runtime_error("Already registered protection domain named " +
+                             name);
+  }
+
   auto cq = ibv_create_cq(resolved_port.device().context(), CQDepth, nullptr,
                           nullptr, 0);
 
@@ -153,13 +159,8 @@ void ControlBlock::registerCQ(std::string name) {
   });
 
   cqs.push_back(std::move(uniq_cq));
-
-  if (cq_map.find(name) != cq_map.end()) {
-    throw std::runtime_error("Already registered protection domain named " +
-                             name);
-  }
-
   cq_map.insert(std::pair<std::string, size_t>(name, cqs.size() - 1));
+  logger->info("CQ '{}' registered", name);
 }
 
 deleted_unique_ptr<struct ibv_cq> &ControlBlock::cq(std::string name) {
@@ -176,6 +177,7 @@ int ControlBlock::port() const { return resolved_port.portID(); }
 
 int ControlBlock::lid() const { return resolved_port.portLID(); }
 
+// TODO(Kristian): return num and remove the erase
 bool ControlBlock::pollCqIsOK(deleted_unique_ptr<struct ibv_cq> &cq,
                               std::vector<struct ibv_wc> &entries) {
   auto num = ibv_poll_cq(cq.get(), entries.size(), &entries[0]);

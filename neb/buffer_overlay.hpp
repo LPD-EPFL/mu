@@ -6,6 +6,7 @@
 #include <memory>
 #include <vector>
 
+#include "broadcastable.hpp"
 #include "consts.hpp"
 
 /// NOTE: Buffer entries are indexed beginning from 1! Trying to access an entry
@@ -28,27 +29,50 @@ class BufferEntry {
   /**
    * @param start: reference to the the entry
    **/
-  BufferEntry(volatile const uint8_t *const buf);
+  BufferEntry(volatile const uint8_t *const buf) : buf(buf) {}
 
   /**
    * @returns: the message id
    **/
-  uint64_t id() const;
+  uint64_t id() const {
+    return *reinterpret_cast<volatile const uint64_t *>(buf);
+  }
 
   /**
    * @returns: a pointer to the content
    **/
-  volatile const uint8_t *content() const;
+  volatile const uint8_t *content() const {
+    return reinterpret_cast<const volatile uint8_t *>(
+        &reinterpret_cast<const volatile uint64_t *>(buf)[1]);
+  }
 
   /**
    * @returns: a pointer to the signature
    **/
-  volatile const uint8_t *signature() const;
+  volatile const uint8_t *signature() const {
+    throw std::runtime_error("Signatures are not supported yet");
+  }
 
   /**
    * @returns: the address of the entry
    **/
-  uintptr_t addr() const;
+  uintptr_t addr() const { return reinterpret_cast<uintptr_t>(buf); }
+
+  /**
+   * @param entry: where to copy the own contents
+   **/
+  inline void copy_to(const BufferEntry &entry) const {
+    std::memcpy(reinterpret_cast<void *>(entry.addr()),
+                const_cast<uint8_t const *>(buf), dory::neb::BUFFER_ENTRY_SIZE);
+  }
+
+  bool same_content_as(const BufferEntry &entry) const {
+    return 0 == std::memcmp(const_cast<uint8_t const *>(buf),
+                            const_cast<uint8_t const *>(entry.buf),
+                            dory::neb::BUFFER_ENTRY_SIZE);
+  }
+
+  bool operator==(const BufferEntry &other) const { return buf == other.buf; }
 
  private:
   volatile const uint8_t *const buf;
@@ -83,8 +107,10 @@ class BroadcastBuffer {
    **/
   std::unique_ptr<BufferEntry> get_entry(uint64_t index) const;
 
+  size_t write(uint64_t index, uint64_t k, dory::neb::Broadcastable &msg);
+
  private:
-  volatile const uint8_t *const buf;
+  volatile uint8_t *const buf;
   uint64_t num_entries;
 };
 

@@ -5,6 +5,7 @@
 #include <string>
 
 #include <dory/ctrl/block.hpp>
+#include <dory/shared/logger.hpp>
 
 namespace dory {
 struct RemoteConnection {
@@ -120,6 +121,8 @@ class ReliableConnection {
   const ControlBlock::MemoryRegion &get_mr() const { return mr; }
 
  private:
+  bool post_send(ibv_send_wr &wr);
+
   ControlBlock &cb;
   struct ibv_pd *pd;
   struct ibv_qp_init_attr create_attr;
@@ -127,5 +130,6 @@ class ReliableConnection {
   deleted_unique_ptr<struct ibv_qp> uniq_qp;
   ControlBlock::MemoryRegion mr;
   RemoteConnection rconn;
+  std::shared_ptr<spdlog::logger> logger;
 };
 }  // namespace dory

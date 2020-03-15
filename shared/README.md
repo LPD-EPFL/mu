@@ -31,6 +31,7 @@ and use in source files as follows:
 #include <dory/shared/logger.hpp>
 #include <dory/shared/unused-suppressor.hpp>
 #include <dory/shared/units.hpp>
+#include <dory/shared/bench.hpp>
 
 // For the units:
 using namespace dory::units;

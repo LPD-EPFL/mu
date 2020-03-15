@@ -8,6 +8,7 @@
 #include <vector>
 
 #include <dory/extern/ibverbs.hpp>
+#include <dory/shared/logger.hpp>
 #include <dory/shared/pointer-wrapper.hpp>
 #include "device.hpp"
 
@@ -34,10 +35,8 @@ class ControlBlock {
     uint32_t rkey;
   };
 
- private:
   static constexpr int CQDepth = 128;
 
- public:
   ControlBlock(ResolvedPort &resolved_port);
 
   void registerPD(std::string name);
@@ -74,6 +73,8 @@ class ControlBlock {
 
   std::vector<deleted_unique_ptr<struct ibv_cq>> cqs;
   std::map<std::string, size_t> cq_map;
+
+  std::shared_ptr<spdlog::logger> logger;
 };
 
 inline ControlBlock::MemoryRights operator|(ControlBlock::MemoryRights a,

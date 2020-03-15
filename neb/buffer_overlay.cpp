@@ -1,30 +1,14 @@
 #include <algorithm>
+#include <limits>
 
 #include "buffer_overlay.hpp"
 
-BufferEntry::BufferEntry(volatile const uint8_t *const buf) : buf(buf) {}
-
-uint64_t BufferEntry::id() const {
-  return *reinterpret_cast<volatile const uint64_t *>(buf);
-}
-
-uintptr_t BufferEntry::addr() const { return reinterpret_cast<uint64_t>(buf); }
-
-volatile const uint8_t *BufferEntry::content() const {
-  return reinterpret_cast<const volatile uint8_t *>(
-      &reinterpret_cast<const volatile uint64_t *>(buf)[1]);
-}
-
-volatile const uint8_t *BufferEntry::signature() const {
-  throw std::logic_error("Signatures are not supported yet");
-}
-
-/* -------------------------------------------------------------------------- */
+using namespace dory::neb;
 
 BroadcastBuffer::BroadcastBuffer(uintptr_t addr, uint64_t buf_size,
                                  uint32_t lkey)
     : lkey(lkey),
-      buf(reinterpret_cast<volatile const uint8_t *const>(addr)),
+      buf(reinterpret_cast<volatile uint8_t *const>(addr)),
       num_entries(buf_size / BUFFER_ENTRY_SIZE) {}
 
 uint64_t BroadcastBuffer::get_byte_offset(uint64_t index) const {
@@ -47,7 +31,18 @@ std::unique_ptr<BufferEntry> BroadcastBuffer::get_entry(uint64_t index) const {
   return std::make_unique<BufferEntry>(&buf[get_byte_offset(index)]);
 }
 
-/* -------------------------------------------------------------------------- */
+size_t BroadcastBuffer::write(uint64_t index, uint64_t k,
+                              dory::neb::Broadcastable &msg) {
+  auto raw =
+      reinterpret_cast<volatile uint64_t *>(&buf[get_byte_offset(index)]);
+
+  raw[0] = k;
+
+  return msg.marshall(reinterpret_cast<volatile void *>(&raw[1]));
+}
+
+/* --------------------------------------------------------------------------
+ */
 
 ReplayBufferWriter::ReplayBufferWriter(uintptr_t addr, size_t buf_size,
                                        std::vector<int> procs)
@@ -57,6 +52,14 @@ ReplayBufferWriter::ReplayBufferWriter(uintptr_t addr, size_t buf_size,
 
   for (size_t i = 0; i < procs.size(); i++) {
     process_index.insert(std::pair<int, size_t>(procs[i], i));
+  }
+
+  const auto num_entries = buf_size / BUFFER_ENTRY_SIZE;
+  const auto p = reinterpret_cast<uint8_t *>(addr);
+  for (uint64_t i = 0; i < num_entries; i++) {
+    const auto p2 = reinterpret_cast<uint64_t *>(&p[i * BUFFER_ENTRY_SIZE]);
+    // so we can distinguish an empty read from an unsuccessful read
+    p2[0] = std::numeric_limits<uint64_t>::max();
   }
 }
 
