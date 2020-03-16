@@ -127,7 +127,13 @@ class NonEquivocatingBroadcast {
 
   // tracks the current state of the next messages to be delivered by remote
   // processes
-  std::map<int, MessageTracker> next;
+  std::map<int, uint64_t> next;
+
+  // stores quorum information on currently replayed but not delivered messages
+  std::map<int, std::map<uint64_t, MessageTracker>> replayed;
+
+  // mutex to protect the replayed map
+  std::mutex rep_mux;
 
   // tracks the pending number of rdma reads at any time
   size_t pending_reads;
@@ -149,6 +155,7 @@ class NonEquivocatingBroadcast {
    * this routine also delivers messages by calling the deliver callback.
    **/
   inline void consume(dory::deleted_unique_ptr<ibv_cq> &cq);
+
   /**
    * Polls the broacast buffers and replays written values to the replay buffer.
    * Also it triggers rdma reads of remote replay buffers which get handled by

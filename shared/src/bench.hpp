@@ -29,7 +29,7 @@ namespace dory {
  **/
 class BenchTimer {
  public:
-  BenchTimer(const std::string& ucase)
+  BenchTimer(std::string ucase)
       : logger(std_out_logger("BENCH")), ucase(ucase) {}
 
   ~BenchTimer() { stop(); }
@@ -66,7 +66,7 @@ class BenchTimer {
  private:
   std::chrono::time_point<std::chrono::high_resolution_clock> begin;
   dory::logger logger;
-  const std::string& ucase;
-  bool completed = false;
+  std::string ucase;
+  volatile bool completed = false;
 };
 }  // namespace dory

@@ -9,7 +9,7 @@ BroadcastBuffer::BroadcastBuffer(uintptr_t addr, uint64_t buf_size,
                                  uint32_t lkey)
     : lkey(lkey),
       buf(reinterpret_cast<volatile uint8_t *const>(addr)),
-      num_entries(buf_size / BUFFER_ENTRY_SIZE) {}
+      num_entries(buf_size / MEMORY_SLOT_SIZE) {}
 
 uint64_t BroadcastBuffer::get_byte_offset(uint64_t index) const {
   if (index == 0) {
@@ -24,11 +24,11 @@ uint64_t BroadcastBuffer::get_byte_offset(uint64_t index) const {
         "Attempt to access memory outside of the buffer space");
   }
 
-  return index * BUFFER_ENTRY_SIZE;
+  return index * MEMORY_SLOT_SIZE;
 }
 
-std::unique_ptr<BufferEntry> BroadcastBuffer::get_entry(uint64_t index) const {
-  return std::make_unique<BufferEntry>(&buf[get_byte_offset(index)]);
+std::unique_ptr<MemorySlot> BroadcastBuffer::slot(uint64_t index) const {
+  return std::make_unique<MemorySlot>(&buf[get_byte_offset(index)]);
 }
 
 size_t BroadcastBuffer::write(uint64_t index, uint64_t k,
@@ -47,17 +47,17 @@ size_t BroadcastBuffer::write(uint64_t index, uint64_t k,
 ReplayBufferWriter::ReplayBufferWriter(uintptr_t addr, size_t buf_size,
                                        std::vector<int> procs)
     : buf(reinterpret_cast<volatile const uint8_t *const>(addr)),
-      num_entries_per_proc(buf_size / BUFFER_ENTRY_SIZE / procs.size()) {
+      num_entries_per_proc(buf_size / MEMORY_SLOT_SIZE / procs.size()) {
   std::sort(std::begin(procs), std::end(procs));
 
   for (size_t i = 0; i < procs.size(); i++) {
     process_index.insert(std::pair<int, size_t>(procs[i], i));
   }
 
-  const auto num_entries = buf_size / BUFFER_ENTRY_SIZE;
+  const auto num_entries = buf_size / MEMORY_SLOT_SIZE;
   const auto p = reinterpret_cast<uint8_t *>(addr);
   for (uint64_t i = 0; i < num_entries; i++) {
-    const auto p2 = reinterpret_cast<uint64_t *>(&p[i * BUFFER_ENTRY_SIZE]);
+    const auto p2 = reinterpret_cast<uint64_t *>(&p[i * MEMORY_SLOT_SIZE]);
     // so we can distinguish an empty read from an unsuccessful read
     p2[0] = std::numeric_limits<uint64_t>::max();
   }
@@ -79,13 +79,13 @@ uint64_t ReplayBufferWriter::get_byte_offset(int proc_id,
 
   auto p_index = process_index.find(proc_id)->second;
 
-  return p_index * num_entries_per_proc * BUFFER_ENTRY_SIZE +
-         index * BUFFER_ENTRY_SIZE;
+  return p_index * num_entries_per_proc * MEMORY_SLOT_SIZE +
+         index * MEMORY_SLOT_SIZE;
 }
 
-std::unique_ptr<BufferEntry> ReplayBufferWriter::get_entry(
-    int proc_id, uint64_t index) const {
-  return std::make_unique<BufferEntry>(&buf[get_byte_offset(proc_id, index)]);
+std::unique_ptr<MemorySlot> ReplayBufferWriter::slot(int proc_id,
+                                                     uint64_t index) const {
+  return std::make_unique<MemorySlot>(&buf[get_byte_offset(proc_id, index)]);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -95,7 +95,7 @@ ReplayBufferReader::ReplayBufferReader(uintptr_t addr, size_t buf_size,
     : lkey(lkey),
       buf(reinterpret_cast<volatile const uint8_t *const>(addr)),
       num_proc(procs.size()),
-      num_entries_per_proc(buf_size / BUFFER_ENTRY_SIZE / procs.size() /
+      num_entries_per_proc(buf_size / MEMORY_SLOT_SIZE / procs.size() /
                            procs.size()) {
   std::sort(std::begin(procs), std::end(procs));
 
@@ -122,15 +122,16 @@ uint64_t ReplayBufferReader::get_byte_offset(int origin_id, int replayer_id,
   auto r_index = process_index.find(replayer_id)->second;
 
   auto origin_offset =
-      o_index * num_entries_per_proc * num_proc * BUFFER_ENTRY_SIZE;
-  auto index_offset = index * num_proc * BUFFER_ENTRY_SIZE;
-  auto replayer_offset = r_index * BUFFER_ENTRY_SIZE;
+      o_index * num_entries_per_proc * num_proc * MEMORY_SLOT_SIZE;
+  auto index_offset = index * num_proc * MEMORY_SLOT_SIZE;
+  auto replayer_offset = r_index * MEMORY_SLOT_SIZE;
 
   return origin_offset + index_offset + replayer_offset;
 }
 
-std::unique_ptr<BufferEntry> ReplayBufferReader::get_entry(
-    int origin_id, int replayer_id, uint64_t index) const {
-  return std::make_unique<BufferEntry>(
+std::unique_ptr<MemorySlot> ReplayBufferReader::slot(int origin_id,
+                                                     int replayer_id,
+                                                     uint64_t index) const {
+  return std::make_unique<MemorySlot>(
       &buf[get_byte_offset(origin_id, replayer_id, index)]);
 }

@@ -1,3 +1,4 @@
+#include <chrono>
 #include <functional>
 #include <future>
 
@@ -16,13 +17,7 @@
 using namespace std::placeholders;
 
 static auto logger = dory::std_out_logger("MAIN");
-
 static constexpr auto num_messages = 2000;
-
-static inline void sleep_sec(int s) {
-  logger->info("Sleeping for {} sec", s);
-  std::this_thread::sleep_for(std::chrono::seconds(s));
-}
 
 /* -------------------------------------------------------------------------- */
 
@@ -50,7 +45,7 @@ class NebConsumer {
   NebConsumer(int num_proc)
       : expected(num_proc * num_messages),
         delivered_counter(0),
-        bt(dory::BenchTimer(std::string("Delivies"))),
+        bt(dory::BenchTimer("Delivies")),
         f(done_signal.get_future()) {}
 
   void bench() { bt.start(); }
@@ -184,7 +179,15 @@ int main(int argc, char *argv[]) {
     replay_ce.announce(id, store, replay_prefix);
   }
 
-  sleep_sec(5);
+  store.set("dory__neb__" + std::to_string(self_id) + "__published", "1");
+  logger->info("Waiting for all remote processes to publish their QPs");
+  for (int pid : remote_ids) {
+    auto key = "dory__neb__" + std::to_string(pid) + "__published";
+    std::string val;
+
+    while (!store.get(key, val))
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
 
   bcast_ce.connect_all(store, bcast_prefix, dory::ControlBlock::REMOTE_WRITE);
   replay_ce.connect_all(store, replay_prefix, dory::ControlBlock::REMOTE_READ);
@@ -202,7 +205,19 @@ int main(int argc, char *argv[]) {
 
   neb.start();
 
-  sleep_sec(1);
+  store.set("dory__neb__" + std::to_string(self_id) + "__connected", "1");
+
+  logger->info("Waiting for all remote processes to connect to published QPs");
+
+  for (int pid : remote_ids) {
+    auto key = "dory__neb__" + std::to_string(pid) + "__connected";
+    std::string val;
+
+    while (!store.get(key, val))
+      ;
+
+    logger->info("Remote process {} is ready", pid);
+  }
 
   nc.bench();
 

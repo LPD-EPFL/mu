@@ -14,7 +14,7 @@
 /// 0. However, the exposed interface assumes indexes starting from 1.
 
 /**
- * A buffer entry has a fixed size of `BUFFER_ENTRY_SIZE` which should always
+ * A buffer entry has a fixed size of `MEMORY_SLOT_SIZE` which should always
  * be a multiple of 2.
  *
  * +----------+-----------+-----------+
@@ -24,12 +24,12 @@
  * +----------+-----------+-----------+
  *
  **/
-class BufferEntry {
+class MemorySlot {
  public:
   /**
    * @param start: reference to the the entry
    **/
-  BufferEntry(volatile const uint8_t *const buf) : buf(buf) {}
+  MemorySlot(volatile const uint8_t *const buf) : buf(buf) {}
 
   /**
    * @returns: the message id
@@ -61,18 +61,18 @@ class BufferEntry {
   /**
    * @param entry: where to copy the own contents
    **/
-  inline void copy_to(const BufferEntry &entry) const {
+  inline void copy_to(const MemorySlot &entry) const {
     std::memcpy(reinterpret_cast<void *>(entry.addr()),
-                const_cast<uint8_t const *>(buf), dory::neb::BUFFER_ENTRY_SIZE);
+                const_cast<uint8_t const *>(buf), dory::neb::MEMORY_SLOT_SIZE);
   }
 
-  bool same_content_as(const BufferEntry &entry) const {
+  bool same_content_as(const MemorySlot &entry) const {
     return 0 == std::memcmp(const_cast<uint8_t const *>(buf),
                             const_cast<uint8_t const *>(entry.buf),
-                            dory::neb::BUFFER_ENTRY_SIZE);
+                            dory::neb::MEMORY_SLOT_SIZE);
   }
 
-  bool operator==(const BufferEntry &other) const { return buf == other.buf; }
+  bool operator==(const MemorySlot &other) const { return buf == other.buf; }
 
  private:
   volatile const uint8_t *const buf;
@@ -105,7 +105,7 @@ class BroadcastBuffer {
    * @returns: the entry associated with the provided index
    * @thorws: std::out_of_range
    **/
-  std::unique_ptr<BufferEntry> get_entry(uint64_t index) const;
+  std::unique_ptr<MemorySlot> slot(uint64_t index) const;
 
   size_t write(uint64_t index, uint64_t k, dory::neb::Broadcastable &msg);
 
@@ -142,7 +142,7 @@ class ReplayBufferWriter {
    * @param proc_id: the process id
    * @param index: index of the entry
    **/
-  std::unique_ptr<BufferEntry> get_entry(int proc_id, uint64_t index) const;
+  std::unique_ptr<MemorySlot> slot(int proc_id, uint64_t index) const;
 
  private:
   volatile const uint8_t *const buf;
@@ -185,8 +185,8 @@ class ReplayBufferReader {
    * @param replayer_id: id of the process who replayed the value
    * @param index: index of the entry
    **/
-  std::unique_ptr<BufferEntry> get_entry(int origin_id, int replayer_id,
-                                         uint64_t index) const;
+  std::unique_ptr<MemorySlot> slot(int origin_id, int replayer_id,
+                                   uint64_t index) const;
 
  private:
   volatile const uint8_t *const buf;

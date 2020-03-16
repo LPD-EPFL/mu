@@ -30,8 +30,8 @@ NonEquivocatingBroadcast::~NonEquivocatingBroadcast() {
   if (poller_running) poller_thread.join();
   logger->info("Poller thread finished");
 
-  // if (reader_running) replay_reader_thread.join();
-  // logger->info("Replay thread finished");
+  if (reader_running) replay_reader_thread.join();
+  logger->info("Replay thread finished");
 }
 
 NonEquivocatingBroadcast::NonEquivocatingBroadcast(int self_id,
@@ -45,17 +45,17 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(int self_id,
       logger(std_out_logger("NEB")),
       own_next(1),
       pending_reads(0) {
-  write_wcs.resize(dory::ControlBlock::CQDepth);
-  read_wcs.resize(dory::ControlBlock::CQDepth);
-
   logger->set_level(spdlog::level::info);
   logger->info("Creating instance");
+
+  write_wcs.resize(dory::ControlBlock::CQDepth);
+  read_wcs.resize(dory::ControlBlock::CQDepth);
 
   auto proc_ids = remote_ids;
   proc_ids.push_back(self_id);
 
   for (auto &id : proc_ids) {
-    next.insert(std::pair<int, MessageTracker>(id, MessageTracker()));
+    next.insert(std::pair<int, uint64_t>(id, 1));
   }
 
   auto r_mr_w = cb.mr(REPLAY_W_NAME);
@@ -107,7 +107,7 @@ void NonEquivocatingBroadcast::start() {
   auto sf = std::shared_future(exit_signal.get_future());
 
   poller_thread = std::thread([=] { start_replayer(sf); });
-  // replay_reader_thread = std::thread([=] { start_reader(sf); });
+  replay_reader_thread = std::thread([=] { start_reader(sf); });
 
   started = true;
   logger->info("Started");
@@ -131,12 +131,12 @@ void NonEquivocatingBroadcast::broadcast(uint64_t k, Broadcastable &msg) {
 
   auto bcast_buf = bcast_bufs.find(self_id)->second;
   auto msg_size = bcast_buf.write(own_next, k, msg);
-  auto entry = bcast_buf.get_entry(own_next);
+  auto slot = bcast_buf.slot(own_next);
 
   for (auto &[id, rc] : bcast_conn) {
     auto ret = rc.postSendSingle(
-        ReliableConnection::RdmaWrite, pack_write_id(id, own_next),
-        reinterpret_cast<void *>(entry->addr()), msg_size + MSG_HEADER_SIZE,
+        ReliableConnection::RdmaWrite, own_next,
+        reinterpret_cast<void *>(slot->addr()), msg_size + MSG_HEADER_SIZE,
         bcast_buf.lkey, rc.remoteBuf() + bcast_buf.get_byte_offset(own_next));
 
     if (!ret) {
@@ -147,7 +147,7 @@ void NonEquivocatingBroadcast::broadcast(uint64_t k, Broadcastable &msg) {
   // increase the message counter
   own_next++;
   // deliver to ourself
-  deliver(k, entry->content(), self_id);
+  deliver(k, slot->content(), self_id);
 }
 
 void NonEquivocatingBroadcast::start_replayer(std::shared_future<void> f) {
@@ -157,57 +157,71 @@ void NonEquivocatingBroadcast::start_replayer(std::shared_future<void> f) {
 
   poller_running = true;
 
+  while (f.wait_for(std::chrono::seconds(0)) == std::future_status::timeout) {
+    poll_bcast_bufs();
+  }
+}
+
+void NonEquivocatingBroadcast::start_reader(std::shared_future<void> f) {
+  if (reader_running) return;
+
+  logger->info("Replay reader thread running");
+
+  reader_running = true;
+
   auto &cq = cb.cq(REPLAY_CQ_NAME);
 
   while (f.wait_for(std::chrono::seconds(0)) == std::future_status::timeout) {
-    poll_bcast_bufs();
     consume(cq);
   }
 }
 
 inline void NonEquivocatingBroadcast::poll_bcast_bufs() {
   for (int &origin : remote_ids) {
-    auto &next_msg = next[origin];
+    // wait before exhausting the read CQ
+    if (pending_reads + remote_ids.size() - 1 >= dory::ControlBlock::CQDepth)
+      return;
 
-    auto bcast_entry =
-        bcast_bufs.find(origin)->second.get_entry(next_msg.idx());
+    auto &next_idx = next[origin];
+
+    auto bcast_slot = bcast_bufs.find(origin)->second.slot(next_idx);
 
     // TODO(Kristian): eventually check for matching signature
-    if (bcast_entry->id() == 0 || bcast_entry->id() != next_msg.idx() ||
-        next_msg.state() == MessageTracker::State::Replayed ||
-        pending_reads >= dory::ControlBlock::CQDepth)
+    if (bcast_slot->id() == 0 || bcast_slot->id() != next_idx ||
+        replayed[origin].find(next_idx) != replayed[origin].end())
       continue;
 
     logger->debug(
-        "Bcast from {} at index {} with id {}", origin, next_msg.idx(),
-        bcast_entry->id(),
-        *reinterpret_cast<volatile const uint64_t *>(bcast_entry->content()));
+        "Bcast from {} at index {} with id {}", origin, next_idx,
+        bcast_slot->id(),
+        *reinterpret_cast<volatile const uint64_t *>(bcast_slot->content()));
 
-    auto replay_entry_w = replay_w_buf->get_entry(origin, next_msg.idx());
+    auto replay_slot_w = replay_w_buf->slot(origin, next_idx);
 
-    bcast_entry->copy_to(*replay_entry_w);
+    bcast_slot->copy_to(*replay_slot_w);
 
-    next_msg.transition(MessageTracker::State::Replayed);
+    rep_mux.lock();
+    auto next_msg = replayed[origin][next_idx];
+    rep_mux.unlock();
 
     for (auto &[replayer, rc] : replay_conn) {
       if (replayer == origin) continue;
 
-      auto replay_entry_r =
-          replay_r_buf->get_entry(origin, replayer, next_msg.idx());
+      auto replay_slot = replay_r_buf->slot(origin, replayer, next_idx);
 
-      auto ret =
-          rc.postSendSingle(ReliableConnection::RdmaRead,
-                            pack_read_id(replayer, origin, next_msg.idx()),
-                            reinterpret_cast<void *>(replay_entry_r->addr()),
-                            BUFFER_ENTRY_SIZE, replay_r_buf->lkey,
-                            rc.remoteBuf() + replay_w_buf->get_byte_offset(
-                                                 origin, next_msg.idx()));
+      auto ret = rc.postSendSingle(
+          ReliableConnection::RdmaRead,
+          pack_read_id(replayer, origin, next_idx),
+          reinterpret_cast<void *>(replay_slot->addr()), MEMORY_SLOT_SIZE,
+          replay_r_buf->lkey,
+          rc.remoteBuf() + replay_w_buf->get_byte_offset(origin, next_idx));
 
       if (!ret) {
-        logger->warn("Read post of {} at {} returned {}", next_msg.idx(),
-                     origin, ret);
+        logger->warn("Read post of {} at {} returned {}", next_idx, origin,
+                     ret);
       } else {
         pending_reads++;
+        next[origin]++;
       }
     }
   }
@@ -229,64 +243,49 @@ inline void NonEquivocatingBroadcast::consume(
 
       logger->debug("WC for READ at {} for ({},{}) ", r_id, o_id, next_idx);
 
-      auto &next_msg = next[o_id];
+      auto &proc_map = replayed[o_id];
+      auto &next_msg = proc_map.find(next_idx)->second;
 
-      if (next_msg.state() == MessageTracker::State::Initial) {
-        logger->warn("Initial state should never exist at this point!");
-      }
-
-      auto r_entry = replay_r_buf->get_entry(o_id, r_id, next_idx);
-      auto o_entry = bcast_bufs.find(o_id)->second.get_entry(next_idx);
+      auto r_slot = replay_r_buf->slot(o_id, r_id, next_idx);
+      auto o_slot = bcast_bufs.find(o_id)->second.slot(next_idx);
 
       // got no response, this may happen when the remote is not ready yet
       // and didn't initialize it's memory buffer or is disconnected
-      if (r_entry->id() == 0) {
+      if (r_slot->id() == 0) {
         logger->warn("Slot was not successfully read");
         // TODO(Kristian): can we safely make this replayer part of the quorum?
         next_msg.add_to_quorum(r_id);
       }
       // got responde but nothing is replayed
-      else if (r_entry->id() == std::numeric_limits<uint64_t>::max()) {
+      else if (r_slot->id() == std::numeric_limits<uint64_t>::max()) {
         logger->debug("Nothing replayed");
         // empty reads can be add this as an ack to the quorum
         next_msg.add_to_quorum(r_id);
       }
       // got something replayed
       else {
-        bool is_matching = r_entry->same_content_as(*o_entry);
+        bool is_matching = r_slot->same_content_as(*o_slot);
         logger->debug("Slots match: {}", is_matching);
 
         if (is_matching) {
           next_msg.add_to_quorum(r_id);
         } else {
-          next_msg.transition(MessageTracker::State::Conflict);
         }
       }
 
-      auto entry = bcast_bufs.find(o_id)->second.get_entry(next_msg.idx());
-
       if (next_msg.has_quorum_of(remote_ids.size() - 1)) {
-        deliver(entry->id(), entry->content(), o_id);
+        auto slot = bcast_bufs.find(o_id)->second.slot(next_idx);
 
-        next_msg.move_forward();
+        deliver(slot->id(), slot->content(), o_id);
+
+        rep_mux.lock();
+        // gc the entry
+        auto it = proc_map.find(next_idx);
+        proc_map.erase(it);
+        rep_mux.unlock();
       }
     }
   }
 }
-
-// void NonEquivocatingBroadcast::start_reader(std::shared_future<void> f) {
-//   if (reader_running) return;
-
-//   logger->info("Replay reader thread running");
-
-//   reader_running = true;
-
-//   auto &cq = cb.cq(REPLAY_CQ_NAME);
-
-//   while (f.wait_for(std::chrono::seconds(0)) == std::future_status::timeout)
-//   {
-//     replay_read(cq);
-//   }
-// }
 
 }  // namespace dory
