@@ -49,6 +49,6 @@ class ConnectionExchanger {
   ControlBlock& cb;
   int max_id;
   std::map<int, dory::ReliableConnection> rcs;
-  std::shared_ptr<spdlog::logger> logger;
+  dory::logger logger;
 };
 }  // namespace dory

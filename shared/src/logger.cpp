@@ -4,7 +4,7 @@
 
 namespace dory {
 
-std::shared_ptr<spdlog::logger> std_out_logger(std::string prefix) {
+logger std_out_logger(std::string prefix) {
   auto logger = spdlog::get(prefix);
 
   if (logger == nullptr) {

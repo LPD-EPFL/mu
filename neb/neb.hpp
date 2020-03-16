@@ -106,7 +106,7 @@ class NonEquivocatingBroadcast {
   std::unique_ptr<ReplayBufferReader> replay_r_buf;
 
   // beautiful logger
-  std::shared_ptr<spdlog::logger> logger;
+  dory::logger logger;
 
   // own next message index;
   uint64_t own_next;

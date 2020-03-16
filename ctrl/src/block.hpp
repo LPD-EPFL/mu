@@ -74,7 +74,7 @@ class ControlBlock {
   std::vector<deleted_unique_ptr<struct ibv_cq>> cqs;
   std::map<std::string, size_t> cq_map;
 
-  std::shared_ptr<spdlog::logger> logger;
+  dory::logger logger;
 };
 
 inline ControlBlock::MemoryRights operator|(ControlBlock::MemoryRights a,

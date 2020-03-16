@@ -2,15 +2,13 @@
 #include <future>
 
 #include <dory/conn/exchanger.hpp>
+#include <dory/ctrl/ae_handler.hpp>
 #include <dory/ctrl/block.hpp>
 #include <dory/ctrl/device.hpp>
 #include <dory/extern/ibverbs.hpp>
 #include <dory/shared/bench.hpp>
 #include <dory/shared/logger.hpp>
 #include <dory/store.hpp>
-
-#include "fcntl.h"
-#include "poll.h"
 
 #include "consts.hpp"
 #include "neb.hpp"
@@ -85,57 +83,6 @@ class NebConsumer {
   std::promise<void> done_signal;
   std::future<void> f;
 };
-/* -------------------------------------------------------------------------- */
-
-void async_event_handler(std::future<void> f, struct ibv_context *ctx) {
-  logger->info("Changing the mode of events read to be non-blocking");
-
-  /* change the blocking mode of the async event queue */
-  auto flags = fcntl(ctx->async_fd, F_GETFL);
-  auto ret = fcntl(ctx->async_fd, F_SETFL, flags | O_NONBLOCK);
-  if (ret < 0) {
-    logger->error(
-        "Error, failed to change file descriptor of async event queue");
-
-    return;
-  }
-
-  struct ibv_async_event event;
-
-  while (f.wait_for(std::chrono::seconds(0)) == std::future_status::timeout) {
-    struct pollfd my_pollfd;
-    int ms_timeout = 100;
-
-    my_pollfd.fd = ctx->async_fd;
-    my_pollfd.events = POLLIN;
-    my_pollfd.revents = 0;
-
-    do {
-      ret = poll(&my_pollfd, 1, ms_timeout);
-
-      if (f.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
-        return;
-    } while (ret == 0);
-
-    if (ret < 0) {
-      logger->error("poll failed");
-      return;
-    }
-
-    ret = ibv_get_async_event(ctx, &event);
-
-    if (ret) {
-      logger->error("Error, ibv_get_async_event() failed");
-      return;
-    }
-
-    logger->warn("Got async event {}", event.event_type);
-
-    // ack the event
-    ibv_ack_async_event(&event);
-  }
-}
-
 /*******************************************************************************
  *                                  MAIN
  ******************************************************************************/
@@ -178,7 +125,8 @@ int main(int argc, char *argv[]) {
 
   std::promise<void> exit_signal;
   auto async_event_thread =
-      std::thread(&async_event_handler, exit_signal.get_future(), od.context());
+      std::thread(&dory::ctrl::async_event_handler, logger,
+                  exit_signal.get_future(), od.context());
 
   /* ------------------------------------------------------------------------ */
   constexpr auto pd_str = dory::NonEquivocatingBroadcast::PD_NAME;
@@ -262,7 +210,6 @@ int main(int argc, char *argv[]) {
   for (int i = 1; i <= num_messages; i++) {
     m.val = 1000 * self_id + i;
     neb.broadcast(i, m);
-    // std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 
   nc.wait_to_finish();
@@ -270,6 +217,7 @@ int main(int argc, char *argv[]) {
   // exit async event thread
   exit_signal.set_value();
   async_event_thread.join();
+
   logger->info("Async Event Thread finished");
 
   return 0;

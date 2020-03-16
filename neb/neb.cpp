@@ -135,7 +135,7 @@ void NonEquivocatingBroadcast::broadcast(uint64_t k, Broadcastable &msg) {
 
   for (auto &[id, rc] : bcast_conn) {
     auto ret = rc.postSendSingle(
-        ReliableConnection::RdmaWrite, own_next,
+        ReliableConnection::RdmaWrite, pack_write_id(id, own_next),
         reinterpret_cast<void *>(entry->addr()), msg_size + MSG_HEADER_SIZE,
         bcast_buf.lkey, rc.remoteBuf() + bcast_buf.get_byte_offset(own_next));
 
@@ -174,7 +174,8 @@ inline void NonEquivocatingBroadcast::poll_bcast_bufs() {
 
     // TODO(Kristian): eventually check for matching signature
     if (bcast_entry->id() == 0 || bcast_entry->id() != next_msg.idx() ||
-        next_msg.state() == MessageTracker::State::Replayed)
+        next_msg.state() == MessageTracker::State::Replayed ||
+        pending_reads >= dory::ControlBlock::CQDepth)
       continue;
 
     logger->debug(
@@ -187,8 +188,6 @@ inline void NonEquivocatingBroadcast::poll_bcast_bufs() {
     bcast_entry->copy_to(*replay_entry_w);
 
     next_msg.transition(MessageTracker::State::Replayed);
-
-    if (pending_reads >= dory::ControlBlock::CQDepth) continue;
 
     for (auto &[replayer, rc] : replay_conn) {
       if (replayer == origin) continue;

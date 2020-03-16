@@ -65,7 +65,7 @@ class BenchTimer {
 
  private:
   std::chrono::time_point<std::chrono::high_resolution_clock> begin;
-  std::shared_ptr<spdlog::logger> logger;
+  dory::logger logger;
   const std::string& ucase;
   bool completed = false;
 };

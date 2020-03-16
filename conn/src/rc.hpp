@@ -130,6 +130,6 @@ class ReliableConnection {
   deleted_unique_ptr<struct ibv_qp> uniq_qp;
   ControlBlock::MemoryRegion mr;
   RemoteConnection rconn;
-  std::shared_ptr<spdlog::logger> logger;
+  dory::logger logger;
 };
 }  // namespace dory
