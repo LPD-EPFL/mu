@@ -11,4 +11,4 @@ jobs:
       - run: conan profile new default --detect
       - run: conan profile update settings.compiler.libcxx=libstdc++11 default
       - run: ./build.sh gcc
-      - run: CC=$(command -v clang) CXX=$(command -v clang++) ./build.sh clang
+      - run: ./build.sh clang

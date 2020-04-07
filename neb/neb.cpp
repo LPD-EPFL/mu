@@ -2,7 +2,7 @@
 #include <limits>
 
 #include <dory/conn/exchanger.hpp>
-#include <dory/conn/wr_builder.hpp>
+#include <dory/conn/wr-builder.hpp>
 #include <dory/shared/bench.hpp>
 #include <dory/store.hpp>
 #include "consts.hpp"

@@ -52,37 +52,5 @@ else
     COMPILER="$1"
 fi
 
-if [ "$COMPILER" == "clang" ]; then
-    if [ -z "$CC" ]; then
-        echo "CC env variable is unset. Required to be set for cmake."
-        echo "Exiting!"
-        exit 1;
-    fi
-    if [ -z "$CXX" ]; then
-        echo "CCX env variable is unsed. Required to be set for cmake."
-        echo "Exiting!"
-        exit 2;
-    fi
-fi
-
-echo "Building dory source with $COMPILER"
-
-echo "Starting off with creating conan packages"
-for p in extern shared memstore ctrl conn;
-do
-    pushd "$p"
-        if [ "$COMPILER" == "clang" ]; then
-            conan create . --build missing -s compiler=clang -s compiler.version="6.0" -s compiler.libcxx="libstdc++11"
-        else
-            conan create .
-        fi
-    popd
-done
-
-echo "Building executables"
-for m in leader-election neb;
-do
-    pushd "$m"
-        ./build.sh "$COMPILER"
-    popd
-done
+python3 build.py -c $COMPILER clean
+python3 build.py -c $COMPILER all

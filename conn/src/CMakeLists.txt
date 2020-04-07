@@ -5,7 +5,8 @@ include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 conan_basic_setup()
 
 add_library(
-    conn 
+    conn
     rc.cpp
     exchanger.cpp
 )
+

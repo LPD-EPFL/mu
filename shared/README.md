@@ -29,7 +29,6 @@ and use in source files as follows:
 #include <dory/shared/pointer-wrapper.hpp>
 #include <dory/shared/unused_suppressor.hpp>
 #include <dory/shared/logger.hpp>
-#include <dory/shared/unused-suppressor.hpp>
 #include <dory/shared/units.hpp>
 #include <dory/shared/bench.hpp>
 
