@@ -22,25 +22,29 @@
 
 ## Build
 
-Run (with `gcc` as default compiler) from within the root:
+Run from within the root:
 
 ```sh
-./build.sh
+./build.py
 ```
 
 this will create all conan packages and build the executables.
 
----
+__Note:__ `gcc` is used as the default compiler. You can also build with `clang` (fixed to v6.0) by calling `./build.py -c clang <target>`.
 
-You can also build with `clang` (fixed to v6.0) by calling `build.sh clang`.
-Make sure to have:
+
+## Docker
+
+You can pull the latest docker image satisfying the requirements from the registry:
 
 ```sh
-export CC=/path/to/clang
-export CXX=/path/to/clang++
+docker pull kristianmitk/dory
 ```
 
-in the env (required by cmake), otherwise the script will exit.
+or by manually building the [Dockerfile](https://github.com/kristianmitk/dory/blob/master/Dockerfile) under the root of this repo.
+
+---
+
 
 ## Usage
 

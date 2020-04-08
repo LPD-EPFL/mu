@@ -2,13 +2,8 @@ version: 2
 jobs:
   build:
     docker:
-      - image: circleci/buildpack-deps:bionic
+      - image: kristianmitk/dory:latest
     steps:
       - checkout
-      - run: sudo apt-get update
-      - run: sudo apt-get -y install libibverbs-dev libmemcached-dev python3 python3-pip cmake clang
-      - run: pip3 install --upgrade conan
-      - run: conan profile new default --detect
-      - run: conan profile update settings.compiler.libcxx=libstdc++11 default
-      - run: ./build.sh gcc
-      - run: ./build.sh clang
+      - run: ./build.py -c gcc clean && ./build.py -c gcc all
+      - run: ./build.py -c clang clean && ./build.py -c clang all
