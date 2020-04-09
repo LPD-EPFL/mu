@@ -101,9 +101,7 @@ bool SerialQuorumWaiter<ID>::fastConsume(std::vector<struct ibv_wc>& entries,
     } else {
       auto [k, pid, seq] = quorum::unpackAll<uint64_t, ID>(entry.wr_id);
 
-      (void)pid;
-
-      if (unlikely(k != kind)) {
+      if (k != kind) {
 #ifdef NDEBUG
         std::cout << "Received unexpected (" << quorum::type_str(k)
                   << " instead of " << quorum::type_str(kind) << ")"
@@ -122,15 +120,17 @@ bool SerialQuorumWaiter<ID>::fastConsume(std::vector<struct ibv_wc>& entries,
       }
 #endif
 
-      if (seq == next_id) {
+      auto current_seq = scoreboard[pid];
+      scoreboard[pid] = current_seq + modulo == seq ? seq : 0;
+
+      if (scoreboard[pid] == next_id) {
         left -= 1;
-
-        if (left == 0) {
-          left = quorum_size;
-          next_id += modulo;
-        }
-
         ret_left = left;
+      }
+
+      if (left == 0) {
+        left = quorum_size;
+        next_id += modulo;
       }
     }
   }

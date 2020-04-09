@@ -113,8 +113,8 @@ class FixedSizeMajorityOperation {
           QuorumWaiter::packer(kind, c.pid, req_id), from_local_memory, size,
           c.rc->remoteBuf() + to_remote_memories[c.pid] + offset);
     }
-    int expected_nr = quorum_size;
 
+    int expected_nr = quorum_size;
     auto cq = ctx->cq.get();
     entries.resize(expected_nr);
     int num = 0;
@@ -122,7 +122,8 @@ class FixedSizeMajorityOperation {
     constexpr unsigned mask = (1 << 14) - 1;  // Must be power of 2 minus 1
 
     while (likely(!qw.canContinueWith(next_req_id))) {
-      if (likely((num = ibv_poll_cq(cq, expected_nr, &entries[0])) >= 0)) {
+      num = ibv_poll_cq(cq, expected_nr, &entries[0]);
+      if (likely(num >= 0)) {
         if (unlikely(!qw.fastConsume(entries, num, expected_nr))) {
           return false;
         }
