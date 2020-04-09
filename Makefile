@@ -46,17 +46,18 @@ $(DEPDIR)/%.conandep: $$(LIST) | $(DEPDIR)
 	$(SILENCE) $(call invoke,$(basename $(@F)))
 
 ############################ Start of editable area ############################
-.PHONY: shared extern memstore ctrl conn
+.PHONY: shared extern memstore crypto ctrl conn
 .PHONY: crash-consensus neb
 
 # Define the targets you want to compile as conan libraries/conan binaries.
-TARGETS := extern shared memstore ctrl conn crash-consensus neb
+TARGETS := extern shared memstore crypto ctrl conn crash-consensus neb
 
 # Specify only the local dependencies for the given conan libraries/binaries
 #  (that have local dependencies)
 memstore : shared extern
 ctrl : shared extern
 conn : shared ctrl memstore
+crypto : shared memstore
 
 crash-consensus: extern shared memstore ctrl conn
 neb: extern shared memstore ctrl conn
