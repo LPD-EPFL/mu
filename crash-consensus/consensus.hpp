@@ -40,17 +40,30 @@
 #include <cstdint>
 #include <thread>
 #include <vector>
+
+#include <dory/conn/exchanger.hpp>
+#include <dory/conn/rc.hpp>
+#include <dory/ctrl/block.hpp>
+#include <dory/ctrl/device.hpp>
+#include <dory/shared/units.hpp>
+#include <dory/shared/unused-suppressor.hpp>
+#include <dory/store.hpp>
+
+#include "branching.hpp"
+#include "config.hpp"
+#include "log.hpp"
+#include "memory.hpp"
+#include "pinning.hpp"
+#include "response-tracker.hpp"
+#include "slow-path.hpp"
+
+#include <random>  // TODO: Remove if leader-switch is finished
+#include "leader-switch.hpp"
+#include "follower.hpp"
 #include "readerwriterqueue.h"
 
+
 namespace dory {
-struct Request {
-  Request() {}
-  Request(uint8_t *buf, size_t buf_len) : buf{buf}, buf_len{buf_len} {}
-
-  uint8_t *buf;
-  size_t buf_len;
-};
-
 class RdmaConsensus {
  public:
   RdmaConsensus(int my_id, std::vector<int> &remote_ids);
@@ -64,16 +77,44 @@ class RdmaConsensus {
  private:
   int my_id;
   std::vector<int> remote_ids;
-  alignas(64) std::atomic<bool> request;
 
   size_t allocated_size;
   size_t alignment;
 
-  alignas(1024) moodycamel::ReaderWriterQueue<bool> output_spsc;
-  alignas(1024) moodycamel::ReaderWriterQueue<Request> input_spsc;
-
   std::thread consensus_thd;
+  std::thread permissions_thd;
 
-  bool not_leader;
+  std::atomic<bool> am_I_leader;
+
+  Devices d;
+  OpenDevice od;
+  std::unique_ptr<ResolvedPort> rp;
+  std::unique_ptr<ControlBlock> cb;
+  std::unique_ptr<ConnectionExchanger> ce_replication;
+  std::unique_ptr<ConnectionExchanger> ce_leader_election;
+  std::unique_ptr<OverlayAllocator> overlay;
+  std::unique_ptr<ScratchpadMemory> scratchpad;
+  std::unique_ptr<Log> replication_log;
+  std::unique_ptr<ConnectionContext> le_conn_ctx;
+  std::unique_ptr<ConnectionContext> re_conn_ctx;
+  std::unique_ptr<ReplicationContext> re_ctx;
+  std::unique_ptr<LeaderElection> leader_election;
+  std::unique_ptr<CatchUpWithFollowers> catchup;
+  std::unique_ptr<LogSlotReader> lsr;
+  std::unique_ptr<SequentialQuorumWaiter> sqw;
+  std::unique_ptr<FixedSizeMajorityOperation<SequentialQuorumWaiter, WriteLogMajorityError>> majW;
+
+  std::vector<uintptr_t> to_remote_memory, dest;
+  BlockingIterator iter;
+  LiveIterator commit_iter;
+
+  Follower follower;
+
+
+  // Used by consensus
+  bool encountered_error = false;
+  bool became_leader = true;
+  bool fast_path = false;
+  uint64_t proposal_nr = 0;
 };
 }  // namespace dory

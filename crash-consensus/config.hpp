@@ -12,11 +12,13 @@ static constexpr bool pinThreads = true;
 static constexpr int consensusThreadCoreID = 0;
 static constexpr int switcherThreadCoreID = 2;
 static constexpr int heartbeatThreadCoreID = 4;
+static constexpr int followerThreadCoreID = 6;
 
 static constexpr bool nameThreads = true;
 static const char consensusThreadName[] = "thd_consensus";
 static const char switcherThreadName[] = "thd_switcher";
 static const char heartbeatThreadName[] = "thd_heartbeat";
+static const char followerThreadName[] = "thd_follower";
 
 }  // namespace ConsensusConfig
 }  // namespace dory

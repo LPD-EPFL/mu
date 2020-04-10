@@ -14,7 +14,7 @@ class SnapshotIterator {
   inline bool hasNext() { return entry_ptr < end_ptr; }
   SnapshotIterator& next();
 
-  inline uint8_t* operator*() { return entry_ptr; }
+  inline uint8_t* location() { return entry_ptr; }
 
  private:
   uint8_t* entry_ptr;
@@ -25,12 +25,13 @@ class SnapshotIterator {
 namespace dory {
 class BlockingIterator {
  public:
+  BlockingIterator() {}
   BlockingIterator(uint8_t* entry_ptr);
 
   BlockingIterator& next();
   bool sampleNext();
 
-  inline uint8_t* operator*() { return entry_ptr; }
+  inline uint8_t* location() { return entry_ptr; }
 
  private:
   uint8_t* entry_ptr;
@@ -41,13 +42,14 @@ class BlockingIterator {
 namespace dory {
 class LiveIterator {
  public:
+  LiveIterator() {}
   LiveIterator(uint8_t* base_ptr, uint8_t* entry_ptr);
 
   bool hasNext(ptrdiff_t limit);
 
   LiveIterator& next(bool check = false);
 
-  inline uint8_t* operator*() { return entry_ptr; }
+  inline uint8_t* location() { return entry_ptr; }
 
  private:
   uint8_t* base_ptr;

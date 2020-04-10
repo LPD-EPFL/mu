@@ -13,6 +13,7 @@
 #include "config.hpp"
 #include "fixed-size-majority.hpp"
 #include "pinning.hpp"
+#include "follower.hpp"
 
 namespace dory {
 struct LeaderContext {
@@ -44,6 +45,23 @@ class LeaderHeartbeat {
     //   want_leader.store(true);
     // }
   }
+
+#if 0
+    std::mt19937_64 eng{std::random_device{}()};  // or seed however you want
+    std::uniform_int_distribution<> dist{10000, 20000};
+    std::this_thread::sleep_for(std::chrono::milliseconds{dist(eng)});
+    std::cout << "Changing leader" << std::endl;
+
+    if (ctx->cc.my_id == 3) {
+      want_leader.store(true);
+      std::this_thread::sleep_for(std::chrono::seconds{11});
+    }
+    else if(ctx->cc.my_id == 1) {
+      std::this_thread::sleep_for(std::chrono::seconds{7});
+      want_leader.store(true);
+    }
+  }
+#endif
 
   std::atomic<bool> &wantLeaderSignal() { return want_leader; }
 
@@ -264,7 +282,7 @@ class LeaderSwitcher {
 
   bool checkAndApplyPermissions(
       std::map<int, ReliableConnection> *replicator_rcs,
-      std::atomic<bool> &leader_mode, bool &force_permission_request) {
+      Follower& follower, std::atomic<bool> &leader_mode, bool &force_permission_request) {
     Leader current_leader = leader.load();
     if (current_leader != prev_leader || force_permission_request) {
       std::cout << "Adjusting connections to leader ("
@@ -309,6 +327,7 @@ class LeaderSwitcher {
             rc.reconnect();
           }
 
+          follower.block();
           leader_mode.store(true);
         }
       } else {
@@ -330,6 +349,8 @@ class LeaderSwitcher {
           }
           rc.reconnect();
         }
+
+        follower.unblock();
 
         // Notify the remote party
         std::cout << "Giving permissions to " << int(current_leader.requester)
@@ -424,9 +445,9 @@ class LeaderElection {
   }
 
   inline bool checkAndApplyConnectionPermissionsOK(
-      std::atomic<bool> &leader_mode, bool &force_permission_request) {
+      Follower& follower, std::atomic<bool> &leader_mode, bool &force_permission_request) {
     return leader_switcher.checkAndApplyPermissions(
-        replicator_conns, leader_mode, force_permission_request);
+        replicator_conns, follower, leader_mode, force_permission_request);
   }
 
   inline std::atomic<Leader> &leaderSignal() {
