@@ -1,8 +1,11 @@
-# Dory
+![alt text](logo/dory-logo-256.png "Dory")
+
+*The word "dory" was first attested by Homer with the meanings of "wood" and "spear"*
+
 
 #### [Wiki](https://github.com/kristianmitk/dory/wiki)
-
 [![CircleCI](https://circleci.com/gh/kristianmitk/dory/tree/master.svg?style=shield&circle-token=8aee442f89261c33ece50901b09ef414a085ca9f)](https://circleci.com/gh/kristianmitk/dory/tree/master) ![clang-format-test](https://github.com/kristianmitk/dory/workflows/clang-format-test/badge.svg)
+
 
 ## Requirements
 
