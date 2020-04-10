@@ -85,7 +85,7 @@ int main(int argc, char* argv[]) {
     std::this_thread::sleep_for(std::chrono::hours(1));
   });
 
-  auto pinned_cpu = 20;
+  auto pinned_cpu = 6;
   dory::pinThreadToCore(proposer, pinned_cpu);
   dory::setThreadName(proposer, "thd_proposer");
   std::cout << "Pinning the proposer thread on coreID " << pinned_cpu

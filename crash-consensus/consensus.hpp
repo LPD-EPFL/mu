@@ -40,8 +40,17 @@
 #include <cstdint>
 #include <thread>
 #include <vector>
+#include "readerwriterqueue.h"
 
 namespace dory {
+struct Request {
+  Request() {}
+  Request(uint8_t *buf, size_t buf_len) : buf{buf}, buf_len{buf_len} {}
+
+  uint8_t *buf;
+  size_t buf_len;
+};
+
 class RdmaConsensus {
  public:
   RdmaConsensus(int my_id, std::vector<int> &remote_ids);
@@ -60,8 +69,8 @@ class RdmaConsensus {
   size_t allocated_size;
   size_t alignment;
 
-  uint8_t *handover_buf;
-  size_t handover_buf_len;
+  alignas(1024) moodycamel::ReaderWriterQueue<bool> output_spsc;
+  alignas(1024) moodycamel::ReaderWriterQueue<Request> input_spsc;
 
   std::thread consensus_thd;
 

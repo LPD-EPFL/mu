@@ -23,11 +23,11 @@
 #include <random>  // TODO: Remove if leader-switch is finished
 #include "leader-switch.hpp"
 
-// #include "readerwriterqueue.h"
+volatile int global = 0;
 
 namespace dory {
 RdmaConsensus::RdmaConsensus(int my_id, std::vector<int>& remote_ids)
-    : my_id{my_id}, remote_ids{remote_ids}, request{false} {
+    : my_id{my_id}, remote_ids{remote_ids}, request{false}, output_spsc{16}, input_spsc{16} {
   using namespace units;
 
   allocated_size = 1_GiB;
@@ -47,14 +47,18 @@ RdmaConsensus::RdmaConsensus(int my_id, std::vector<int>& remote_ids)
 RdmaConsensus::~RdmaConsensus() { consensus_thd.join(); }
 
 bool RdmaConsensus::propose(uint8_t* buf, size_t len) {
-  handover_buf = buf;
-  handover_buf_len = len;
-  request.store(true, std::memory_order_release);
+  input_spsc.try_enqueue(Request(buf, len));
 
-  while (request.load(std::memory_order_relaxed))
-    ;
+  int res = global;
+  bool ok = false;
+  while(!output_spsc.try_dequeue(ok)) {
+    for (int i = 0; i < 32; i++) {
+      res += global;
+      ok = res == 0;
+    }
+  }
 
-  return !not_leader;
+  return ok;
 }
 
 void RdmaConsensus::run() {
@@ -223,14 +227,15 @@ void RdmaConsensus::run() {
       }
 
       if (likely(fast_path)) {  // Fast-path
-        if (request.load(std::memory_order_relaxed)) {
+        Request req;
+        if (input_spsc.try_dequeue(req)) {
           Slot slot(re_ctx.log);
 
           // TODO: Are these values correct?
           auto local_fuo = re_ctx.log.headerFirstUndecidedOffset();
           slot.storeAcceptedProposal(proposal_nr);
           slot.storeFirstUndecidedOffset(local_fuo);
-          slot.storePayload(handover_buf, handover_buf_len);
+          slot.storePayload(req.buf, req.buf_len);
 
           auto [address, offset, size] = slot.location();
 
@@ -282,7 +287,7 @@ void RdmaConsensus::run() {
               }
             }
 
-            request.store(false, std::memory_order_release);
+            output_spsc.try_enqueue(true);
           } else {
             std::cout
                 << "Error occurred when writing the new value to a majority"
@@ -294,7 +299,8 @@ void RdmaConsensus::run() {
           }
         }
       } else {  // Slow-path
-        if (request.load(/*std::memory_order_acquire*/)) {
+        Request req;
+        if (input_spsc.try_dequeue(req)) {
           // std::cout << "\nWorking on index " << i << std::endl;
           auto catchup_proposal_err = catchup.catchProposal(leader);
           // std::cout << "Here A" << std::endl;
@@ -490,7 +496,7 @@ void RdmaConsensus::run() {
                 }
               }
 
-              request.store(false /*, std::memory_order_relaxed*/);
+              output_spsc.enqueue(true);
             }
 
           } else {
@@ -502,7 +508,7 @@ void RdmaConsensus::run() {
             // TODO: Are these values correct?
             slot.storeAcceptedProposal(proposal_nr);
             slot.storeFirstUndecidedOffset(local_fuo);
-            slot.storePayload(handover_buf, handover_buf_len);
+            slot.storePayload(req.buf, req.buf_len);
 
             auto [address, offset, size] = slot.location();
 
@@ -564,7 +570,7 @@ void RdmaConsensus::run() {
                 }
               }
 
-              request.store(false /*, std::memory_order_relaxed*/);
+              output_spsc.enqueue(true);
             }
           }
         }
@@ -573,7 +579,9 @@ void RdmaConsensus::run() {
       became_leader = true;
 
       not_leader = true;
-      request.store(false /*, std::memory_order_relaxed*/);
+
+      // TODO: Make sure the follower reports a failure when trying to propose
+      // request.store(false /*, std::memory_order_relaxed*/);
 
       auto has_next = iter.sampleNext();
       if (!has_next) {
