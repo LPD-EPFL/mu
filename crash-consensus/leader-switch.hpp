@@ -15,6 +15,8 @@
 #include "pinning.hpp"
 #include "follower.hpp"
 
+#include "timers.h"
+
 namespace dory {
 struct LeaderContext {
   LeaderContext(ConnectionContext &cc, ScratchpadMemory &scratchpad)
@@ -51,7 +53,7 @@ class LeaderHeartbeat {
     std::mt19937_64 eng{std::random_device{}()};  // or seed however you want
     std::uniform_int_distribution<> dist{10000, 20000};
     std::this_thread::sleep_for(std::chrono::milliseconds{dist(eng)});
-    std::cout << "Changing leader" << std::endl;
+    // std::cout << "Changing leader" << std::endl;
 
     if (ctx->cc.my_id == 3) {
       want_leader.store(true);
@@ -315,18 +317,18 @@ class LeaderSwitcher {
           std::cout << "I (process " << c_ctx->my_id << ") got leader approval"
                     << std::endl;
 
-          // Reset everybody
+          TIMESTAMP_T start, end;
+          GET_TIMESTAMP(start);
           for (auto &[pid, rc] : *replicator_rcs) {
-            IGNORE(pid);
-            rc.reset();
+            if (!rc.changeRightsIfNeeded(ControlBlock::LOCAL_READ | ControlBlock::LOCAL_WRITE)) {
+              std::cout << "Doing hard reset on QP for process " << pid << std::endl;
+              rc.reset();
+              rc.init(ControlBlock::LOCAL_READ | ControlBlock::LOCAL_WRITE);
+              rc.reconnect();
+            }
           }
-
-          // Re-configure the connections
-          for (auto &[pid, rc] : *replicator_rcs) {
-            IGNORE(pid);
-            rc.init(ControlBlock::LOCAL_READ | ControlBlock::LOCAL_WRITE);
-            rc.reconnect();
-          }
+          GET_TIMESTAMP(end);
+          std::cout << "Leader change connection management took " << ELAPSED_NSEC(start, end) << " ns" << std::endl;
 
           follower.block();
           leader_mode.store(true);
@@ -335,30 +337,32 @@ class LeaderSwitcher {
         leader_mode.store(false);
         // Reset everybody
         for (auto &[pid, rc] : *replicator_rcs) {
-          IGNORE(pid);
-          rc.reset();
-        }
+          ControlBlock::MemoryRights rights;
 
-        // Re-configure the connections
-        for (auto &[pid, rc] : *replicator_rcs) {
           if (pid == current_leader.requester) {
-            std::cout << "Giving read/write to " << pid << std::endl;
-            rc.init(ControlBlock::LOCAL_READ | ControlBlock::LOCAL_WRITE |
-                    ControlBlock::REMOTE_READ | ControlBlock::REMOTE_WRITE);
+            rights = ControlBlock::LOCAL_READ | ControlBlock::LOCAL_WRITE |
+                    ControlBlock::REMOTE_READ | ControlBlock::REMOTE_WRITE;
           } else {
-            rc.init(ControlBlock::LOCAL_READ | ControlBlock::LOCAL_WRITE);
+            rights = ControlBlock::LOCAL_READ | ControlBlock::LOCAL_WRITE;
           }
-          rc.reconnect();
+
+          if (!rc.changeRights(rights)) {
+            std::cout << "Doing hard reset on QP for process " << pid << std::endl;
+            rc.reset();
+            rc.init(ControlBlock::LOCAL_READ | ControlBlock::LOCAL_WRITE);
+            rc.reconnect();
+          }
+
         }
 
         follower.unblock();
 
         // Notify the remote party
-        std::cout << "Giving permissions to " << int(current_leader.requester)
-                  << std::endl;
+        // std::cout << "Giving permissions to " << int(current_leader.requester)
+        //           << std::endl;
         permission_asker.givePermission(current_leader.requester,
                                         current_leader.requester_value);
-        std::cout << "Permissions given" << std::endl;
+        // std::cout << "Permissions given" << std::endl;
 
         auto expected = current_leader;
         auto desired = expected;

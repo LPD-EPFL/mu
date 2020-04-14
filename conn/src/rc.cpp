@@ -220,6 +220,50 @@ void ReliableConnection::connect(RemoteConnection &rc) {
   wr_cached.wr.rdma.rkey = rconn.rci.rkey;
 }
 
+bool ReliableConnection::needsReset() {
+  struct ibv_qp_attr attr;
+  struct ibv_qp_init_attr init_attr;
+
+  if (ibv_query_qp(uniq_qp.get(), &attr, IBV_QP_STATE, &init_attr)) {
+    throw std::runtime_error("Failed to query QP state: " +
+                             std::string(std::strerror(errno)));
+  }
+
+  return attr.qp_state == IBV_QPS_RTS;
+}
+
+bool ReliableConnection::changeRights(ControlBlock::MemoryRights rights) {
+  struct ibv_qp_attr attr;
+  memset(&attr, 0, sizeof(attr));
+
+  attr.qp_access_flags = static_cast<int>(rights);
+
+  auto ret = ibv_modify_qp(uniq_qp.get(), &attr, IBV_QP_ACCESS_FLAGS);
+  return ret == 0;
+}
+
+bool ReliableConnection::changeRightsIfNeeded(ControlBlock::MemoryRights rights) {
+  auto converted_rights = static_cast<int>(rights);
+
+  struct ibv_qp_attr attr;
+  struct ibv_qp_init_attr init_attr;
+
+  if (ibv_query_qp(uniq_qp.get(), &attr, IBV_QP_STATE | IBV_QP_ACCESS_FLAGS, &init_attr)) {
+    throw std::runtime_error("Failed to query QP state: " +
+                             std::string(std::strerror(errno)));
+  }
+
+  if (attr.qp_state != IBV_QPS_RTS) {
+    return false;
+  }
+
+  if (attr.qp_access_flags == converted_rights) {
+    return true;
+  }
+
+  return changeRights(rights);
+}
+
 bool ReliableConnection::post_send(ibv_send_wr &wr) {
   struct ibv_send_wr *bad_wr = nullptr;
 
