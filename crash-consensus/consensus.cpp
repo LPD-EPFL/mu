@@ -91,11 +91,13 @@ void RdmaConsensus::run() {
   ce_replication->configure_all("primary", "shared-mr", "cq-replication",
                                "cq-replication");
   ce_replication->announce_all(store, "qp-replication");
+  ce_replication->announce_ready(store, "qp-replication", "announce");
 
   ce_leader_election = std::make_unique<ConnectionExchanger>(my_id, remote_ids, *cb.get());
   ce_leader_election->configure_all("primary", "shared-mr", "cq-leader-election",
                                    "cq-leader-election");
   ce_leader_election->announce_all(store, "qp-leader-election");
+  ce_leader_election->announce_ready(store, "qp-leader-election", "announce");
 
   auto shared_memory_addr = reinterpret_cast<uint8_t*>(cb->mr("shared-mr").addr);
 
@@ -112,21 +114,22 @@ void RdmaConsensus::run() {
 
   replication_log = std::make_unique<Log>(logmem, logmem_size);
 
-  std::cout << "Waiting (10 sec) for all processes to fetch the connections"
-            << std::endl;
-  std::this_thread::sleep_for(std::chrono::seconds(10));
+  ce_replication->wait_ready_all(store, "qp-replication", "announce");
+  ce_leader_election->wait_ready_all(store, "qp-leader-election", "announce");
 
   ce_replication->connect_all(
       store, "qp-replication",
       ControlBlock::LOCAL_READ | ControlBlock::LOCAL_WRITE);
+  ce_replication->announce_ready(store, "qp-replication", "connect");
 
   ce_leader_election->connect_all(
       store, "qp-leader-election",
       ControlBlock::LOCAL_READ | ControlBlock::LOCAL_WRITE |
           ControlBlock::REMOTE_READ | ControlBlock::REMOTE_WRITE);
+  ce_leader_election->announce_ready(store, "qp-leader-election", "connect");
 
-  std::cout << "Waiting (10 sec) for all processes to stabilize" << std::endl;
-  std::this_thread::sleep_for(std::chrono::seconds(10));
+  ce_replication->wait_ready_all(store, "qp-replication", "connect");
+  ce_leader_election->wait_ready_all(store, "qp-leader-election", "connect");
 
   // Initialize the contexts
   auto& cq_leader_election = cb->cq("cq-leader-election");
@@ -161,8 +164,7 @@ void RdmaConsensus::run() {
   std::fill(to_remote_memory.begin(), to_remote_memory.end(), log_offset);
   dest = to_remote_memory;
 
-  std::cout << "Waiting (5 sec) for all processes to establish the connections"
-            << std::endl;
+  std::cout << "Waiting (5 sec) for all threads to start" << std::endl;
   std::this_thread::sleep_for(std::chrono::seconds(5));
 }
 
