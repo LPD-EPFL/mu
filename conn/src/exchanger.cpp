@@ -62,6 +62,43 @@ void ConnectionExchanger::announce_all(MemoryStore& store,
   }
 }
 
+void ConnectionExchanger::announce_ready(MemoryStore& store,
+                                         std::string const& prefix,
+                                         std::string const& reason) {
+  std::stringstream name;
+  name << prefix << "-" << my_id << "-ready(" << reason << ")";
+  store.set(name.str(), "ready(" + reason + ")");
+}
+
+void ConnectionExchanger::wait_ready(int proc_id, MemoryStore& store,
+                                     std::string const& prefix,
+                                     std::string const& reason) {
+  auto packed_reason = "ready(" + reason + ")";
+  std::stringstream name;
+  name << prefix << "-" << proc_id << "-" << packed_reason;
+
+  auto key = name.str();
+  std::string value;
+
+  while (!store.get(key, value)) {
+    std::this_thread::sleep_for(retryTime);
+  }
+
+  if (value != packed_reason) {
+    throw std::runtime_error("Ready announcement of message `" + key +
+                             "` does not contain the value `" + packed_reason +
+                             "`");
+  }
+}
+
+void ConnectionExchanger::wait_ready_all(MemoryStore& store,
+                                         std::string const& prefix,
+                                         std::string const& reason) {
+  for (int pid : remote_ids) {
+    wait_ready(pid, store, prefix, reason);
+  }
+}
+
 void ConnectionExchanger::connect(int proc_id, MemoryStore& store,
                                   std::string const& prefix,
                                   ControlBlock::MemoryRights rights) {

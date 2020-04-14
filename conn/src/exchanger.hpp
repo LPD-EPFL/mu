@@ -17,6 +17,7 @@ namespace dory {
 class ConnectionExchanger {
  private:
   static constexpr double gapFactor = 2;
+  static constexpr auto retryTime = std::chrono::milliseconds(20);
 
  public:
   ConnectionExchanger(int my_id, std::vector<int> remote_ids, ControlBlock& cb);
@@ -37,6 +38,15 @@ class ConnectionExchanger {
   void connect_all(
       MemoryStore& store, std::string const& prefix,
       ControlBlock::MemoryRights rights = ControlBlock::LOCAL_READ);
+
+  void announce_ready(MemoryStore& store, std::string const& prefix,
+                      std::string const& reason);
+
+  void wait_ready(int proc_id, MemoryStore& store, std::string const& prefix,
+                  std::string const& reason);
+
+  void wait_ready_all(MemoryStore& store, std::string const& prefix,
+                      std::string const& reason);
 
   std::map<int, dory::ReliableConnection>& connections() { return rcs; }
 
