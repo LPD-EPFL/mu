@@ -40,6 +40,11 @@ class Follower {
     }
   }
 
+  template<typename Func>
+  void commitHandler(Func f) {
+    commit = std::move(f);
+  }
+
   void unblock() {
     // if (!blocked_thread.load()) {
     //   throw std::runtime_error("Cannot unblock a non-blocked thread");
@@ -111,16 +116,8 @@ class Follower {
         commit_iter->next();
 
         ParsedSlot pslot(commit_iter->location());
-
-        // Committing
-        // std::string str;
         auto [buf, len] = pslot.payload();
-        // auto bbuf = reinterpret_cast<char*>(buf);
-        // str.assign(bbuf, len);
-        // std::cout << "Committing payload (len=" << len << ") `"
-        //           << *reinterpret_cast<uint64_t*>(buf) << "`" << std::endl;
-        IGNORE(buf);
-        IGNORE(len);
+        commit(buf, len);
 
         // Bookkeeping
         ctx->log.updateHeaderFirstUndecidedOffset(fuo);
@@ -132,6 +129,8 @@ class Follower {
     ReplicationContext *ctx;
     BlockingIterator *iter;
     LiveIterator *commit_iter;
+
+    std::function<void(uint8_t*, size_t)> commit;
 
     std::thread follower_thd;
 

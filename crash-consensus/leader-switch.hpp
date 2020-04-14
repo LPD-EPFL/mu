@@ -31,6 +31,7 @@ class LeaderHeartbeat {
   LeaderHeartbeat(LeaderContext *ctx) : ctx{ctx}, want_leader{false} {}
 
   void scanHeartbeats() {
+#if 0
     std::mt19937_64 eng{std::random_device{}()};  // or seed however you want
     std::uniform_int_distribution<> dist{10000, 20000};
     // std::this_thread::sleep_for(std::chrono::milliseconds{dist(eng)});
@@ -46,7 +47,7 @@ class LeaderHeartbeat {
     // }
   }
 
-#if 0
+#else
     std::mt19937_64 eng{std::random_device{}()};  // or seed however you want
     std::uniform_int_distribution<> dist{10000, 20000};
     std::this_thread::sleep_for(std::chrono::milliseconds{dist(eng)});

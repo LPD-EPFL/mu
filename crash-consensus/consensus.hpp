@@ -69,11 +69,43 @@ class RdmaConsensus {
   RdmaConsensus(int my_id, std::vector<int> &remote_ids);
   ~RdmaConsensus();
 
-  bool propose(uint8_t *buf, size_t len);
+  template<typename Func>
+  void commitHandler(Func f) {
+    commit = std::move(f);
+    follower.commitHandler(commit);
+    spawn_follower();
+  }
+
+  int propose(uint8_t *buf, size_t len);
+
+  inline int potentialLeader() {
+    return potential_leader;
+  }
+
+  enum ProposeError {
+    NoError = 0, // Placeholder for the 0 value
+    MutexUnavailable,
+    FastPath,
+    SlowPathCatchProposal,
+    SlowPathUpdateProposal,
+    SlowPathReadRemoteLogs,
+    SlowPathWriteAdoptedValue,
+    SlowPathWriteNewValue,
+    FollowerMode
+  };
 
  private:
+  void spawn_follower();
   void run();
 
+  inline int ret_error(ProposeError error) {
+    became_leader = true;
+    return static_cast<int>(error);
+  }
+
+  inline int ret_no_error() {
+    return 0;
+  }
  private:
   int my_id;
   std::vector<int> remote_ids;
@@ -85,6 +117,8 @@ class RdmaConsensus {
   std::thread permissions_thd;
 
   std::atomic<bool> am_I_leader;
+
+  std::function<void(uint8_t*, size_t)> commit;
 
   Devices d;
   OpenDevice od;
@@ -112,9 +146,9 @@ class RdmaConsensus {
 
 
   // Used by consensus
-  bool encountered_error = false;
   bool became_leader = true;
   bool fast_path = false;
   uint64_t proposal_nr = 0;
+  int potential_leader = -1;
 };
 }  // namespace dory

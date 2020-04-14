@@ -14,10 +14,17 @@ RdmaConsensus::RdmaConsensus(int my_id, std::vector<int>& remote_ids)
 
   run();
 
+  // TODO (Check that): Both iterators are implicitly protected by the mutex,
+  // since they are shared between two threads.
   iter = re_ctx->log.blockingIterator();
   commit_iter = re_ctx->log.liveIterator();
-  follower = Follower(re_ctx.get(), &iter, &commit_iter);
 
+  follower = Follower(re_ctx.get(), &iter, &commit_iter);
+}
+
+RdmaConsensus::~RdmaConsensus() { consensus_thd.join(); }
+
+void RdmaConsensus::spawn_follower() {
   consensus_thd = std::thread([this]() {
     follower.spawn();
 
@@ -47,8 +54,6 @@ RdmaConsensus::RdmaConsensus(int my_id, std::vector<int>& remote_ids)
     setThreadName(consensus_thd, ConsensusConfig::consensusThreadName);
   }
 }
-
-RdmaConsensus::~RdmaConsensus() { consensus_thd.join(); }
 
 void RdmaConsensus::run() {
   std::vector<int> ids(remote_ids);
@@ -168,15 +173,12 @@ void RdmaConsensus::run() {
   std::this_thread::sleep_for(std::chrono::seconds(5));
 }
 
-bool RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
+int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
   std::unique_lock<std::mutex> lock(follower.lock(), std::defer_lock);
   if (!lock.try_lock()) {
-    return false;
-  }
-
-  if (unlikely(encountered_error)) {
-    encountered_error = false;
-    return false;
+    auto& leader = leader_election->leaderSignal();
+    potential_leader = leader.load().requester;
+    return ret_error(ProposeError::MutexUnavailable);
   }
 
   if (am_I_leader.load()) {  // Leader (slow and fast-path)
@@ -235,18 +237,8 @@ bool RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
             commit_iter.next();
 
             ParsedSlot pslot(commit_iter.location());
-
-            // Committing
-            std::string str;
             auto [buf, len] = pslot.payload();
-            auto bbuf = reinterpret_cast<char*>(buf);
-
-            IGNORE(bbuf);
-            IGNORE(len);
-            // str.assign(bbuf, len);
-            // std::cout << "Committing payload (len=" << len << ") `" <<
-            // str << "`"
-            //           << std::endl;
+            commit(buf, len);
           }
         }
       } else {
@@ -255,13 +247,14 @@ bool RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
             << std::endl;
         auto err = majW->fastWriteError();
         majW->recoverFromError(err);
-        return false;
+        return ret_error(ProposeError::FastPath);
       }
     } else {  // Slow-path
       // std::cout << "\nWorking on index " << i << std::endl;
       auto catchup_proposal_err = catchup->catchProposal(leader);
       // std::cout << "Here A" << std::endl;
 
+      bool encountered_error = false;
       while (!catchup_proposal_err->ok()) {
         if (catchup_proposal_err->type() ==
             MaybeError::CatchProposalRetryError) {
@@ -277,7 +270,7 @@ bool RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
       }
 
       if (encountered_error) {
-        return false;
+        return ret_error(ProposeError::SlowPathCatchProposal);
       }
       // std::cout << "Passed catchup.catchProposal()" << std::endl;
 
@@ -293,7 +286,7 @@ bool RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
       }
 
       if (encountered_error) {
-        return false;
+        return ret_error(ProposeError::SlowPathUpdateProposal);
       }
       // std::cout << "Passed catchup.updateWithCurrentProposal()" <<
       // std::endl;
@@ -323,17 +316,17 @@ bool RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
           max_accepted_proposal = local_pslot.acceptedProposal();
 
           // std::cout << "Reading from process " << ctx.my_id << std::endl;
-          ParsedSlot pslot(freshest);
+          // ParsedSlot pslot(freshest);
 
           // std::cout << "Accepted proposal " << pslot.acceptedProposal()
           //           << std::endl;
           // std::cout << "First undecided offset " <<
           // pslot.firstUndecidedOffset()
           //           << std::endl;
-          std::string str;
-          auto [buf, len] = pslot.payload();
-          auto bbuf = reinterpret_cast<char*>(buf);
-          str.assign(bbuf, len);
+          // std::string str;
+          // auto [buf, len] = pslot.payload();
+          // auto bbuf = reinterpret_cast<char*>(buf);
+          // str.assign(bbuf, len);
           // std::cout << "Payload (len=" << len << ") `" << str << "`" <<
           // std::endl;
         }
@@ -352,10 +345,10 @@ bool RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
             // std::cout << "First undecided offset " <<
             // pslot.firstUndecidedOffset()
             //           << std::endl;
-            std::string str;
-            auto [buf, len] = pslot.payload();
-            auto bbuf = reinterpret_cast<char*>(buf);
-            str.assign(bbuf, len);
+            // std::string str;
+            // auto [buf, len] = pslot.payload();
+            // auto bbuf = reinterpret_cast<char*>(buf);
+            // str.assign(bbuf, len);
             // std::cout << "Payload (len=" << len << ") `" << str << "`" <<
             // std::endl;
 
@@ -369,7 +362,7 @@ bool RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
         std::cout << resp->type_str(resp->type()) << std::endl;
         lsr->recoverFromError(resp);
 
-        return false;
+        return ret_error(ProposeError::SlowPathReadRemoteLogs);
       }
 
       // std::cout << "Got the freshest value" << std::endl;
@@ -379,9 +372,12 @@ bool RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
                   << std::endl;
 
         auto size = ParsedSlot::copy(local_fuo_entry, freshest);
-
-        ParsedSlot fresh_pslot(freshest);
+        // TODO (Check that): These lines are necessary
+        ParsedSlot fresh_pslot(local_fuo_entry);
         fresh_pslot.setAcceptedProposal(proposal_nr);
+
+        // ParsedSlot fresh_pslot(freshest);
+        // fresh_pslot.setAcceptedProposal(proposal_nr);
 
         // std::cout << "Accepted proposal " <<
         // fresh_pslot.acceptedProposal()
@@ -389,10 +385,10 @@ bool RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
         // std::cout << "First undecided offset " <<
         // fresh_pslot.firstUndecidedOffset()
         //           << std::endl;
-        std::string str;
-        auto [buf, len] = fresh_pslot.payload();
-        auto bbuf = reinterpret_cast<char*>(buf);
-        str.assign(bbuf, len);
+        // std::string str;
+        // auto [buf, len] = fresh_pslot.payload();
+        // auto bbuf = reinterpret_cast<char*>(buf);
+        // str.assign(bbuf, len);
         // std::cout << "Payload (len=" << len << ") `" << str << "`" <<
         // std::endl;
 
@@ -407,11 +403,8 @@ bool RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
         // }
 
         if (!err->ok()) {
-          std::cout
-              << "Error occurred when writing the new value to a majority"
-              << std::endl;
           majW->recoverFromError(err);
-          return false;
+          return ret_error(ProposeError::SlowPathWriteAdoptedValue);
         } else {
           // std::cout << "Processes ";
           // for (auto pid : majW.successes()) {
@@ -443,16 +436,8 @@ bool RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
               commit_iter.next();
 
               ParsedSlot pslot(commit_iter.location());
-
-              // Committing
-              std::string str;
               auto [buf, len] = pslot.payload();
-              // auto bbuf = reinterpret_cast<char*>(buf);
-              // str.assign(bbuf, len);
-              // std::cout << "Committing payload A (len=" << len << ") `" << str
-              //           << "`" << std::endl;
-              std::cout << "Committing payload A (len=" << len << ") `"
-                        << *reinterpret_cast<uint64_t*>(buf) << "`" << std::endl;
+              commit(buf, len);
             }
           }
         }
@@ -480,11 +465,8 @@ bool RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
         // }
 
         if (!err->ok()) {
-          std::cout
-              << "Error occurred when writing the new value to a majority"
-              << std::endl;
           majW->recoverFromError(err);
-          return false;
+          return ret_error(ProposeError::SlowPathWriteNewValue);
         } else {
           // std::cout << "Processes ";
           // for (auto pid : majW.successes()) {
@@ -516,16 +498,8 @@ bool RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
               commit_iter.next();
 
               ParsedSlot pslot(commit_iter.location());
-
-              // Committing
-              std::string str;
               auto [buf, len] = pslot.payload();
-              // auto bbuf = reinterpret_cast<char*>(buf);
-              // str.assign(bbuf, len);
-              // std::cout << "Committing payload B (len=" << len << ") `" << str
-              //           << "`" << std::endl;
-              std::cout << "Committing payload B (len=" << len << ") `"
-                        << *reinterpret_cast<uint64_t*>(buf) << "`" << std::endl;
+              commit(buf, len);
             }
           }
         }
@@ -533,9 +507,11 @@ bool RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
     }
   } else {
     became_leader = true;
-    return false;
+    auto& leader = leader_election->leaderSignal();
+    potential_leader = leader.load().requester;
+    return ret_error(ProposeError::FollowerMode);
   }
 
-  return true;
+  return ret_no_error();
 }
 }  // namespace dory
