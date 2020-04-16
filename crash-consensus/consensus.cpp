@@ -12,7 +12,7 @@ RdmaConsensus::RdmaConsensus(int my_id, std::vector<int>& remote_ids)
       ask_reset{false} {
   using namespace units;
 
-  allocated_size = 1_GiB;
+  allocated_size = 10_GiB;
   alignment = 64;
 
   run();
@@ -383,8 +383,8 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
       // std::cout << "Got the freshest value" << std::endl;
 
       if (freshest != nullptr) {
-        std::cout << "Proposing the freshest value in the slow path"
-                  << std::endl;
+        // std::cout << "Proposing the freshest value in the slow path"
+        //           << std::endl;
 
         auto size = ParsedSlot::copy(local_fuo_entry, freshest);
         // TODO (Check that): These lines are necessary
@@ -459,8 +459,8 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
 
       } else {
         fast_path = true;
-        std::cout << "Proposing the new value in the slow-path"
-                  << std::endl;
+        // std::cout << "Proposing the new value in the slow-path"
+        //           << std::endl;
         Slot slot(re_ctx->log);
 
         // TODO: Are these values correct?

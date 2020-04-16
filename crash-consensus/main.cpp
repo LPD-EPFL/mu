@@ -73,7 +73,7 @@ int main(int argc, char* argv[]) {
     if (id == 3 || id == 1) {
       TIMESTAMP_INIT;
 
-      const uint64_t times = 1024 * 1024;
+      const uint64_t times = 1024 * 1024 * 10;
       std::vector<TIMESTAMP_T> timestamps(times);
 
       for (uint64_t i = 0; i < times; i++) {

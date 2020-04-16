@@ -291,8 +291,8 @@ class LeaderSwitcher {
     // If you discovered a new request for a leader, notify the main event loop
     // to give permissions to him and switch to follower.
     if (requester > 0) {
-      std::cout << "Process with pid " << requester
-                << " asked for permissions" << std::endl;
+      // std::cout << "Process with pid " << requester
+      //           << " asked for permissions" << std::endl;
       leader.store(dory::Leader(requester, reading[requester], force_reset));
     } else {
       // Check if my leader election declared me as leader
@@ -319,9 +319,9 @@ class LeaderSwitcher {
       Follower& follower, std::atomic<bool> &leader_mode, bool &force_permission_request) {
     Leader current_leader = leader.load();
     if (current_leader != prev_leader || force_permission_request) {
-      std::cout << "Adjusting connections to leader ("
-                << int(current_leader.requester) << " "
-                << current_leader.requester_value << ")" << std::endl;
+      // std::cout << "Adjusting connections to leader ("
+      //           << int(current_leader.requester) << " "
+      //           << current_leader.requester_value << ")" << std::endl;
 
       auto orig_leader = prev_leader;
       prev_leader = current_leader;
@@ -329,10 +329,10 @@ class LeaderSwitcher {
       force_permission_request = false;
 
       if (current_leader.requester == c_ctx->my_id) {
-        std::cout << "A" << std::endl;
+        // std::cout << "A" << std::endl;
         if (!leader_mode.load()) {
 
-          std::cout << "Asking for permissions: " << hard_reset << std::endl;
+          // std::cout << "Asking for permissions: " << hard_reset << std::endl;
           // Ask for permission. Wait for everybody to reply
           permission_asker.askForPermissions(hard_reset);
 
@@ -382,15 +382,15 @@ class LeaderSwitcher {
             }
           }
 
-          std::cout << "Blocking the follower" << std::endl;
+          // std::cout << "Blocking the follower" << std::endl;
           follower.block();
           leader_mode.store(true);
-          std::cout << "Permissions granted" << std::endl;
+          // std::cout << "Permissions granted" << std::endl;
         } else {
-          std::cout << "C" << std::endl;
+          // std::cout << "C" << std::endl;
         }
       } else {
-        std::cout << "B" << std::endl;
+        // std::cout << "B" << std::endl;
         leader_mode.store(false);
 
         if (current_leader.reset()) {
@@ -448,8 +448,8 @@ class LeaderSwitcher {
                                         current_leader.requester_value);
         // std::cout << "Permissions given" << std::endl;
 
-        std::cout << "Giving permissions to " << int(current_leader.requester)
-                  << std::endl;
+        // std::cout << "Giving permissions to " << int(current_leader.requester)
+        //           << std::endl;
         auto expected = current_leader;
         auto desired = expected;
         desired.makeUnused();
