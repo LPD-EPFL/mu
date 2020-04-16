@@ -6,7 +6,10 @@
 
 namespace dory {
 RdmaConsensus::RdmaConsensus(int my_id, std::vector<int>& remote_ids)
-    : my_id{my_id}, remote_ids{remote_ids}, am_I_leader{false} {
+    : my_id{my_id},
+      remote_ids{remote_ids},
+      am_I_leader{false},
+      ask_reset{false} {
   using namespace units;
 
   allocated_size = 1_GiB;
@@ -32,6 +35,13 @@ void RdmaConsensus::spawn_follower() {
     am_I_leader.store(false);
 
     while (true) {
+      bool asked_reset = ask_reset.load();
+      if (asked_reset) {
+        std::cout << "Hard-reset requested" << std::endl;
+        force_permission_request = true;
+        am_I_leader.store(false);
+      }
+
       // It should internally block/unblock the follower
       auto apply_ok = leader_election->checkAndApplyConnectionPermissionsOK(
           follower, am_I_leader, force_permission_request);
@@ -40,7 +50,12 @@ void RdmaConsensus::spawn_follower() {
       // because somebody else tried to become as well.
       if (unlikely(!apply_ok)) {
         std::cout << "Request permissions again" << std::endl;
+        force_permission_request = true;
         am_I_leader.store(false);
+      }
+
+      if (unlikely(asked_reset)) {
+        ask_reset.store(false);
       }
     }
 
@@ -247,7 +262,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
             << std::endl;
         auto err = majW->fastWriteError();
         majW->recoverFromError(err);
-        return ret_error(ProposeError::FastPath);
+        return ret_error(ProposeError::FastPath, true);
       }
     } else {  // Slow-path
       // std::cout << "\nWorking on index " << i << std::endl;
@@ -270,7 +285,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
       }
 
       if (encountered_error) {
-        return ret_error(ProposeError::SlowPathCatchProposal);
+        return ret_error(ProposeError::SlowPathCatchProposal, true);
       }
       // std::cout << "Passed catchup.catchProposal()" << std::endl;
 
@@ -286,7 +301,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
       }
 
       if (encountered_error) {
-        return ret_error(ProposeError::SlowPathUpdateProposal);
+        return ret_error(ProposeError::SlowPathUpdateProposal, true);
       }
       // std::cout << "Passed catchup.updateWithCurrentProposal()" <<
       // std::endl;
@@ -362,7 +377,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
         std::cout << resp->type_str(resp->type()) << std::endl;
         lsr->recoverFromError(resp);
 
-        return ret_error(ProposeError::SlowPathReadRemoteLogs);
+        return ret_error(ProposeError::SlowPathReadRemoteLogs, true);
       }
 
       // std::cout << "Got the freshest value" << std::endl;
@@ -404,7 +419,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
 
         if (!err->ok()) {
           majW->recoverFromError(err);
-          return ret_error(ProposeError::SlowPathWriteAdoptedValue);
+          return ret_error(ProposeError::SlowPathWriteAdoptedValue, true);
         } else {
           // std::cout << "Processes ";
           // for (auto pid : majW.successes()) {
@@ -466,7 +481,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
 
         if (!err->ok()) {
           majW->recoverFromError(err);
-          return ret_error(ProposeError::SlowPathWriteNewValue);
+          return ret_error(ProposeError::SlowPathWriteNewValue, true);
         } else {
           // std::cout << "Processes ";
           // for (auto pid : majW.successes()) {

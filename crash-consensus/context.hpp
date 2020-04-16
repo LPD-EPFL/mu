@@ -10,13 +10,14 @@
 
 namespace dory {
 struct Leader {
-  Leader(int requester, uint64_t requester_value) noexcept
-      : used(1), requester(requester), requester_value(requester_value) {}
+  Leader(int requester, uint64_t requester_value, int force_reset = 0) noexcept
+      : used(1), force_reset(force_reset), requester(requester), requester_value(requester_value) {}
 
-  Leader() noexcept : used(0), requester(0), requester_value(0) {}
+  Leader() noexcept : used(0), force_reset(0), requester(0), requester_value(0) {}
 
   uint8_t used : 1;
-  uint8_t requester : 7;
+  uint8_t force_reset : 1;
+  uint8_t requester : 6;
   uint64_t requester_value : 48;
 
   inline bool operator==(Leader const &rhs) {
@@ -25,6 +26,7 @@ struct Leader {
 
   inline bool unused() { return used == 0; }
   inline void makeUnused() { used = 0; }
+  inline bool reset() { return force_reset != 0; }
 
   inline bool operator!=(Leader const &rhs) { return !(*this == rhs); }
 };

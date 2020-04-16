@@ -56,16 +56,19 @@ int main(int argc, char* argv[]) {
         uint64_t proposer_id = val >> 60;
         val &= 0xfffffffffffffffUL;
 
-        std::cout << "CID: " << commit_id
-                  << ", Proposer: " << proposer_id
-                  << ", Val: " << val << "\n";
+        (void) proposer_id;
+
+        // std::cout << "CID: " << commit_id
+        //           << ", Proposer: " << proposer_id
+        //           << ", Val: " << val << "\n";
         commit_id += 1;
       }
     });
 
     // Wait enough time for the consensus to become ready
     std::cout << "Wait before starting to propose" << std::endl;
-    std::this_thread::sleep_for(std::chrono::seconds(40));
+    std::this_thread::sleep_for(std::chrono::seconds(30));
+    std::cout << "Started proposing" << std::endl;
 
     if (id == 3 || id == 1) {
       TIMESTAMP_INIT;
@@ -79,7 +82,7 @@ int main(int argc, char* argv[]) {
         uint64_t encoded_i = i | (uint64_t(id) << 60);
         int err;
         if ((err = consensus.propose(reinterpret_cast<uint8_t*>(&encoded_i), sizeof(encoded_i)))) {
-          std::cout << "Proposal failed at index " << i << std::endl;
+          // std::cout << "Proposal failed at index " << i << std::endl;
           i -= 1;
           switch (static_cast<dory::RdmaConsensus::ProposeError>(err)) {
             case dory::RdmaConsensus::FastPath:
@@ -93,31 +96,35 @@ int main(int argc, char* argv[]) {
 
             case dory::RdmaConsensus::MutexUnavailable:
             case dory::RdmaConsensus::FollowerMode:
-            std::cout << "Error: in follower mode. Potential leader: " << consensus.potentialLeader() << std::endl;
+            // std::cout << "Error: in follower mode. Potential leader: " << consensus.potentialLeader() << std::endl;
             break;
 
             default:
             std::cout << "Bug in code. You should only handle errors here" << std::endl;
           }
+        } else {
+          if (i % 10000 == 0) {
+            std::cout << "Passed " << i << std::endl;
+          }
         }
 
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        // std::this_thread::sleep_for(std::chrono::seconds(1));
       }
 
       std::cout << "Finished proposing, computing rtt for proposals..."
                 << std::endl;
-      // Adjacent difference
-      std::vector<uint64_t> diffs;
-      auto it = timestamps.begin();
-      auto prev = *it++;
-      for (; it < timestamps.end(); it++) {
-        diffs.push_back(ELAPSED_NSEC(prev, (*it)));
-        prev = *it;
-      }
+      // // Adjacent difference
+      // std::vector<uint64_t> diffs;
+      // auto it = timestamps.begin();
+      // auto prev = *it++;
+      // for (; it < timestamps.end(); it++) {
+      //   diffs.push_back(ELAPSED_NSEC(prev, (*it)));
+      //   prev = *it;
+      // }
 
-      for (auto n : diffs) {
-        std::cout << n << std::endl;
-      }
+      // for (auto n : diffs) {
+      //   std::cout << n << std::endl;
+      // }
     }
 
     std::this_thread::sleep_for(std::chrono::hours(1));

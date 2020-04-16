@@ -15,7 +15,7 @@ class Follower {
   Follower() {}
 
   Follower(ReplicationContext *ctx, BlockingIterator *iter, LiveIterator *commit_iter)
-    : ctx{ ctx }, iter{ iter }, commit_iter{ commit_iter }, block_thread_req{false}, blocked_thread{false}
+    : ctx{ ctx }, iter{ iter }, commit_iter{ commit_iter }, block_thread_req{false}, blocked_thread{false}, blocked_state{false}
     {
     }
 
@@ -34,9 +34,12 @@ class Follower {
   }
 
   void block() {
-    block_thread_req.store(true);
-    while (block_thread_req.load()) {
-      ;
+    if (!blocked_state) {
+      block_thread_req.store(true);
+      while (block_thread_req.load()) {
+        ;
+      }
+      blocked_state = true;
     }
   }
 
@@ -46,10 +49,13 @@ class Follower {
   }
 
   void unblock() {
-    // if (!blocked_thread.load()) {
-    //   throw std::runtime_error("Cannot unblock a non-blocked thread");
-    // }
-    blocked_thread.store(false);
+    if (blocked_state) {
+      // if (!blocked_thread.load()) {
+      //   throw std::runtime_error("Cannot unblock a non-blocked thread");
+      // }
+      blocked_thread.store(false);
+      blocked_state = false;
+    }
   }
 
   inline std::mutex &lock() {
@@ -86,7 +92,10 @@ class Follower {
           log_mutex.unlock();
 
           while (blocked_thread.load()) {
-            ;
+            // // This is necessary to make the call to `block` idempotent
+            // if (block_thread_req.load()) {
+            //   block_thread_req.store(false);
+            // }
           }
           log_mutex.lock();
         }
@@ -129,7 +138,6 @@ class Follower {
     ReplicationContext *ctx;
     BlockingIterator *iter;
     LiveIterator *commit_iter;
-
     std::function<void(uint8_t*, size_t)> commit;
 
     std::thread follower_thd;
@@ -137,5 +145,7 @@ class Follower {
     alignas(64) std::atomic<bool> block_thread_req;
     alignas(64) std::atomic<bool> blocked_thread;
     alignas(64) std::mutex log_mutex;
+
+    bool blocked_state;
 };
 }

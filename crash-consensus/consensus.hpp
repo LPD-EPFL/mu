@@ -98,8 +98,16 @@ class RdmaConsensus {
   void spawn_follower();
   void run();
 
-  inline int ret_error(ProposeError error) {
+  inline int ret_error(ProposeError error, bool ask_connection_reset = false) {
     became_leader = true;
+
+    if (ask_connection_reset) {
+      ask_reset.store(true);
+      while (ask_reset.load()) {
+        ;
+      }
+    }
+
     return static_cast<int>(error);
   }
 
@@ -150,5 +158,7 @@ class RdmaConsensus {
   bool fast_path = false;
   uint64_t proposal_nr = 0;
   int potential_leader = -1;
+
+  std::atomic<bool> ask_reset;
 };
 }  // namespace dory
