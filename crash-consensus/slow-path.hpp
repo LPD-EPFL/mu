@@ -254,10 +254,14 @@ class LogSlotReader {
           size = offset_size.second;
           remote_iterators[pid].iterator().storeDest(store_addr);
 
-          rc.postSendSingle(
+          auto ok = rc.postSendSingle(
               ReliableConnection::RdmaRead,
               quorum::pack(quorum::EntryRd, pid, entry_read_req_id), store_addr,
               size, rc.remoteBuf() + r_ctx->log_offset + offset);
+
+          if (!ok) {
+            return std::make_unique<ReadLogMajorityError>(entry_read_req_id);
+          }
         }
 
         to_be_polled.posted();

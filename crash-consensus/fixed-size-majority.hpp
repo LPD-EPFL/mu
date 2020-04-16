@@ -108,10 +108,14 @@ class FixedSizeMajorityOperation {
     auto next_req_id = qw.nextReqID();
 
     for (auto &c : connections) {
-      c.rc->postSendSingleCached(
+      auto ok = c.rc->postSendSingleCached(
           ReliableConnection::RdmaWrite,
           QuorumWaiter::packer(kind, c.pid, req_id), from_local_memory, size,
           c.rc->remoteBuf() + to_remote_memories[c.pid] + offset);
+
+      if (!ok) {
+        return false;
+      }
     }
 
     int expected_nr = quorum_size;
@@ -163,14 +167,20 @@ class FixedSizeMajorityOperation {
     auto &rcs = ctx->ce.connections();
     for (auto &[pid, rc] : rcs) {
       if constexpr (std::is_same_v<T, std::vector<void *>>) {
-        rc.postSendSingle(ReliableConnection::RdmaRead,
+        auto ok = rc.postSendSingle(ReliableConnection::RdmaRead,
                           QuorumWaiter::packer(kind, pid, req_id),
                           local_memory[pid], size,
                           rc.remoteBuf() + remote_memory[pid]);
+        if (!ok) {
+          return std::make_unique<ErrorType>(req_id);
+        }
       } else {
-        rc.postSendSingle(ReliableConnection::RdmaWrite,
+        auto ok = rc.postSendSingle(ReliableConnection::RdmaWrite,
                           QuorumWaiter::packer(kind, pid, req_id), local_memory,
                           size, rc.remoteBuf() + remote_memory[pid]);
+        if (!ok) {
+          return std::make_unique<ErrorType>(req_id);
+        }
       }
     }
 
@@ -217,14 +227,20 @@ class FixedSizeMajorityOperation {
     auto &rcs = ctx->ce.connections();
     for (auto &[pid, rc] : rcs) {
       if constexpr (std::is_same_v<T, std::vector<void *>>) {
-        rc.postSendSingle(ReliableConnection::RdmaRead,
+        auto ok = rc.postSendSingle(ReliableConnection::RdmaRead,
                           QuorumWaiter::packer(kind, pid, req_id),
                           local_memory[pid], size,
                           rc.remoteBuf() + remote_memory[pid]);
+        if (!ok) {
+          return std::make_unique<ErrorType>(req_id);
+        }
       } else {
-        rc.postSendSingle(ReliableConnection::RdmaWrite,
+        auto ok = rc.postSendSingle(ReliableConnection::RdmaWrite,
                           QuorumWaiter::packer(kind, pid, req_id), local_memory,
                           size, rc.remoteBuf() + remote_memory[pid]);
+        if (!ok) {
+          return std::make_unique<ErrorType>(req_id);
+        }
       }
     }
 

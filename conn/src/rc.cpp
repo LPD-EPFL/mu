@@ -309,6 +309,7 @@ bool ReliableConnection::postSendSingleCached(RdmaReq req, uint64_t req_id,
   auto ret = ibv_post_send(uniq_qp.get(), &wr_cached, &bad_wr);
 
   if (bad_wr != nullptr) {
+    logger->debug("Got bad wr with id: {}", bad_wr->wr_id);
     return false;
     // throw std::runtime_error(
     //     "Error encountered during posting in some work request");
