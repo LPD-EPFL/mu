@@ -5,6 +5,8 @@
 #include <utility>
 #include <vector>
 
+#include "logger.hpp"
+
 namespace dory {
 struct Memory {
   Memory() : Memory(1) {}
@@ -105,5 +107,7 @@ class ScratchpadMemory {
   Memory mem;
   uint8_t *next;
   uint8_t *base;
+
+  dory::logger logger;
 };
 }  // namespace dory
