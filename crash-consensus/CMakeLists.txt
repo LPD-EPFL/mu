@@ -18,6 +18,8 @@ set(
     consensus.cpp
 )
 
+add_definitions(-DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE)
+
 # add_library(rdmaconsensus SHARED ${LIB_SRCS})
 # target_link_libraries(rdmaconsensus ${CONAN_LIBS} pthread)
 
