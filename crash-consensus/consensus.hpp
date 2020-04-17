@@ -49,20 +49,19 @@
 #include <dory/shared/unused-suppressor.hpp>
 #include <dory/store.hpp>
 
-#include "logger.hpp"
 #include "branching.hpp"
 #include "config.hpp"
 #include "log.hpp"
+#include "logger.hpp"
 #include "memory.hpp"
 #include "pinning.hpp"
 #include "response-tracker.hpp"
 #include "slow-path.hpp"
 
 #include <random>  // TODO: Remove if leader-switch is finished
-#include "leader-switch.hpp"
 #include "follower.hpp"
+#include "leader-switch.hpp"
 #include "readerwriterqueue.h"
-
 
 namespace dory {
 class RdmaConsensus {
@@ -70,7 +69,7 @@ class RdmaConsensus {
   RdmaConsensus(int my_id, std::vector<int> &remote_ids);
   ~RdmaConsensus();
 
-  template<typename Func>
+  template <typename Func>
   void commitHandler(Func f) {
     commit = std::move(f);
     follower.commitHandler(commit);
@@ -79,12 +78,10 @@ class RdmaConsensus {
 
   int propose(uint8_t *buf, size_t len);
 
-  inline int potentialLeader() {
-    return potential_leader;
-  }
+  inline int potentialLeader() { return potential_leader; }
 
   enum ProposeError {
-    NoError = 0, // Placeholder for the 0 value
+    NoError = 0,  // Placeholder for the 0 value
     MutexUnavailable,
     FastPath,
     SlowPathCatchProposal,
@@ -112,9 +109,8 @@ class RdmaConsensus {
     return static_cast<int>(error);
   }
 
-  inline int ret_no_error() {
-    return 0;
-  }
+  inline int ret_no_error() { return 0; }
+
  private:
   int my_id;
   std::vector<int> remote_ids;
@@ -127,7 +123,7 @@ class RdmaConsensus {
 
   std::atomic<bool> am_I_leader;
 
-  std::function<void(uint8_t*, size_t)> commit;
+  std::function<void(uint8_t *, size_t)> commit;
 
   Devices d;
   OpenDevice od;
@@ -145,14 +141,15 @@ class RdmaConsensus {
   std::unique_ptr<CatchUpWithFollowers> catchup;
   std::unique_ptr<LogSlotReader> lsr;
   std::unique_ptr<SequentialQuorumWaiter> sqw;
-  std::unique_ptr<FixedSizeMajorityOperation<SequentialQuorumWaiter, WriteLogMajorityError>> majW;
+  std::unique_ptr<
+      FixedSizeMajorityOperation<SequentialQuorumWaiter, WriteLogMajorityError>>
+      majW;
 
   std::vector<uintptr_t> to_remote_memory, dest;
   BlockingIterator iter;
   LiveIterator commit_iter;
 
   Follower follower;
-
 
   // Used by consensus
   bool became_leader = true;
