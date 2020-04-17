@@ -226,7 +226,7 @@ bool ReliableConnection::post_send(ibv_send_wr &wr) {
   auto ret = ibv_post_send(uniq_qp.get(), &wr, &bad_wr);
 
   if (bad_wr != nullptr) {
-    logger->debug("Got bad wr with id: {}", bad_wr->wr_id);
+    SPDLOG_LOGGER_DEBUG(logger, "Got bad wr with id: {}", bad_wr->wr_id);
     return false;
     // throw std::runtime_error("Error encountered during posting in some work
     // request");

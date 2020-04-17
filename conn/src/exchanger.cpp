@@ -52,7 +52,7 @@ void ConnectionExchanger::announce(int proc_id, MemoryStore& store,
   name << prefix << "-" << my_id << "-for-" << proc_id;
   auto infoForRemoteParty = rc.remoteInfo();
   store.set(name.str(), infoForRemoteParty.serialize());
-  logger->info("Publishing qp {}", name.str());
+  SPDLOG_LOGGER_INFO(logger, "Publishing qp {}", name.str());
 }
 
 void ConnectionExchanger::announce_all(MemoryStore& store,
@@ -72,7 +72,7 @@ void ConnectionExchanger::connect(int proc_id, MemoryStore& store,
 
   std::string ret_val;
   if (!store.get(name.str(), ret_val)) {
-    logger->debug("Could not retrieve key {}", name.str());
+    SPDLOG_LOGGER_DEBUG(logger, "Could not retrieve key {}", name.str());
 
     throw std::runtime_error("Cannot connect to remote qp" + name.str());
   }
@@ -81,7 +81,7 @@ void ConnectionExchanger::connect(int proc_id, MemoryStore& store,
 
   rc.init(rights);
   rc.connect(remoteRC);
-  logger->info("Connected with {}", name.str());
+  SPDLOG_LOGGER_INFO(logger, "Connected with {}", name.str());
 }
 
 void ConnectionExchanger::connect_all(MemoryStore& store,

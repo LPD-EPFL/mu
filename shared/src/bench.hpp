@@ -38,7 +38,7 @@ class BenchTimer {
    * Sets the starting time point.
    **/
   void start() {
-    logger->info("Starting benchmark for {}", ucase);
+    SPDLOG_LOGGER_INFO(logger, "Starting benchmark for {}", ucase);
     begin = std::chrono::high_resolution_clock::now();
   }
 
@@ -58,7 +58,7 @@ class BenchTimer {
     auto diff = to - from;
     auto ns = std::chrono::duration<long, std::nano>(diff);
 
-    logger->info("{} took: {} ns", ucase, ns.count());
+    SPDLOG_LOGGER_INFO(logger, "{} took: {} ns", ucase, ns.count());
 
     completed = true;
   }

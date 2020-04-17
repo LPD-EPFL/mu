@@ -31,7 +31,7 @@ void ControlBlock::registerPD(std::string name) {
 
   pds.push_back(std::move(uniq_pd));
   pd_map.insert(std::pair<std::string, size_t>(name, pds.size() - 1));
-  logger->info("PD '{}' registered", name);
+  SPDLOG_LOGGER_INFO(logger, "PD '{}' registered", name);
 }
 
 deleted_unique_ptr<struct ibv_pd> &ControlBlock::pd(std::string name) {
@@ -61,7 +61,7 @@ void ControlBlock::allocateBuffer(std::string name, size_t length,
 
   buf_map.insert(
       std::pair<std::string, std::pair<size_t, size_t>>(name, index_length));
-  logger->info("Buffer '{}' of size {} allocated", name, length);
+  SPDLOG_LOGGER_INFO(logger, "Buffer '{}' of size {} allocated", name, length);
 }
 
 void ControlBlock::registerMR(std::string name, std::string pd_name,
@@ -97,8 +97,9 @@ void ControlBlock::registerMR(std::string name, std::string pd_name,
 
   mrs.push_back(std::move(uniq_mr));
   mr_map.insert(std::pair<std::string, size_t>(name, mrs.size() - 1));
-  logger->info("MR '{}' under PD '{}' registered with buf '{}' and rights {}",
-               name, pd_name, buffer_name, rights);
+  SPDLOG_LOGGER_INFO(
+      logger, "MR '{}' under PD '{}' registered with buf '{}' and rights {}",
+      name, pd_name, buffer_name, rights);
 }
 
 ControlBlock::MemoryRegion ControlBlock::mr(std::string name) const {
@@ -160,7 +161,7 @@ void ControlBlock::registerCQ(std::string name) {
 
   cqs.push_back(std::move(uniq_cq));
   cq_map.insert(std::pair<std::string, size_t>(name, cqs.size() - 1));
-  logger->info("CQ '{}' registered", name);
+  SPDLOG_LOGGER_INFO(logger, "CQ '{}' registered", name);
 }
 
 deleted_unique_ptr<struct ibv_cq> &ControlBlock::cq(std::string name) {

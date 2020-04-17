@@ -5,3 +5,7 @@ dory-connection/0.0.1
 
 [generators]
 cmake
+
+[options]
+dory-ctrl:log_level=WARN
+dory-connection:log_level=WARN

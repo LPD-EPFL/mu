@@ -17,7 +17,8 @@ volatile bool initialized = false;
 
 void init() {
   if (initialized) {
-    logger->warn("Trying to re-initialize the dory-crypo library!");
+    SPDLOG_LOGGER_WARN(logger,
+                       "Trying to re-initialize the dory-crypo library!");
     return;
   }
 

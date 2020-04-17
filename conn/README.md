@@ -21,9 +21,15 @@ Inside a `conanfile.txt` specify:
 ```toml
 [requires]
 dory-memstore/0.0.1
+
+[options]
+dory-connection:log_level=<level>
 ```
 
-and use the lib in the source files as follows:
+refer to our [wiki](https://github.com/kristianmitk/dory/wiki/Logger) to
+see the various log level options.
+
+Use the lib in the source files as follows:
 
 ```cpp
 #include <dory/conn/rc.hpp>
