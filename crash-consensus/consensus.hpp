@@ -49,6 +49,7 @@
 #include <dory/shared/unused-suppressor.hpp>
 #include <dory/store.hpp>
 
+#include "logger.hpp"
 #include "branching.hpp"
 #include "config.hpp"
 #include "log.hpp"
@@ -160,5 +161,6 @@ class RdmaConsensus {
   int potential_leader = -1;
 
   std::atomic<bool> ask_reset;
+  dory::logger logger;
 };
 }  // namespace dory
