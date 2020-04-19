@@ -85,7 +85,7 @@
 
 namespace dory {
 ReliableConnection::ReliableConnection(ControlBlock &cb)
-    : cb{cb}, pd{nullptr}, logger(std_out_logger("RC")) {
+    : cb{cb}, pd{nullptr}, LOGGER_INIT(logger, "RC") {
   memset(&create_attr, 0, sizeof(struct ibv_qp_init_attr));
   create_attr.qp_type = IBV_QPT_RC;
   create_attr.cap.max_send_wr = WRDepth;
@@ -270,7 +270,7 @@ bool ReliableConnection::post_send(ibv_send_wr &wr) {
   auto ret = ibv_post_send(uniq_qp.get(), &wr, &bad_wr);
 
   if (bad_wr != nullptr) {
-    SPDLOG_LOGGER_DEBUG(logger, "Got bad wr with id: {}", bad_wr->wr_id);
+    LOGGER_DEBUG(logger, "Got bad wr with id: {}", bad_wr->wr_id);
     return false;
     // throw std::runtime_error("Error encountered during posting in some work
     // request");
@@ -309,7 +309,7 @@ bool ReliableConnection::postSendSingleCached(RdmaReq req, uint64_t req_id,
   auto ret = ibv_post_send(uniq_qp.get(), &wr_cached, &bad_wr);
 
   if (bad_wr != nullptr) {
-    logger->debug("Got bad wr with id: {}", bad_wr->wr_id);
+    LOGGER_DEBUG(logger, "Got bad wr with id: {}", bad_wr->wr_id);
     return false;
     // throw std::runtime_error(
     //     "Error encountered during posting in some work request");

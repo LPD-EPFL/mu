@@ -21,14 +21,14 @@ namespace ctrl {
  **/
 void async_event_handler(dory::logger logger, std::future<void> exit_sig,
                          struct ibv_context* ctx) {
-  SPDLOG_LOGGER_INFO(logger,
+  LOGGER_INFO(logger,
                      "Changing the mode of events read to be non-blocking");
 
   /* change the blocking mode of the async event queue */
   auto flags = fcntl(ctx->async_fd, F_GETFL);
   auto ret = fcntl(ctx->async_fd, F_SETFL, flags | O_NONBLOCK);
   if (ret < 0) {
-    SPDLOG_LOGGER_ERROR(
+    LOGGER_ERROR(
         logger, "Error, failed to change file descriptor of async event queue");
 
     return;
@@ -54,18 +54,18 @@ void async_event_handler(dory::logger logger, std::future<void> exit_sig,
     } while (ret == 0);
 
     if (ret < 0) {
-      SPDLOG_LOGGER_ERROR(logger, "poll failed");
+      LOGGER_ERROR(logger, "poll failed");
       return;
     }
 
     ret = ibv_get_async_event(ctx, &event);
 
     if (ret) {
-      SPDLOG_LOGGER_ERROR(logger, "Error, ibv_get_async_event() failed");
+      LOGGER_ERROR(logger, "Error, ibv_get_async_event() failed");
       return;
     }
 
-    SPDLOG_LOGGER_WARN(logger, "Got async event {}", event.event_type);
+    LOGGER_WARN(logger, "Got async event {}", event.event_type);
 
     // ack the event
     ibv_ack_async_event(&event);

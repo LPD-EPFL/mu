@@ -11,7 +11,7 @@ ConnectionExchanger::ConnectionExchanger(int my_id, std::vector<int> remote_ids,
     : my_id{my_id},
       remote_ids{remote_ids},
       cb{cb},
-      logger(std_out_logger("CE")) {
+      LOGGER_INIT(logger, "CE") {
   auto [valid, maximum_id] = valid_ids();
   if (!valid) {
     throw std::runtime_error(
@@ -52,7 +52,7 @@ void ConnectionExchanger::announce(int proc_id, MemoryStore& store,
   name << prefix << "-" << my_id << "-for-" << proc_id;
   auto infoForRemoteParty = rc.remoteInfo();
   store.set(name.str(), infoForRemoteParty.serialize());
-  SPDLOG_LOGGER_INFO(logger, "Publishing qp {}", name.str());
+  LOGGER_INFO(logger, "Publishing qp {}", name.str());
 }
 
 void ConnectionExchanger::announce_all(MemoryStore& store,
@@ -109,7 +109,7 @@ void ConnectionExchanger::connect(int proc_id, MemoryStore& store,
 
   std::string ret_val;
   if (!store.get(name.str(), ret_val)) {
-    SPDLOG_LOGGER_DEBUG(logger, "Could not retrieve key {}", name.str());
+    LOGGER_DEBUG(logger, "Could not retrieve key {}", name.str());
 
     throw std::runtime_error("Cannot connect to remote qp" + name.str());
   }
@@ -118,7 +118,7 @@ void ConnectionExchanger::connect(int proc_id, MemoryStore& store,
 
   rc.init(rights);
   rc.connect(remoteRC);
-  SPDLOG_LOGGER_INFO(logger, "Connected with {}", name.str());
+  LOGGER_INFO(logger, "Connected with {}", name.str());
 }
 
 void ConnectionExchanger::connect_all(MemoryStore& store,

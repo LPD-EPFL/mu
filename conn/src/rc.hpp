@@ -147,6 +147,6 @@ class ReliableConnection {
 
   struct ibv_sge sg_cached[1];
   struct ibv_send_wr wr_cached;
-  dory::logger logger;
+  LOGGER_DECL(logger);
 };
 }  // namespace dory

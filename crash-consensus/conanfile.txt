@@ -7,3 +7,7 @@ dory-external/0.0.1
 
 [generators]
 cmake
+
+[options]
+dory-ctrl:log_level=INFO
+dory-connection:log_level=INFO

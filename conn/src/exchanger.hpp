@@ -59,6 +59,6 @@ class ConnectionExchanger {
   ControlBlock& cb;
   int max_id;
   std::map<int, dory::ReliableConnection> rcs;
-  dory::logger logger;
+  LOGGER_DECL(logger);
 };
 }  // namespace dory

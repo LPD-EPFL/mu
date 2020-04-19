@@ -7,8 +7,9 @@ class DoryConnectionConan(ConanFile):
     #url = "TODO"
     description = "RDMA connection abstractions"
     settings = "os", "compiler", "build_type", "arch"
-    options = {"shared": [True, False], "log_level": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"]}
-    default_options = {"shared": False, "log_level": "INFO"}
+    options = {"shared": [True, False], "log_level": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR", "CRITICAL", "OFF"]}
+    default_options = {"shared": False, "log_level": "INFO",
+        "dory-ctrl:log_level": "OFF"}
     generators = "cmake"
     exports_sources = "src/*"
 
@@ -20,6 +21,7 @@ class DoryConnectionConan(ConanFile):
         return cmake
 
     def requirements(self):
+
         self.requires("dory-shared/0.0.1")
         self.requires("dory-ctrl/0.0.1")
         self.requires("dory-memstore/0.0.1")
