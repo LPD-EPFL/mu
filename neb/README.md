@@ -17,5 +17,5 @@ From within root:
 From within root:
 
 ```sh
-./build/bin/main <process-id> <numer-of-processes>
+./build/bin/main <process-id> <numer-of-processes> <number-of-messages>
 ```

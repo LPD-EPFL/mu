@@ -13,7 +13,9 @@ class MessageTracker {
 
   void add_to_quorum(int pid) { quorum.insert(pid); }
 
-  inline bool has_quorum_of(size_t size) { return quorum.size() >= size; }
+  bool includes(int pid) const { return quorum.find(pid) != quorum.end(); }
+
+  inline bool has_quorum_of(size_t size) const { return quorum.size() >= size; }
 
  private:
   std::set<int> quorum;

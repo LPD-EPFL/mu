@@ -3,12 +3,15 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <mutex>
 #include <set>
+#include <shared_mutex>
 #include <thread>
 #include <vector>
 
 #include <dory/conn/exchanger.hpp>
 #include <dory/conn/rc.hpp>
+#include <dory/crypto/sign.hpp>
 #include <dory/ctrl/block.hpp>
 #include <dory/shared/logger.hpp>
 #include <dory/shared/pointer-wrapper.hpp>
@@ -30,7 +33,7 @@ class NonEquivocatingBroadcast {
    * @param id: of the local process
    * @param remote_ids: vector holding all remote process ids
    * @param cb: reference to the control block
-   * @param deliver_cb: callback to call upon delivery of a message
+   * @param deliver_cb: synchronized callback to call upon delivery of a message
    *
    */
   NonEquivocatingBroadcast(int self_id, std::vector<int> remote_ids,
@@ -48,6 +51,15 @@ class NonEquivocatingBroadcast {
                        ConnectionExchanger &replay_conn);
 
   /**
+   * Provides the public keys corresponding to the remote processes
+   * The order order of the `keys` vector should match the one of the
+   * `remote_ids`
+   * @param keys: map holding the public keys
+   **/
+  void set_remote_keys(std::map<int, dory::crypto::pub_key> &keys);
+  void set_remote_keys(std::map<int, dory::crypto::pub_key> &&keys);
+
+  /**
    * @param uint64_t: message key
    * @param msg: message to broadcast
    */
@@ -57,6 +69,11 @@ class NonEquivocatingBroadcast {
    * Begin operation. Needs to be called after providing the RC connected QPs.
    **/
   void start();
+
+  /**
+   * End operation.
+   **/
+  void end();
 
   static constexpr auto PD_NAME = "neb-primary";
   static constexpr auto REPLAY_W_NAME = "neb-replay-w";
@@ -84,8 +101,14 @@ class NonEquivocatingBroadcast {
   // ids of the remote processes
   std::vector<int> remote_ids;
 
+  // remote public keys orderd as `remote_id``
+  std::map<int, dory::crypto::pub_key> remote_keys;
+
   // callback to call for delivery of a message
   deliver_callback deliver;
+
+  // mutex for synchronizing the delivery
+  std::mutex deliver_mux;
 
   // RDMA control
   ControlBlock &cb;
@@ -121,9 +144,8 @@ class NonEquivocatingBroadcast {
   // as triggers rdma replay reads.
   std::thread poller_thread;
 
-  // thread that polls replay read responses and tries to deliver messages
-  // from remote processes.
-  std::thread replay_reader_thread;
+  // thread that polls on the CQs and handles the work completions
+  std::thread cq_poller_thread;
 
   // tracks the current state of the next messages to be delivered by remote
   // processes
@@ -136,7 +158,14 @@ class NonEquivocatingBroadcast {
   std::mutex rep_mux;
 
   // tracks the pending number of rdma reads at any time
-  size_t pending_reads;
+  std::atomic_size_t pending_reads;
+
+  // tracks the pending number of rdma writes at any time
+  std::atomic_uint32_t pending_writes;
+
+  // mutex to synchronize access to remote process resources. Used when removing
+  // remotes dues to crashes
+  std::shared_mutex remote_mux;
 
   /**
    * Starts the replayer thread which tries to deliver messages by remote
@@ -145,16 +174,22 @@ class NonEquivocatingBroadcast {
   void start_replayer(std::shared_future<void> f);
 
   /**
-   * Starts the reader thread which consumes WC by the replay read CQ.
+   * Starts a thread which consumes WC from the CQs.
    **/
-  void start_reader(std::shared_future<void> f);
+  void start_cq_poller(std::shared_future<void> f);
 
   /**
    * Consumes and handles the work completion of the replay buffer read CQ.
-   * Upon successful and matching replay read of all relevant remote processes
-   * this routine also delivers messages by calling the deliver callback.
+   * Upon successful and matching replay read of all relevant remote
+   *processes this routine also delivers messages by calling the deliver
+   *callback.
    **/
-  inline void consume(dory::deleted_unique_ptr<ibv_cq> &cq);
+  inline void consume_read_wcs(dory::deleted_unique_ptr<ibv_cq> &cq);
+
+  /**
+   * Consumes the work completions of the write CQ
+   **/
+  inline void consume_write_wcs(dory::deleted_unique_ptr<ibv_cq> &cq);
 
   /**
    * Polls the broacast buffers and replays written values to the replay buffer.
@@ -163,11 +198,16 @@ class NonEquivocatingBroadcast {
    **/
   inline void poll_bcast_bufs();
 
-  // TODO(Kristian): make atomic
+  /**
+   * Removes the remote process from the cluster. This routine is called upon
+   * read/write WC with status 12
+   **/
+  void remove_remote(int pid);
+
   volatile bool connected = false;
   volatile bool started = false;
-  volatile bool poller_running = false;
-  volatile bool reader_running = false;
+  volatile bool bcast_poller_running = false;
+  volatile bool cq_poller_running = false;
 
   std::promise<void> exit_signal;
 };

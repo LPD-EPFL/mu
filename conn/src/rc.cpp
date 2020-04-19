@@ -331,6 +331,7 @@ bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf,
 bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf,
                                         uint64_t len, uint32_t lkey,
                                         uintptr_t remote_addr) {
+  // TODO(Kristian): if not used concurrently, we could reuse the same wr
   struct ibv_send_wr wr;
   struct ibv_sge sg;
 
@@ -377,4 +378,11 @@ RemoteConnection ReliableConnection::remoteInfo() const {
   RemoteConnection rc(cb.lid(), uniq_qp->qp_num, mr.addr, mr.size, mr.rkey);
   return rc;
 }
+
+void ReliableConnection::query_qp(ibv_qp_attr &qp_attr,
+                                  ibv_qp_init_attr &init_attr,
+                                  int attr_mask) const {
+  ibv_query_qp(uniq_qp.get(), &qp_attr, attr_mask, &init_attr);
+}
+
 }  // namespace dory

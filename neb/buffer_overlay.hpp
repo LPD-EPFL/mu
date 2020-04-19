@@ -50,7 +50,8 @@ class MemorySlot {
    * @returns: a pointer to the signature
    **/
   volatile const uint8_t *signature() const {
-    throw std::runtime_error("Signatures are not supported yet");
+    return reinterpret_cast<const volatile uint8_t *>(
+        &buf[dory::neb::SLOT_SIGNATURE_OFFSET]);
   }
 
   /**

@@ -178,7 +178,6 @@ int ControlBlock::port() const { return resolved_port.portID(); }
 
 int ControlBlock::lid() const { return resolved_port.portLID(); }
 
-// TODO(Kristian): return num and remove the erase
 bool ControlBlock::pollCqIsOK(deleted_unique_ptr<struct ibv_cq> &cq,
                               std::vector<struct ibv_wc> &entries) {
   auto num = ibv_poll_cq(cq.get(), entries.size(), &entries[0]);

@@ -90,6 +90,7 @@ std::unique_ptr<MemorySlot> ReplayBufferWriter::slot(int proc_id,
 
 /* -------------------------------------------------------------------------- */
 
+// TODO: replace by a garbage-collected memory overlay
 ReplayBufferReader::ReplayBufferReader(uintptr_t addr, size_t buf_size,
                                        uint32_t lkey, std::vector<int> procs)
     : lkey(lkey),

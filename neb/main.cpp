@@ -1,23 +1,50 @@
 #include <chrono>
+#include <fstream>
 #include <functional>
 #include <future>
+#include <iostream>
+#include <thread>
 
 #include <dory/conn/exchanger.hpp>
+#include <dory/crypto/sign.hpp>
 #include <dory/ctrl/ae_handler.hpp>
 #include <dory/ctrl/block.hpp>
 #include <dory/ctrl/device.hpp>
 #include <dory/extern/ibverbs.hpp>
 #include <dory/shared/bench.hpp>
 #include <dory/shared/logger.hpp>
+#include <dory/shared/unused-suppressor.hpp>
 #include <dory/store.hpp>
 
 #include "consts.hpp"
 #include "neb.hpp"
 
-using namespace std::placeholders;
-
+static constexpr auto PKEY_PREFIX = "pkey-p";
 static auto logger = dory::std_out_logger("MAIN");
-static constexpr auto num_messages = 2000;
+static auto num_messages = 1000;
+
+void write(const std::vector<
+               std::tuple<int, uint64_t, std::chrono::steady_clock::time_point>>
+               &samples,
+           const char *file_name) {
+  std::ofstream fs;
+
+  fs.open(file_name);
+  auto &[nutin1, nutin2, start] = samples[0];
+
+  dory::IGNORE(nutin1);
+  dory::IGNORE(nutin2);
+
+  for (size_t i = 1; i < samples.size(); i++) {
+    auto &[pid, k, ts] = samples[i];
+    auto diff =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(ts - start);
+
+    fs << pid << " " << k << " " << diff.count() << "\n";
+  }
+
+  fs.close();
+}
 
 /* -------------------------------------------------------------------------- */
 
@@ -45,46 +72,69 @@ class NebConsumer {
   NebConsumer(int num_proc)
       : expected(num_proc * num_messages),
         delivered_counter(0),
-        bt(dory::BenchTimer("Delivies")),
-        f(done_signal.get_future()) {}
+        bt(dory::BenchTimer("Deliveries")),
+        f(done_signal.get_future()) {
+    // +1 for the start point
+    timestamps.resize(expected + 1);
+  }
 
-  void bench() { bt.start(); }
+  void bench() {
+    bt.start();
+    timestamps[0] =
+        std::tuple<int, uint64_t, std::chrono::steady_clock::time_point>(
+            0, 0, std::chrono::steady_clock::now());
+  }
 
   void deliver_callback(uint64_t k, volatile const void *m, size_t proc_id) {
-    NebSampleMessage msg;
+    delivered_counter += 1;
 
-    msg.unmarshall(m);
-
-    logger->info("Delivered ({}, {}) by {}", k, msg.val, proc_id);
-    delivered_counter++;
+    timestamps[delivered_counter] =
+        std::tuple<int, uint64_t, std::chrono::steady_clock::time_point>(
+            proc_id, k, std::chrono::steady_clock::now());
 
     if (delivered_counter == expected) {
       bt.stop();
       done_signal.set_value();
     }
+
+    dory::IGNORE(k);
+    dory::IGNORE(m);
+    dory::IGNORE(proc_id);
+
+    NebSampleMessage msg;
+    msg.unmarshall(m);
+    LOGGER_DEBUG(logger, "Delivered ({}, {}) by {}, overall: {}", k, msg.val,
+                 proc_id, delivered_counter);
   }
 
   void wait_to_finish() const {
-    logger->info("Wating to finish");
+    LOGGER_INFO(logger, "Done boradcasting. Wating for all messages.");
+
+    // block until we delivered all expected messages
     while (f.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
     }
+
+    write(timestamps, "/tmp/neb-bench-ts");
   }
 
  private:
   int expected;
-  int delivered_counter;
+  volatile int delivered_counter;
   dory::BenchTimer bt;
 
   std::promise<void> done_signal;
   std::future<void> f;
+  std::vector<std::tuple<int, uint64_t, std::chrono::steady_clock::time_point>>
+      timestamps;
 };
 /*******************************************************************************
  *                                  MAIN
  ******************************************************************************/
 int main(int argc, char *argv[]) {
+  logger->set_level(spdlog::level::debug);
   /* ------------------------------------------------------------------------ */
   if (argc < 2) {
-    logger->error("Provide the process id as first argument!");
+    LOGGER_CRITICAL(logger, "Provide the process id as first argument!");
     exit(1);
   }
 
@@ -93,18 +143,22 @@ int main(int argc, char *argv[]) {
 
   if (argc > 2) {
     num_proc = atoi(argv[2]);
-    if (num_proc < 1) {
-      logger->error("At least one processes is required!");
-      exit(1);
-    }
+    assert(num_proc > 1);
+  }
+
+  if (argc > 3) {
+    num_messages = atoi(argv[3]);
+    assert(num_messages >= 0);
   }
 
   std::vector<int> remote_ids;
 
   for (int i = 1; i <= num_proc; i++) {
-    if (i == self_id) continue;
-    remote_ids.push_back(i);
+    if (i != self_id) remote_ids.push_back(i);
   }
+
+  dory::crypto::init();
+  dory::crypto::publish_pub_key(PKEY_PREFIX + std::to_string(self_id));
 
   /* ------------------------------------------------------------------------ */
   dory::Devices d;
@@ -180,13 +234,13 @@ int main(int argc, char *argv[]) {
   }
 
   store.set("dory__neb__" + std::to_string(self_id) + "__published", "1");
-  logger->info("Waiting for all remote processes to publish their QPs");
+  LOGGER_INFO(logger, "Waiting for all remote processes to publish their QPs");
   for (int pid : remote_ids) {
     auto key = "dory__neb__" + std::to_string(pid) + "__published";
     std::string val;
 
     while (!store.get(key, val))
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      std::this_thread::sleep_for(std::chrono::microseconds(100));
   }
 
   bcast_ce.connect_all(store, bcast_prefix, dory::ControlBlock::REMOTE_WRITE);
@@ -202,12 +256,14 @@ int main(int argc, char *argv[]) {
   dory::NonEquivocatingBroadcast neb(self_id, remote_ids, cb, deliver_fn);
 
   neb.set_connections(bcast_ce, replay_ce);
+  neb.set_remote_keys(dory::crypto::get_public_keys(PKEY_PREFIX, remote_ids));
 
   neb.start();
 
   store.set("dory__neb__" + std::to_string(self_id) + "__connected", "1");
 
-  logger->info("Waiting for all remote processes to connect to published QPs");
+  LOGGER_INFO(logger,
+              "Waiting for all remote processes to connect to published QPs");
 
   for (int pid : remote_ids) {
     auto key = "dory__neb__" + std::to_string(pid) + "__connected";
@@ -216,24 +272,30 @@ int main(int argc, char *argv[]) {
     while (!store.get(key, val))
       ;
 
-    logger->info("Remote process {} is ready", pid);
+    LOGGER_INFO(logger, "Remote process {} is ready", pid);
   }
 
   nc.bench();
 
   NebSampleMessage m;
   for (int i = 1; i <= num_messages; i++) {
-    m.val = 1000 * self_id + i;
+    m.val = 1000000 * self_id + i;
     neb.broadcast(i, m);
+    // std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
   nc.wait_to_finish();
+
+  LOGGER_INFO(logger, "Sleeping for 10 seconds to let others finish");
+  std::this_thread::sleep_for(std::chrono::seconds(10));
+
+  neb.end();
 
   // exit async event thread
   exit_signal.set_value();
   async_event_thread.join();
 
-  logger->info("Async Event Thread finished");
+  LOGGER_INFO(logger, "Async Event Thread finished");
 
   return 0;
 }

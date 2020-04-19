@@ -133,6 +133,9 @@ class ReliableConnection {
 
   const ControlBlock::MemoryRegion &get_mr() const { return mr; }
 
+  void query_qp(ibv_qp_attr &qp_attr, ibv_qp_init_attr &init_attr,
+                int attr_mask) const;
+
  private:
   bool post_send(ibv_send_wr &wr);
 

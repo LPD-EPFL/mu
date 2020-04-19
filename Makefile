@@ -63,7 +63,7 @@ conn : shared ctrl memstore
 crypto : shared memstore
 
 crash-consensus: extern shared memstore ctrl conn
-neb: extern shared memstore ctrl conn
+neb: extern shared memstore ctrl conn crypto
 
 ############################# End of editable area #############################
 .PHONY: all

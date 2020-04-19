@@ -1,3 +1,6 @@
+#pragma once
+
+#include <map>
 #include <string>
 
 #include <dory/shared/pointer-wrapper.hpp>
@@ -29,6 +32,13 @@ void publish_pub_key(std::string mem_key);
  * Gets a public key from the central registry stored und the key `mem_key`
  **/
 pub_key get_public_key(std::string mem_key);
+
+/**
+ * Gets all public keys given the prefix and the remote ids
+ * Keys are looked up in the central registry using "<prefix><remote_id>"
+ **/
+std::map<int, pub_key> get_public_keys(std::string prefix,
+                                       std::vector<int>& remote_ids);
 
 /**
  * Signs the provided message with the private key of the local keypair. The
