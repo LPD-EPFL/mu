@@ -56,14 +56,14 @@ ScratchpadMemory::ScratchpadMemory(std::vector<int>& ids,
                                    OverlayAllocator& overlay, int alignment)
     : max_id{Identifiers::maxID(ids)},
       base{reinterpret_cast<uint8_t*>(overlay.base())},
-      logger(std_out_logger(ConsensusConfig::logger_prefix)) {
+      LOGGER_INIT(logger, ConsensusConfig::logger_prefix) {
   // Get the memory requirment
   Memory memory(alignment);
   ScratchpadMemory scratchpad(ids, memory);
   auto scratchpad_required_mem = scratchpad.requiredSize();
-  SPDLOG_LOGGER_INFO(
-      logger, "Scratchpad memory :: slot size: {} bytes, total size: {} bytes.",
-      slotSize(), scratchpad_required_mem);
+  LOGGER_INFO(logger,
+              "Scratchpad memory :: slot size: {} bytes, total size: {} bytes.",
+              slotSize(), scratchpad_required_mem);
 
   // Do the allocation
   auto [scratchpad_ok, scratchpad_mem] =

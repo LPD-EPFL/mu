@@ -108,6 +108,6 @@ class ScratchpadMemory {
   uint8_t *next;
   uint8_t *base;
 
-  dory::logger logger;
+  LOGGER_DECL(logger);
 };
 }  // namespace dory

@@ -10,7 +10,7 @@ RdmaConsensus::RdmaConsensus(int my_id, std::vector<int>& remote_ids)
       remote_ids{remote_ids},
       am_I_leader{false},
       ask_reset{false},
-      logger(std_out_logger(ConsensusConfig::logger_prefix)) {
+      LOGGER_INIT(logger, ConsensusConfig::logger_prefix) {
   using namespace units;
 
   allocated_size = 10_GiB;
@@ -38,7 +38,7 @@ void RdmaConsensus::spawn_follower() {
     while (true) {
       bool asked_reset = ask_reset.load();
       if (asked_reset) {
-        SPDLOG_LOGGER_WARN(logger, "Hard-reset requested.");
+        LOGGER_WARN(logger, "Hard-reset requested.");
         force_permission_request = true;
         am_I_leader.store(false);
       }
@@ -50,8 +50,7 @@ void RdmaConsensus::spawn_follower() {
       // If apply is not ok, means that I tried to become a leader, but failed
       // because somebody else tried to become as well.
       if (unlikely(!apply_ok)) {
-        SPDLOG_LOGGER_WARN(logger,
-                           "Permission request interrupted. Trying again.");
+        LOGGER_WARN(logger, "Permission request interrupted. Trying again.");
         force_permission_request = true;
         am_I_leader.store(false);
       }
@@ -88,17 +87,17 @@ void RdmaConsensus::run() {
     }
   }
 
-  SPDLOG_LOGGER_INFO(
-      logger, "Device name: {}, Device verbs name: {}, Extra info: {} {}",
-      od.name(), od.dev_name(), OpenDevice::type_str(od.node_type()),
-      OpenDevice::type_str(od.transport_type()));
+  LOGGER_INFO(logger,
+              "Device name: {}, Device verbs name: {}, Extra info: {} {}",
+              od.name(), od.dev_name(), OpenDevice::type_str(od.node_type()),
+              OpenDevice::type_str(od.transport_type()));
 
   rp = std::make_unique<ResolvedPort>(od);
   auto binded = rp->bindTo(0);
-  SPDLOG_LOGGER_INFO(logger, "Binding to the first port of the device... {}",
-                     binded ? "OK" : "FAILED");
-  SPDLOG_LOGGER_INFO(logger, "Binded on (port_id, port_lid) = ({:d}, {:d})",
-                     rp->portID(), rp->portLID());
+  LOGGER_INFO(logger, "Binding to the first port of the device... {}",
+              binded ? "OK" : "FAILED");
+  LOGGER_INFO(logger, "Binded on (port_id, port_lid) = ({:d}, {:d})",
+              rp->portID(), rp->portLID());
 
   // Configure the control block
   cb = std::make_unique<ControlBlock>(*rp.get());
@@ -134,10 +133,9 @@ void RdmaConsensus::run() {
       std::make_unique<ScratchpadMemory>(ids, *overlay.get(), alignment);
   auto [logmem_ok, logmem, logmem_size] = overlay->allocateRemaining(alignment);
 
-  SPDLOG_LOGGER_INFO(logger, "Log allocation... {}",
-                     logmem_ok ? "OK" : "FAILED");
-  SPDLOG_LOGGER_INFO(logger, "Log (address: 0x{:x}, size: {} bytes)",
-                     uintptr_t(logmem), logmem_size);
+  LOGGER_INFO(logger, "Log allocation... {}", logmem_ok ? "OK" : "FAILED");
+  LOGGER_INFO(logger, "Log (address: 0x{:x}, size: {} bytes)",
+              uintptr_t(logmem), logmem_size);
 
   auto log_offset = logmem - shared_memory_addr;
 
@@ -182,8 +180,8 @@ void RdmaConsensus::run() {
   auto quorum_size = quorum::majority(remote_ids.size() + 1) - 1;
   auto next_log_entry_offset = re_ctx->log.headerFirstUndecidedOffset();
 
-  SPDLOG_LOGGER_TRACE(logger, "My first undecided offset is {}",
-                      next_log_entry_offset);
+  LOGGER_TRACE(logger, "My first undecided offset is {}",
+               next_log_entry_offset);
 
   catchup =
       std::make_unique<CatchUpWithFollowers>(re_ctx.get(), *scratchpad.get());
@@ -200,7 +198,7 @@ void RdmaConsensus::run() {
   std::fill(to_remote_memory.begin(), to_remote_memory.end(), log_offset);
   dest = to_remote_memory;
 
-  SPDLOG_LOGGER_INFO(logger, "Waiting (5 sec) for all threads to start");
+  LOGGER_INFO(logger, "Waiting (5 sec) for all threads to start");
   std::this_thread::sleep_for(std::chrono::seconds(5));
 }
 
@@ -216,7 +214,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
     if (unlikely(became_leader)) {
       fast_path = false;
       became_leader = false;
-      SPDLOG_LOGGER_TRACE(logger, "Rebuilding log");
+      LOGGER_TRACE(logger, "Rebuilding log");
       re_ctx->log.rebuildLog();
     }
 
@@ -243,9 +241,8 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
         if (has_next) {
           ParsedSlot pslot(iter.location());
 
-          SPDLOG_LOGGER_TRACE(logger, "Accepted proposal: {}, FUO: {}",
-                              pslot.acceptedProposal(),
-                              pslot.firstUndecidedOffset());
+          LOGGER_TRACE(logger, "Accepted proposal: {}, FUO: {}",
+                       pslot.acceptedProposal(), pslot.firstUndecidedOffset());
           // auto [buf, len] = pslot.payload();
 
           // Now that I got something, I will use the commit iterator
@@ -259,9 +256,9 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
           }
         }
       } else {
-        SPDLOG_LOGGER_TRACE(logger,
-                            "Error in fast-path: occurred when writing the new "
-                            "value to a majority");
+        LOGGER_TRACE(logger,
+                     "Error in fast-path: occurred when writing the new "
+                     "value to a majority");
         auto err = majW->fastWriteError();
         majW->recoverFromError(err);
         return ret_error(ProposeError::FastPath, true);
@@ -275,9 +272,9 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
             MaybeError::CatchProposalRetryError) {
           catchup_proposal_err = catchup->catchProposal(leader);
         } else {
-          SPDLOG_LOGGER_TRACE(
-              logger, "Error in slow-path: occurred when catching-up ({})",
-              MaybeError::type_str(catchup_proposal_err->type()));
+          LOGGER_TRACE(logger,
+                       "Error in slow-path: occurred when catching-up ({})",
+                       MaybeError::type_str(catchup_proposal_err->type()));
           catchup->recoverFromError(catchup_proposal_err);
           encountered_error = true;
           break;
@@ -287,12 +284,12 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
       if (encountered_error) {
         return ret_error(ProposeError::SlowPathCatchProposal, true);
       }
-      SPDLOG_LOGGER_TRACE(logger, "Passed catchup.catchProposal()");
+      LOGGER_TRACE(logger, "Passed catchup.catchProposal()");
 
       auto catchup_update_proposal_err =
           catchup->updateWithCurrentProposal(leader);
       if (!catchup_update_proposal_err->ok()) {
-        SPDLOG_LOGGER_TRACE(
+        LOGGER_TRACE(
             logger,
             "Error in slow-path: occurred when updating the proposal ({})",
             MaybeError::type_str(catchup_update_proposal_err->type()));
@@ -303,19 +300,18 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
       if (encountered_error) {
         return ret_error(ProposeError::SlowPathUpdateProposal, true);
       }
-      SPDLOG_LOGGER_TRACE(logger, "Passed catchup.updateWithCurrentProposal()");
+      LOGGER_TRACE(logger, "Passed catchup.updateWithCurrentProposal()");
 
       proposal_nr = catchup->proposal();
-      SPDLOG_LOGGER_TRACE(logger, "Attempt writes with proposal numer = {}",
-                          proposal_nr);
+      LOGGER_TRACE(logger, "Attempt writes with proposal numer = {}",
+                   proposal_nr);
 
       // Trying to get the freshest value from the remote logs on the same
       // IndexedIterator index
       auto local_fuo = re_ctx->log.headerFirstUndecidedOffset();
       auto local_fuo_entry = re_ctx->log.headerPtr() + local_fuo;
 
-      SPDLOG_LOGGER_TRACE(logger, "My local first undecided offset = {}",
-                          local_fuo);
+      LOGGER_TRACE(logger, "My local first undecided offset = {}", local_fuo);
 
       // Find the freshest among the remote responses
       uint8_t* freshest = nullptr;
@@ -330,23 +326,23 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
           freshest = local_fuo_entry;
           max_accepted_proposal = local_pslot.acceptedProposal();
 
-          SPDLOG_LOGGER_TRACE(logger, "Accepted proposal: {}, FUO: {}",
-                              local_pslot.acceptedProposal(),
-                              local_pslot.firstUndecidedOffset());
+          LOGGER_TRACE(logger, "Accepted proposal: {}, FUO: {}",
+                       local_pslot.acceptedProposal(),
+                       local_pslot.firstUndecidedOffset());
           // auto [buf, len] = local_pslot.payload();
         }
 
         for (auto pid : successes) {
           if (pid < 0) {
-            SPDLOG_LOGGER_TRACE(logger, "Nothing to read from {}", -pid);
+            LOGGER_TRACE(logger, "Nothing to read from {}", -pid);
           } else {
-            SPDLOG_LOGGER_TRACE(logger, "Something to read from {}", pid);
+            LOGGER_TRACE(logger, "Something to read from {}", pid);
             auto store_addr = scratchpad->readLogEntrySlots()[pid];
             ParsedSlot pslot(store_addr);
 
-            SPDLOG_LOGGER_TRACE(logger, "Accepted proposal: {}, FUO: {}",
-                                pslot.acceptedProposal(),
-                                pslot.firstUndecidedOffset());
+            LOGGER_TRACE(logger, "Accepted proposal: {}, FUO: {}",
+                         pslot.acceptedProposal(),
+                         pslot.firstUndecidedOffset());
             // auto [buf, len] = pslot.payload();
 
             if (max_accepted_proposal < pslot.acceptedProposal()) {
@@ -356,7 +352,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
           }
         }
       } else {
-        SPDLOG_LOGGER_TRACE(
+        LOGGER_TRACE(
             logger,
             "Error in slow-path: occured when reading the remote slots ({})",
             resp->type_str(resp->type()));
@@ -365,20 +361,19 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
         return ret_error(ProposeError::SlowPathReadRemoteLogs, true);
       }
 
-      SPDLOG_LOGGER_TRACE(logger, "Got the freshest value");
+      LOGGER_TRACE(logger, "Got the freshest value");
 
       if (freshest != nullptr) {
-        SPDLOG_LOGGER_TRACE(logger,
-                            "Proposing the freshest value in the slow-path");
+        LOGGER_TRACE(logger, "Proposing the freshest value in the slow-path");
 
         auto size = ParsedSlot::copy(local_fuo_entry, freshest);
         // TODO (Check that): These lines are necessary
         ParsedSlot fresh_pslot(local_fuo_entry);
         fresh_pslot.setAcceptedProposal(proposal_nr);
 
-        SPDLOG_LOGGER_TRACE(logger, "Accepted proposal: {}, FUO: {}",
-                            fresh_pslot.acceptedProposal(),
-                            fresh_pslot.firstUndecidedOffset());
+        LOGGER_TRACE(logger, "Accepted proposal: {}, FUO: {}",
+                     fresh_pslot.acceptedProposal(),
+                     fresh_pslot.firstUndecidedOffset());
         // auto [buf, len] = fresh_pslot.payload();
 
         std::transform(to_remote_memory.begin(), to_remote_memory.end(),
@@ -396,9 +391,9 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
           if (has_next) {
             ParsedSlot pslot(iter.location());
 
-            SPDLOG_LOGGER_TRACE(logger, "Accepted proposal: {}, FUO: {}",
-                                pslot.acceptedProposal(),
-                                pslot.firstUndecidedOffset());
+            LOGGER_TRACE(logger, "Accepted proposal: {}, FUO: {}",
+                         pslot.acceptedProposal(),
+                         pslot.firstUndecidedOffset());
             // auto [buf, len] = pslot.payload();
 
             // Now that I got something, I will use the commit iterator
@@ -415,7 +410,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
 
       } else {
         fast_path = true;
-        SPDLOG_LOGGER_TRACE(logger, "Proposing the new value in the slow-path");
+        LOGGER_TRACE(logger, "Proposing the new value in the slow-path");
         Slot slot(re_ctx->log);
 
         // TODO: Are these values correct?
@@ -439,9 +434,9 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
           if (has_next) {
             ParsedSlot pslot(iter.location());
 
-            SPDLOG_LOGGER_TRACE(logger, "Accepted proposal: {}, FUO: {}",
-                                pslot.acceptedProposal(),
-                                pslot.firstUndecidedOffset());
+            LOGGER_TRACE(logger, "Accepted proposal: {}, FUO: {}",
+                         pslot.acceptedProposal(),
+                         pslot.firstUndecidedOffset());
             // auto [buf, len] = pslot.payload();
 
             // Now that I got something, I will use the commit iterator
@@ -458,8 +453,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
       }
     }
   } else {
-    SPDLOG_LOGGER_TRACE(logger,
-                        "Reject proposal request because I am a follower");
+    LOGGER_TRACE(logger, "Reject proposal request because I am a follower");
     became_leader = true;
     auto& leader = leader_election->leaderSignal();
     potential_leader = leader.load().requester;

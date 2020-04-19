@@ -158,6 +158,6 @@ class RdmaConsensus {
   int potential_leader = -1;
 
   std::atomic<bool> ask_reset;
-  dory::logger logger;
+  LOGGER_DECL(logger);
 };
 }  // namespace dory
