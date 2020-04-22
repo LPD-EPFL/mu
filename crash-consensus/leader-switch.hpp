@@ -16,6 +16,7 @@
 #include "follower.hpp"
 
 #include "timers.h"
+#include <x86intrin.h> /* for clflush */
 
 #include "contexted-poller.hpp"
 
@@ -39,7 +40,7 @@ class LeaderHeartbeat {
     static constexpr int fail_retry_interval = 1024;
     static constexpr int failed_attempt_limit = 6;
     static constexpr int outstanding_multiplier = 4;
-    static constexpr int history_length = 10;
+    static constexpr int history_length = 15;
 
  public:
   LeaderHeartbeat() {}
@@ -49,7 +50,6 @@ class LeaderHeartbeat {
 
   void startPoller() {
     read_seq = 0;
-    outstanding = 0;
 
     rcs = &(ctx->cc.ce.connections());
 
@@ -69,37 +69,42 @@ class LeaderHeartbeat {
     ctx->poller.endRegistrations(3);
 
     heartbeat_poller = ctx->poller.getContext(quorum::LeaderHeartbeat);
+
+    post_id = 0;
+    post_ids.resize(max_id + 1);
+    for (auto &id : post_ids) {
+      id = post_id;
+    }
   }
 
   void scanHeartbeats() {
     // Update my heartbeat
-    *counter += 1;
+    *counter += 1; _mm_clflush((const void*)counter); asm volatile ("mfence" ::: "memory");
 
+    bool did_work = false;
     auto &rcs_ = *rcs;
     for (auto& [pid, rc]: rcs_) {
-      // status[pid].loop_modulo = (status[pid].loop_modulo + 1) % fail_retry_interval;
-
-      // if (status[pid].failed_attempts > failed_attempt_limit) {
-      //   // If it has zero updates, only schedule during the module operation
-      //   if (status[pid].loop_modulo != 1) {
-      //     continue;
-      //   }
-      // }
+      *counter += 1; _mm_clflush((const void*)counter); asm volatile ("mfence" ::: "memory");
 
       if (outstanding_pids.find(pid) != outstanding_pids.end()) {
         continue;
       }
 
+      did_work = true;
       outstanding_pids.insert(pid);
-      // std::cout << "Posting " << pid << std::endl;
+      post_ids[pid] = post_id;
+
+      std::cout << "Posting PID: " << pid << ", PostID: " << post_id << std::endl;
 
       auto post_ret = rc.postSendSingle(ReliableConnection::RdmaRead, quorum::pack(quorum::LeaderHeartbeat, pid, read_seq), slots[pid], sizeof(uint64_t), rc.remoteBuf() + offset);
 
       if (!post_ret) {
         std::cout << "Post returned " << post_ret << std::endl;
-      } else {
-        outstanding += 1;
       }
+    }
+
+    if (did_work) {
+      post_id += 1;
     }
 
     read_seq += 1;
@@ -113,53 +118,48 @@ class LeaderHeartbeat {
     if (heartbeat_poller(ctx->cc.cq, entries)) {
       // std::cout << "Polled " << entries.size() << " entries" << std::endl;
 
-      outstanding -= entries.size();
-
       for(auto const& entry: entries) {
+        *counter += 1; _mm_clflush((const void*)counter); asm volatile ("mfence" ::: "memory");
         auto [k, pid, seq] = quorum::unpackAll<uint64_t, uint64_t>(entry.wr_id);
         IGNORE(k);
         IGNORE(seq);
 
         outstanding_pids.erase(pid);
-        volatile uint64_t *val = reinterpret_cast<uint64_t*>(slots[pid]);
-        // std::cout << "Polling " << pid << ", value: " << *val << std::endl;
+        auto proc_post_id = post_ids[pid];
 
-        if (status[pid].value < *val) {
-          status[pid].consecutive_updates = std::min(status[pid].consecutive_updates + 2, history_length);
-          status[pid].failed_attempts = 0;
-          // status[pid].freshly_updated = true;
+        volatile uint64_t *val = reinterpret_cast<uint64_t*>(slots[pid]);
+        std::cout << "Polling PID: " << pid << ", PostID: " << proc_post_id << ", Value: " << *val << std::endl;
+
+        if (status[pid].value == *val) {
+          // status[pid].same_value += 1;
+          std::cout << "Same value" << std::endl;
+
+          // if (status[pid].same_value == )
+          status[pid].consecutive_updates = std::max(status[pid].consecutive_updates - 1, 0);
+        } else {
+          if (post_id < proc_post_id + 3 ) {
+            status[pid].consecutive_updates = std::min(status[pid].consecutive_updates + 5, history_length);
+          }
         }
 
         status[pid].value = *val;
         // std::cout << "Received (pid, seq) = (" << pid << ", " << seq << "), value = " << *val << std::endl;
       }
 
-      if (entries.size() > 0) {
-        volatile uint64_t *val = reinterpret_cast<uint64_t*>(ctx->scratchpad.leaderHeartbeatSlot());
+      // Penalize the outstanding that are way behind
+      for (auto pid : outstanding_pids) {
+        *counter += 1; _mm_clflush((const void*)counter); asm volatile ("mfence" ::: "memory");
+        auto proc_post_id = post_ids[pid];
 
-        int my_id = ctx->cc.my_id;
-        if (status[my_id].value < *val) {
-          status[my_id].consecutive_updates = std::min(status[my_id].consecutive_updates + 2, history_length);
-          status[my_id].failed_attempts = 0;
-        }
-
-        status[my_id].value = *val;
-
-        // Reduce everything by one. The slow processes with eventually go to zero.
-        for (auto& pid: ids) {
-          // auto freshly_updated = status[pid].freshly_updated;
-          // status[pid].freshly_updated = false;
-
-          status[pid].consecutive_updates = std::max(status[pid].consecutive_updates - 1, 0);
-          if (status[pid].consecutive_updates == 0) {
-            status[pid].failed_attempts += 1;
-          }
+        if (post_id > proc_post_id + 3 ) {
+          std::cout << "Penalizing " << pid << std::endl;
+          status[pid].consecutive_updates = std::max(status[pid].consecutive_updates - 2, 0);
         }
       }
     }
-    // } while (outstanding > outstanding_multiplier * max_id);
 
     for (auto& pid: ids) {
+      *counter += 1; _mm_clflush((const void*)counter); asm volatile ("mfence" ::: "memory");
       std::cout << "PID:" << pid << ", score: " << status[pid].consecutive_updates << std::endl;
     }
     std::cout << std::endl;
@@ -219,8 +219,11 @@ class LeaderHeartbeat {
   std::map<int, ReliableConnection> *rcs;
 
   uint64_t read_seq;
-  int outstanding;
+
+  uint64_t post_id;
+  std::vector<uint64_t> post_ids;
   std::set<int> outstanding_pids;
+
 
   PollingContext heartbeat_poller;
   std::vector<ReadingStatus> status;
@@ -724,7 +727,14 @@ class LeaderElection {
       leader_heartbeat.startPoller();
       for (unsigned long long i = 0;; i = (i + 1) & iterations_ftr_check) {
         leader_heartbeat.scanHeartbeats();
-        std::this_thread::sleep_for(std::chrono::microseconds(10));
+
+        // std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        // std::this_thread::sleep_for(std::chrono::microseconds(10));
+
+        // if (i % 5 == 0) {
+        //   std::this_thread::sleep_for(std::chrono::seconds(10));
+        // }
 
         if (i == 0) {
           if (ftr.wait_for(std::chrono::seconds(0)) !=
