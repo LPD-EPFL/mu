@@ -56,7 +56,7 @@ class ControlBlock {
   int port() const;
   int lid() const;
 
-  bool pollCqIsOK(deleted_unique_ptr<struct ibv_cq> &cq,
+  static bool pollCqIsOK(deleted_unique_ptr<struct ibv_cq> &cq,
                   std::vector<struct ibv_wc> &entries);
 
  private:

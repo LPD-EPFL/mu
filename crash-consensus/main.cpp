@@ -77,6 +77,7 @@ int main(int argc, char* argv[]) {
       std::vector<TIMESTAMP_T> timestamps(times);
 
       for (uint64_t i = 0; i < times; i++) {
+        break;
         GET_TIMESTAMP(timestamps[i]);
         // Encode process doing the proposal
         uint64_t encoded_i = i | (uint64_t(id) << 60);

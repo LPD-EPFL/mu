@@ -17,59 +17,158 @@
 
 #include "timers.h"
 
+#include "contexted-poller.hpp"
+
 namespace dory {
 struct LeaderContext {
   LeaderContext(ConnectionContext &cc, ScratchpadMemory &scratchpad)
-      : cc{cc}, scratchpad{scratchpad} {}
+      : cc{cc}, scratchpad{scratchpad}, poller{&cc} {
+
+  }
   ConnectionContext &cc;
   ScratchpadMemory &scratchpad;
+  ContextedPoller poller;
 };
 }  // namespace dory
 
 namespace dory {
 class LeaderHeartbeat {
+ private:
+    static constexpr double gapFactor = 2;
+    static constexpr std::chrono::nanoseconds heartbeatRefreshRate = std::chrono::nanoseconds(500);
+    static constexpr int fail_retry_interval = 1024;
+    static constexpr int failed_attempt_limit = 6;
+    static constexpr int outstanding_multiplier = 4;
+    static constexpr int history_length = 10;
+
  public:
-  LeaderHeartbeat() : LeaderHeartbeat(nullptr) {}
-  LeaderHeartbeat(LeaderContext *ctx) : ctx{ctx}, want_leader{false} {}
+  LeaderHeartbeat() {}
+  LeaderHeartbeat(LeaderContext *ctx) : ctx{ctx}, want_leader{false} {
+    // Careful, there is a move assignment happening!
+  }
+
+  void startPoller() {
+    read_seq = 0;
+    outstanding = 0;
+
+    rcs = &(ctx->cc.ce.connections());
+
+    offset = ctx->scratchpad.leaderHeartbeatSlotOffset();
+    counter = reinterpret_cast<uint64_t*>(ctx->scratchpad.leaderHeartbeatSlot());
+    *counter = 0;
+    slots = ctx->scratchpad.readLeaderHeartbeatSlots();
+
+    ids = ctx->cc.remote_ids;
+    ids.push_back(ctx->cc.my_id);
+    std::sort(ids.begin(), ids.end());
+
+    max_id = *(std::minmax_element(ids.begin(), ids.end()).second);
+    status = std::vector<ReadingStatus>(max_id + 1);
+
+    ctx->poller.registerContext(quorum::LeaderHeartbeat);
+    ctx->poller.endRegistrations(3);
+
+    heartbeat_poller = ctx->poller.getContext(quorum::LeaderHeartbeat);
+  }
 
   void scanHeartbeats() {
-#if 0
-    std::mt19937_64 eng{std::random_device{}()};  // or seed however you want
-    std::uniform_int_distribution<> dist{10000, 20000};
-    // std::this_thread::sleep_for(std::chrono::milliseconds{dist(eng)});
-    // std::cout << "Changing leader" << std::endl;
+    // Update my heartbeat
+    *counter += 1;
 
-    if (ctx->cc.my_id == 3) {
-      want_leader.store(true);
-      std::this_thread::sleep_for(std::chrono::milliseconds{10});
+    auto &rcs_ = *rcs;
+    for (auto& [pid, rc]: rcs_) {
+      // status[pid].loop_modulo = (status[pid].loop_modulo + 1) % fail_retry_interval;
+
+      // if (status[pid].failed_attempts > failed_attempt_limit) {
+      //   // If it has zero updates, only schedule during the module operation
+      //   if (status[pid].loop_modulo != 1) {
+      //     continue;
+      //   }
+      // }
+
+      if (outstanding_pids.find(pid) != outstanding_pids.end()) {
+        continue;
+      }
+
+      outstanding_pids.insert(pid);
+      // std::cout << "Posting " << pid << std::endl;
+
+      auto post_ret = rc.postSendSingle(ReliableConnection::RdmaRead, quorum::pack(quorum::LeaderHeartbeat, pid, read_seq), slots[pid], sizeof(uint64_t), rc.remoteBuf() + offset);
+
+      if (!post_ret) {
+        std::cout << "Post returned " << post_ret << std::endl;
+      } else {
+        outstanding += 1;
+      }
     }
-    // else if(ctx->cc.my_id == 1) {
-    //   std::this_thread::sleep_for(std::chrono::seconds{40});
-    //   want_leader.store(true);
-    // }
+
+    read_seq += 1;
+
+    // If the number of outstanding requests goes out of hand, go slower
+    // do {
+    entries.resize(outstanding_pids.size());
+    // std::vector<struct ibv_wc> entries(outstanding);
+    // std::cout << "I have " << outstanding << " requests to be polled, max_id " << max_id << std::endl;
+
+    if (heartbeat_poller(ctx->cc.cq, entries)) {
+      // std::cout << "Polled " << entries.size() << " entries" << std::endl;
+
+      outstanding -= entries.size();
+
+      for(auto const& entry: entries) {
+        auto [k, pid, seq] = quorum::unpackAll<uint64_t, uint64_t>(entry.wr_id);
+        IGNORE(k);
+        IGNORE(seq);
+
+        outstanding_pids.erase(pid);
+        volatile uint64_t *val = reinterpret_cast<uint64_t*>(slots[pid]);
+        // std::cout << "Polling " << pid << ", value: " << *val << std::endl;
+
+        if (status[pid].value < *val) {
+          status[pid].consecutive_updates = std::min(status[pid].consecutive_updates + 2, history_length);
+          status[pid].failed_attempts = 0;
+          // status[pid].freshly_updated = true;
+        }
+
+        status[pid].value = *val;
+        // std::cout << "Received (pid, seq) = (" << pid << ", " << seq << "), value = " << *val << std::endl;
+      }
+
+      if (entries.size() > 0) {
+        volatile uint64_t *val = reinterpret_cast<uint64_t*>(ctx->scratchpad.leaderHeartbeatSlot());
+
+        int my_id = ctx->cc.my_id;
+        if (status[my_id].value < *val) {
+          status[my_id].consecutive_updates = std::min(status[my_id].consecutive_updates + 2, history_length);
+          status[my_id].failed_attempts = 0;
+        }
+
+        status[my_id].value = *val;
+
+        // Reduce everything by one. The slow processes with eventually go to zero.
+        for (auto& pid: ids) {
+          // auto freshly_updated = status[pid].freshly_updated;
+          // status[pid].freshly_updated = false;
+
+          status[pid].consecutive_updates = std::max(status[pid].consecutive_updates - 1, 0);
+          if (status[pid].consecutive_updates == 0) {
+            status[pid].failed_attempts += 1;
+          }
+        }
+      }
+    }
+    // } while (outstanding > outstanding_multiplier * max_id);
+
+    for (auto& pid: ids) {
+      std::cout << "PID:" << pid << ", score: " << status[pid].consecutive_updates << std::endl;
+    }
+    std::cout << std::endl;
+
+    if (leader_pid() == ctx->cc.my_id) {
+      std::cout << "I want leader" << std::endl;
+      // want_leader.store(true);
+    }
   }
-
-#else
-    // std::mt19937_64 eng{std::random_device{}()};  // or seed however you want
-    // std::uniform_int_distribution<> dist{100, 200};
-    // std::this_thread::sleep_for(std::chrono::milliseconds{dist(eng)});
-    // // std::cout << "Changing leader" << std::endl;
-
-    // if (ctx->cc.my_id == 1 || ctx->cc.my_id == 3) {
-    //   want_leader.store(true);
-    //   std::this_thread::sleep_for(std::chrono::milliseconds{dist(eng)});
-    // }
-
-    if (ctx->cc.my_id == 3) {
-      std::this_thread::sleep_for(std::chrono::milliseconds{200});
-      want_leader.store(true);
-    }
-    else if(ctx->cc.my_id == 1) {
-      std::this_thread::sleep_for(std::chrono::milliseconds{300});
-      want_leader.store(true);
-    }
-  }
-#endif
 
   std::atomic<bool> &wantLeaderSignal() { return want_leader; }
 
@@ -81,12 +180,59 @@ class LeaderHeartbeat {
 
     ctx = o.ctx;
     o.ctx = nullptr;
+    want_leader.store(false);
     return *this;
   }
 
  private:
+  struct ReadingStatus {
+    ReadingStatus() :
+      value{ 0 }, consecutive_updates{ 0 }, failed_attempts{ 0 }, loop_modulo{ 0 }, freshly_updated{false}
+    {}
+
+    int outstanding;
+    uint64_t value;
+    int consecutive_updates;
+    int failed_attempts;
+    int loop_modulo;
+    bool freshly_updated;
+  };
+
+ private:
+
+  int leader_pid() {
+    int leader_id = -1;
+
+    for (auto& pid : ids) {
+      // std::cout << pid << " " << status[pid].consecutive_updates << std::endl;
+      if (status[pid].consecutive_updates > 2) {
+        leader_id = pid;
+        break;
+      }
+    }
+
+    return leader_id;
+  }
+
   LeaderContext *ctx;
   std::atomic<bool> want_leader;
+  std::map<int, ReliableConnection> *rcs;
+
+  uint64_t read_seq;
+  int outstanding;
+  std::set<int> outstanding_pids;
+
+  PollingContext heartbeat_poller;
+  std::vector<ReadingStatus> status;
+
+  ptrdiff_t offset;
+  std::vector<uint8_t *> slots;
+  std::vector<struct ibv_wc> entries;
+
+  std::vector<int> ids;
+  int max_id;
+
+  volatile uint64_t *counter;
 };
 }  // namespace dory
 
@@ -95,7 +241,8 @@ class LeaderPermissionAsker {
  public:
   LeaderPermissionAsker() {}
   LeaderPermissionAsker(LeaderContext *ctx)
-      : c_ctx{&ctx->cc},
+      : ctx{ctx},
+        c_ctx{&ctx->cc},
         scratchpad{&ctx->scratchpad},
         req_nr(c_ctx->my_id),
         grant_req_id{1} {
@@ -114,6 +261,15 @@ class LeaderPermissionAsker {
     remote_mem_locations.resize(Identifiers::maxID(c_ctx->remote_ids) + 1);
     std::fill(remote_mem_locations.begin(), remote_mem_locations.end(),
               remote_slot_offset);
+  }
+
+  void startPoller() {
+    ctx->poller.registerContext(quorum::LeaderReqWr);
+    ctx->poller.registerContext(quorum::LeaderGrantWr);
+    ctx->poller.endRegistrations(3);
+
+    ask_perm_poller = ctx->poller.getContext(quorum::LeaderReqWr);
+    give_perm_poller = ctx->poller.getContext(quorum::LeaderGrantWr);
   }
 
   // TODO: Refactor
@@ -142,7 +298,8 @@ class LeaderPermissionAsker {
 
     while (true) {
       entries.resize(expected_nr);
-      if (c_ctx->cb.pollCqIsOK(c_ctx->cq, entries)) {
+      if (give_perm_poller(c_ctx->cq, entries)) {
+      // if (c_ctx->cb.pollCqIsOK(c_ctx->cq, entries)) {
         for (auto const &entry : entries) {
           auto [reply_k, reply_pid, reply_seq] =
               quorum::unpackAll<uint64_t, uint64_t>(entry.wr_id);
@@ -225,7 +382,7 @@ class LeaderPermissionAsker {
     }
 
     // Wait for the request to reach all followers
-    auto err = leaderWriter.write(temp, sizeof(req_nr), remote_mem_locations);
+    auto err = leaderWriter.write(temp, sizeof(req_nr), remote_mem_locations, ask_perm_poller);
 
     if (!err->ok()) {
       return err;
@@ -239,6 +396,7 @@ class LeaderPermissionAsker {
   inline uint64_t requestNr() const { return req_nr; }
 
  private:
+  LeaderContext *ctx;
   ConnectionContext *c_ctx;
   ScratchpadMemory *scratchpad;
   uint64_t req_nr;
@@ -252,6 +410,8 @@ class LeaderPermissionAsker {
 
   int modulo;
   std::vector<struct ibv_wc> entries;
+  PollingContext ask_perm_poller;
+  PollingContext give_perm_poller;
 };
 }  // namespace dory
 
@@ -268,6 +428,10 @@ class LeaderSwitcher {
         sz{read_slots.size()},
         permission_asker{ctx} {
     prepareScanner();
+  }
+
+  void startPoller() {
+    permission_asker.startPoller();
   }
 
   void scanPermissions() {
@@ -557,24 +721,10 @@ class LeaderElection {
     leader_heartbeat = LeaderHeartbeat(&ctx);
     std::future<void> ftr = hb_exit_signal.get_future();
     heartbeat_thd = std::thread([this, ftr = std::move(ftr)]() {
-      // std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-      // bool stopped = false;
-
+      leader_heartbeat.startPoller();
       for (unsigned long long i = 0;; i = (i + 1) & iterations_ftr_check) {
-
-        // if (ctx.cc.my_id == 1) {
-        //   std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-        //   if (std::chrono::duration_cast<std::chrono::seconds>(end - begin).count() < 80) {
-        //     leader_heartbeat.scanHeartbeats();
-        //   } else {
-        //     if (!stopped) {
-        //       stopped = true;
-        //       std::cout << "Stopped requesting leadership" << std::endl;
-        //     }
-        //   }
-        // } else {
-          leader_heartbeat.scanHeartbeats();
-        // }
+        leader_heartbeat.scanHeartbeats();
+        std::this_thread::sleep_for(std::chrono::microseconds(10));
 
         if (i == 0) {
           if (ftr.wait_for(std::chrono::seconds(0)) !=
@@ -611,6 +761,7 @@ class LeaderElection {
     leader_switcher = LeaderSwitcher(&ctx, &leader_heartbeat);
     std::future<void> ftr = switcher_exit_signal.get_future();
     switcher_thd = std::thread([this, ftr = std::move(ftr)]() {
+      leader_switcher.startPoller();
       for (unsigned long long i = 0;; i = (i + 1) & iterations_ftr_check) {
         leader_switcher.scanPermissions();
         if (i == 0) {

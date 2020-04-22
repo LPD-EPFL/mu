@@ -31,6 +31,7 @@ enum Kind : uint64_t {
 
   LeaderReqWr = 6,    // Used to ask for permissions from followers
   LeaderGrantWr = 7,  // Used from followers when they grant you permissions
+  LeaderHeartbeat = 8,
   MAX = 15
 };
 
@@ -43,7 +44,8 @@ enum Kind : uint64_t {
       {Kind::EntryRd, "Kind::EntryRd"},
       {Kind::EntryWr, "Kind::EntryWr"},
       {Kind::LeaderReqWr, "Kind::LeaderReqWr"},
-      {Kind::LeaderGrantWr, "Kind::LeaderGrantWr"}};
+      {Kind::LeaderGrantWr, "Kind::LeaderGrantWr"},
+      {Kind::LeaderHeartbeat, "Kind::LeaderHeartbeat"}};
   auto it = MyEnumStrings.find(k);
   return it == MyEnumStrings.end() ? "Out of range" : it->second;
 }

@@ -97,6 +97,8 @@ void ScratchpadMemory::setup() {
   setupWriteSlot();
   setupLeaderRequestSlot();
   setupLeaderResponseSlot();
+  setupLeaderHeartbeatSlot();
+  setupReadLeaderHeartbeatSlots();
 }
 
 size_t ScratchpadMemory::requiredSize() const { return next - mem.ptr; }
@@ -153,6 +155,20 @@ ptrdiff_t ScratchpadMemory::leaderResponseSlotOffset() {
   return leader_resp_slot_offset;
 }
 
+uint8_t* ScratchpadMemory::leaderHeartbeatSlot() { return leader_heartbeat_slot; }
+
+ptrdiff_t ScratchpadMemory::leaderHeartbeatSlotOffset() {
+  return leader_heartbeat_slot_offset;
+}
+
+std::vector<uint8_t*>& ScratchpadMemory::readLeaderHeartbeatSlots() {
+  return read_leader_heartbeat_slots;
+}
+
+std::vector<ptrdiff_t>& ScratchpadMemory::readLeaderHeartbeatSlotsOffsets() {
+  return read_leader_heartbeat_slots_offsets;
+}
+
 void ScratchpadMemory::setupReadProposalNrSlots() {
   setupSlots(read_proposal_nr_slots, read_proposal_nr_slots_offsets);
 }
@@ -179,6 +195,14 @@ void ScratchpadMemory::setupLeaderRequestSlot() {
 
 void ScratchpadMemory::setupLeaderResponseSlot() {
   setupSlot(leader_resp_slot, leader_resp_slot_offset);
+}
+
+void ScratchpadMemory::setupLeaderHeartbeatSlot() {
+  setupSlot(leader_heartbeat_slot, leader_heartbeat_slot_offset);
+}
+
+void ScratchpadMemory::setupReadLeaderHeartbeatSlots() {
+  setupSlots(read_leader_heartbeat_slots, read_leader_heartbeat_slots_offsets);
 }
 
 void ScratchpadMemory::setupSlots(std::vector<uint8_t*>& slots,

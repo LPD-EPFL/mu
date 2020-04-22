@@ -87,16 +87,30 @@ class FixedSizeMajorityOperation {
                                leader);
   }
 
+  template <typename Poller>
+  std::unique_ptr<MaybeError> read(
+      std::vector<void *> &to_local_memories, size_t size,
+      std::vector<uintptr_t> &from_remote_memories, Poller p) {
+    return op_without_leader(to_local_memories, size, from_remote_memories, p);
+  }
+
   std::unique_ptr<MaybeError> read(
       std::vector<void *> &to_local_memories, size_t size,
       std::vector<uintptr_t> &from_remote_memories) {
-    return op_without_leader(to_local_memories, size, from_remote_memories);
+    return op_without_leader(to_local_memories, size, from_remote_memories, ctx->cb.pollCqIsOK);
+  }
+
+  template <typename Poller>
+  std::unique_ptr<MaybeError> write(
+      void *from_local_memory, size_t size,
+      std::vector<uintptr_t> &to_remote_memories, Poller p) {
+    return op_without_leader(from_local_memory, size, to_remote_memories, p);
   }
 
   std::unique_ptr<MaybeError> write(
       void *from_local_memory, size_t size,
       std::vector<uintptr_t> &to_remote_memories) {
-    return op_without_leader(from_local_memory, size, to_remote_memories);
+    return op_without_leader(from_local_memory, size, to_remote_memories, ctx->cb.pollCqIsOK);
   }
 
   bool fastWrite(void *from_local_memory, size_t size,
@@ -215,10 +229,10 @@ class FixedSizeMajorityOperation {
     return std::make_unique<NoError>();
   }
 
-  template <class T>
+  template <class T, class Poller>
   std::unique_ptr<MaybeError> op_without_leader(
       T const &local_memory, size_t size,
-      std::vector<uintptr_t> &remote_memory) {
+      std::vector<uintptr_t> &remote_memory, Poller poller) {
     successful_ops.clear();
 
     auto req_id = qw.reqID();
@@ -247,7 +261,7 @@ class FixedSizeMajorityOperation {
     int expected_nr = rcs.size();
     while (!qw.canContinueWith(next_req_id)) {
       entries.resize(expected_nr);
-      if (ctx->cb.pollCqIsOK(ctx->cq, entries)) {
+      if (poller(ctx->cq, entries)) {
         if (!qw.consume(entries, successful_ops)) {
           if (failed_majority.isUnrecoverable(entries)) {
             return std::make_unique<ErrorType>(req_id);

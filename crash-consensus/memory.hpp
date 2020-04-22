@@ -55,6 +55,8 @@ class ScratchpadMemory {
   uint8_t *writeSlot();
   uint8_t *leaderRequestSlot();
   uint8_t *leaderResponseSlot();
+  uint8_t *leaderHeartbeatSlot();
+  std::vector<uint8_t *> &readLeaderHeartbeatSlots();
 
   // Add more entries here
   std::vector<ptrdiff_t> &readProposalNrSlotsOffsets();
@@ -64,6 +66,8 @@ class ScratchpadMemory {
   ptrdiff_t writeSlotOffset();
   ptrdiff_t leaderRequestSlotOffset();
   ptrdiff_t leaderResponseSlotOffset();
+  ptrdiff_t leaderHeartbeatSlotOffset();
+  std::vector<ptrdiff_t> &readLeaderHeartbeatSlotsOffsets();
 
  private:
   ScratchpadMemory(std::vector<int> &ids, Memory const &mem);
@@ -77,6 +81,8 @@ class ScratchpadMemory {
   void setupWriteSlot();
   void setupLeaderRequestSlot();
   void setupLeaderResponseSlot();
+  void setupLeaderHeartbeatSlot();
+  void setupReadLeaderHeartbeatSlots();
 
   void setupSlots(std::vector<uint8_t *> &slots,
                   std::vector<ptrdiff_t> &offsets);
@@ -94,6 +100,8 @@ class ScratchpadMemory {
   uint8_t *write_slot;
   uint8_t *leader_req_slot;
   uint8_t *leader_resp_slot;
+  uint8_t *leader_heartbeat_slot;
+  std::vector<uint8_t *> read_leader_heartbeat_slots;
 
   // Add more entries here
   std::vector<ptrdiff_t> read_proposal_nr_slots_offsets;
@@ -103,6 +111,8 @@ class ScratchpadMemory {
   ptrdiff_t write_slot_offset;
   ptrdiff_t leader_req_slot_offset;
   ptrdiff_t leader_resp_slot_offset;
+  ptrdiff_t leader_heartbeat_slot_offset;
+  std::vector<ptrdiff_t> read_leader_heartbeat_slots_offsets;
 
   Memory mem;
   uint8_t *next;
