@@ -45,7 +45,6 @@ class LeaderHeartbeat {
     static constexpr std::chrono::nanoseconds heartbeatRefreshRate = std::chrono::nanoseconds(500);
     static constexpr int fail_retry_interval = 1024;
     static constexpr int failed_attempt_limit = 6;
-    static constexpr int outstanding_multiplier = 4;
     static constexpr int history_length = 15;
 
  public:
@@ -390,8 +389,10 @@ class LeaderPermissionAsker {
       *temp = req_nr;
     }
 
+    // std::cout << "AskForPermissions_Write" << std::endl;
     // Wait for the request to reach all followers
     auto err = leaderWriter.write(temp, sizeof(req_nr), remote_mem_locations, ask_perm_poller);
+    // std::cout << "AskForPermissions_WriteDone" << std::endl;
 
     if (!err->ok()) {
       return err;
@@ -470,6 +471,9 @@ class LeaderSwitcher {
     } else {
       // Check if my leader election declared me as leader
       if (want_leader->load()) {
+        // std::cout << "Want leader" << std::endl;
+        // want_leader->store(false);
+
         auto expected = leader.load();
         if (expected.unused()) {
           // std::cout << "I have consumed the previous leader request" <<
