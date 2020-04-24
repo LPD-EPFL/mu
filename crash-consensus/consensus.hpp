@@ -96,11 +96,13 @@ class RdmaConsensus {
   void spawn_follower();
   void run();
 
-  inline int ret_error(ProposeError error, bool ask_connection_reset = false) {
+  inline int ret_error(std::unique_lock<std::mutex> &lock, ProposeError error, bool ask_connection_reset = false) {
     became_leader = true;
 
     if (ask_connection_reset) {
       ask_reset.store(true);
+      lock.unlock();
+
       while (ask_reset.load()) {
         ;
       }

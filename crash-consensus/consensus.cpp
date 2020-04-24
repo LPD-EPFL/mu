@@ -211,7 +211,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
   if (!lock.try_lock()) {
     auto& leader = leader_election->leaderSignal();
     potential_leader = leader.load().requester;
-    return ret_error(ProposeError::MutexUnavailable);
+    return ret_error(lock, ProposeError::MutexUnavailable);
   }
 
   if (am_I_leader.load()) {  // Leader (slow and fast-path)
@@ -265,7 +265,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
                      "value to a majority");
         auto err = majW->fastWriteError();
         majW->recoverFromError(err);
-        return ret_error(ProposeError::FastPath, true);
+        return ret_error(lock, ProposeError::FastPath, true);
       }
     } else {  // Slow-path
       auto catchup_proposal_err = catchup->catchProposal(leader);
@@ -286,7 +286,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
       }
 
       if (encountered_error) {
-        return ret_error(ProposeError::SlowPathCatchProposal, true);
+        return ret_error(lock, ProposeError::SlowPathCatchProposal, true);
       }
       LOGGER_TRACE(logger, "Passed catchup.catchProposal()");
 
@@ -302,7 +302,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
       }
 
       if (encountered_error) {
-        return ret_error(ProposeError::SlowPathUpdateProposal, true);
+        return ret_error(lock, ProposeError::SlowPathUpdateProposal, true);
       }
       LOGGER_TRACE(logger, "Passed catchup.updateWithCurrentProposal()");
 
@@ -362,7 +362,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
             resp->type_str(resp->type()));
         lsr->recoverFromError(resp);
 
-        return ret_error(ProposeError::SlowPathReadRemoteLogs, true);
+        return ret_error(lock, ProposeError::SlowPathReadRemoteLogs, true);
       }
 
       LOGGER_TRACE(logger, "Got the freshest value");
@@ -387,7 +387,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
 
         if (!err->ok()) {
           majW->recoverFromError(err);
-          return ret_error(ProposeError::SlowPathWriteAdoptedValue, true);
+          return ret_error(lock, ProposeError::SlowPathWriteAdoptedValue, true);
         } else {
           re_ctx->log.updateHeaderFirstUndecidedOffset(
               LogConfig::round_up_powerof2(local_fuo + size));
@@ -430,7 +430,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
 
         if (!err->ok()) {
           majW->recoverFromError(err);
-          return ret_error(ProposeError::SlowPathWriteNewValue, true);
+          return ret_error(lock, ProposeError::SlowPathWriteNewValue, true);
         } else {
           re_ctx->log.updateHeaderFirstUndecidedOffset(
               LogConfig::round_up_powerof2(offset + size));
@@ -461,7 +461,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
     became_leader = true;
     auto& leader = leader_election->leaderSignal();
     potential_leader = leader.load().requester;
-    return ret_error(ProposeError::FollowerMode);
+    return ret_error(lock, ProposeError::FollowerMode);
   }
 
   return ret_no_error();
