@@ -48,7 +48,13 @@ class ConnectionExchanger {
   void wait_ready_all(MemoryStore& store, std::string const& prefix,
                       std::string const& reason);
 
-  std::map<int, dory::ReliableConnection>& connections() { return rcs; }
+  std::map<int, ReliableConnection>& connections() { return rcs; }
+
+  void addLoopback(std::string const& pd, std::string const& mr,
+                   std::string send_cq_name, std::string recv_cq_name);
+
+  void connectLoopback(ControlBlock::MemoryRights rights);
+  ReliableConnection& loopback() { return *(loopback_.get()); }
 
  private:
   std::pair<bool, int> valid_ids() const;
@@ -58,7 +64,8 @@ class ConnectionExchanger {
   std::vector<int> remote_ids;
   ControlBlock& cb;
   int max_id;
-  std::map<int, dory::ReliableConnection> rcs;
+  std::map<int, ReliableConnection> rcs;
+  std::unique_ptr<ReliableConnection> loopback_;
   LOGGER_DECL(logger);
 };
 }  // namespace dory

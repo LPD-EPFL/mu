@@ -8,10 +8,7 @@
 namespace dory {
 ConnectionExchanger::ConnectionExchanger(int my_id, std::vector<int> remote_ids,
                                          ControlBlock& cb)
-    : my_id{my_id},
-      remote_ids{remote_ids},
-      cb{cb},
-      LOGGER_INIT(logger, "CE") {
+    : my_id{my_id}, remote_ids{remote_ids}, cb{cb}, LOGGER_INIT(logger, "CE") {
   auto [valid, maximum_id] = valid_ids();
   if (!valid) {
     throw std::runtime_error(
@@ -23,8 +20,8 @@ ConnectionExchanger::ConnectionExchanger(int my_id, std::vector<int> remote_ids,
 
 void ConnectionExchanger::configure(int proc_id, std::string const& pd,
                                     std::string const& mr,
-                                    std::string send_cp_name,
-                                    std::string recv_cp_name) {
+                                    std::string send_cq_name,
+                                    std::string recv_cq_name) {
   rcs.insert(
       std::pair<int, ReliableConnection>(proc_id, ReliableConnection(cb)));
 
@@ -32,7 +29,7 @@ void ConnectionExchanger::configure(int proc_id, std::string const& pd,
 
   rc.bindToPD(pd);
   rc.bindToMR(mr);
-  rc.associateWithCQ(send_cp_name, recv_cp_name);
+  rc.associateWithCQ(send_cq_name, recv_cq_name);
 }
 
 void ConnectionExchanger::configure_all(std::string const& pd,
@@ -42,6 +39,26 @@ void ConnectionExchanger::configure_all(std::string const& pd,
   for (auto const& id : remote_ids) {
     configure(id, pd, mr, send_cq_name, recv_cq_name);
   }
+}
+
+void ConnectionExchanger::addLoopback(std::string const& pd,
+                                      std::string const& mr,
+                                      std::string send_cq_name,
+                                      std::string recv_cq_name) {
+  loopback_ = std::make_unique<ReliableConnection>(cb);
+  loopback_->bindToPD(pd);
+  loopback_->bindToMR(mr);
+  loopback_->associateWithCQ(send_cq_name, recv_cq_name);
+
+  LOGGER_INFO(logger, "Loopback connection was added");
+}
+
+void ConnectionExchanger::connectLoopback(ControlBlock::MemoryRights rights) {
+  auto infoForRemoteParty = loopback_->remoteInfo();
+  loopback_->init(rights);
+  loopback_->connect(infoForRemoteParty);
+
+  LOGGER_INFO(logger, "Loopback connection was established");
 }
 
 void ConnectionExchanger::announce(int proc_id, MemoryStore& store,
