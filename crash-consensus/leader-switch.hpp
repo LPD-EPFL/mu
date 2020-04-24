@@ -41,11 +41,8 @@ struct LeaderContext {
 namespace dory {
 class LeaderHeartbeat {
  private:
-    static constexpr double gapFactor = 2;
-    static constexpr std::chrono::nanoseconds heartbeatRefreshRate = std::chrono::nanoseconds(500);
-    static constexpr int fail_retry_interval = 1024;
-    static constexpr int failed_attempt_limit = 6;
-    static constexpr int history_length = 15;
+    // static constexpr std::chrono::nanoseconds heartbeatRefreshRate = std::chrono::nanoseconds(500);
+    static constexpr int history_length = 7;
 
  public:
   LeaderHeartbeat() {}
@@ -162,7 +159,7 @@ class LeaderHeartbeat {
           status[pid].consecutive_updates = std::max(status[pid].consecutive_updates - 1, 0);
         } else {
           if (post_id < proc_post_id + 3 ) {
-            status[pid].consecutive_updates = std::min(status[pid].consecutive_updates + 5, history_length);
+            status[pid].consecutive_updates = std::min(status[pid].consecutive_updates + 3, history_length);
           }
         }
 
@@ -199,7 +196,7 @@ class LeaderHeartbeat {
     if (leader_pid() == ctx->cc.my_id) {
       want_leader.store(true);
     } else {
-      std::this_thread::sleep_for(std::chrono::microseconds(10));
+      std::this_thread::sleep_for(std::chrono::microseconds(3));
       // std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
   }
@@ -239,7 +236,7 @@ class LeaderHeartbeat {
 
     for (auto& pid : ids) {
       // std::cout << pid << " " << status[pid].consecutive_updates << std::endl;
-      if (status[pid].consecutive_updates > 7) {
+      if (status[pid].consecutive_updates > 2) {
         leader_id = pid;
         break;
       }
@@ -811,7 +808,6 @@ class LeaderElection {
                               std::string(std::strerror(errno)));
             // }
           } else if (ret == 1) {
-            // command = tmp;
             command.store(tmp);
           }
         }
@@ -835,13 +831,7 @@ class LeaderElection {
 
         prev_command = current_command;
 
-        // std::this_thread::sleep_for(std::chrono::milliseconds(250));
-
-        std::this_thread::sleep_for(std::chrono::microseconds(5));
-
-        // if (i % 5 == 0) {
-        //   std::this_thread::sleep_for(std::chrono::seconds(10));
-        // }
+        std::this_thread::sleep_for(std::chrono::microseconds(1));
 
         if (i == 0) {
           if (ftr.wait_for(std::chrono::seconds(0)) !=
