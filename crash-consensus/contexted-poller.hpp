@@ -79,6 +79,8 @@ struct PollingContext : public GenericContext {
       }
     }
 
+    entries.erase(entries.begin() + index, entries.end());
+
     return true;
   }
 
