@@ -57,10 +57,13 @@ class LeaderHeartbeat {
     read_seq = 0;
 
     rcs = &(ctx->cc.ce.connections());
+    my_id = ctx->cc.my_id;
+    loopback = &(ctx->cc.ce.loopback());
 
     offset = ctx->scratchpad.leaderHeartbeatSlotOffset();
-    counter = reinterpret_cast<uint64_t*>(ctx->scratchpad.leaderHeartbeatSlot());
-    *counter = 0;
+    counter_from = reinterpret_cast<uint64_t*>(ctx->scratchpad.leaderHeartbeatSlot() + 64);
+    *counter_from = 0;
+
     slots = ctx->scratchpad.readLeaderHeartbeatSlots();
 
     ids = ctx->cc.remote_ids;
@@ -82,14 +85,27 @@ class LeaderHeartbeat {
     }
   }
 
+  void retract() {
+    want_leader.store(false);
+  }
+
   void scanHeartbeats() {
-    // Update my heartbeat
-    *counter += 1; _mm_clflush((const void*)counter); asm volatile ("mfence" ::: "memory");
+
+    if (outstanding_pids.find(my_id) == outstanding_pids.end()) {
+      // Update my heartbeat
+      *counter_from += 1;
+      auto post_ret = loopback->postSendSingle(ReliableConnection::RdmaWrite, quorum::pack(quorum::LeaderHeartbeat, my_id, 0), counter_from, sizeof(uint64_t), loopback->remoteBuf() + offset);
+
+      if (!post_ret) {
+        std::cout << "Post returned " << post_ret << std::endl;
+      }
+
+      outstanding_pids.insert(my_id);
+    }
 
     bool did_work = false;
     auto &rcs_ = *rcs;
     for (auto& [pid, rc]: rcs_) {
-      *counter += 1; _mm_clflush((const void*)counter); asm volatile ("mfence" ::: "memory");
 
       if (outstanding_pids.find(pid) != outstanding_pids.end()) {
         continue;
@@ -99,7 +115,7 @@ class LeaderHeartbeat {
       outstanding_pids.insert(pid);
       post_ids[pid] = post_id;
 
-      std::cout << "Posting PID: " << pid << ", PostID: " << post_id << std::endl;
+      // std::cout << "Posting PID: " << pid << ", PostID: " << post_id << std::endl;
 
       auto post_ret = rc.postSendSingle(ReliableConnection::RdmaRead, quorum::pack(quorum::LeaderHeartbeat, pid, read_seq), slots[pid], sizeof(uint64_t), rc.remoteBuf() + offset);
 
@@ -124,7 +140,6 @@ class LeaderHeartbeat {
       // std::cout << "Polled " << entries.size() << " entries" << std::endl;
 
       for(auto const& entry: entries) {
-        *counter += 1; _mm_clflush((const void*)counter); asm volatile ("mfence" ::: "memory");
         auto [k, pid, seq] = quorum::unpackAll<uint64_t, uint64_t>(entry.wr_id);
         IGNORE(k);
         IGNORE(seq);
@@ -133,11 +148,15 @@ class LeaderHeartbeat {
         auto proc_post_id = post_ids[pid];
 
         volatile uint64_t *val = reinterpret_cast<uint64_t*>(slots[pid]);
-        std::cout << "Polling PID: " << pid << ", PostID: " << proc_post_id << ", Value: " << *val << std::endl;
+        if (pid == unsigned(my_id)) {
+          val = reinterpret_cast<uint64_t*>(loopback->remoteBuf() + offset);
+        }
+
+        // std::cout << "Polling PID: " << pid << ", PostID: " << proc_post_id << ", Value: " << *val << std::endl;
 
         if (status[pid].value == *val) {
           // status[pid].same_value += 1;
-          std::cout << "Same value" << std::endl;
+          // std::cout << "Same value" << std::endl;
 
           // if (status[pid].same_value == )
           status[pid].consecutive_updates = std::max(status[pid].consecutive_updates - 1, 0);
@@ -147,31 +166,41 @@ class LeaderHeartbeat {
           }
         }
 
+        // if (status[pid].value != *val) {
+        //   std::cout << "Polling PID: " << pid << ", PostID: " << proc_post_id << ", Value: " << *val << std::endl;
+        // }
+
         status[pid].value = *val;
         // std::cout << "Received (pid, seq) = (" << pid << ", " << seq << "), value = " << *val << std::endl;
       }
 
-      // Penalize the outstanding that are way behind
-      for (auto pid : outstanding_pids) {
-        *counter += 1; _mm_clflush((const void*)counter); asm volatile ("mfence" ::: "memory");
-        auto proc_post_id = post_ids[pid];
+      // // Penalize the outstanding that are way behind
+      // for (auto pid : outstanding_pids) {
+      //   auto proc_post_id = post_ids[pid];
 
-        if (post_id > proc_post_id + 3 ) {
-          std::cout << "Penalizing " << pid << std::endl;
-          status[pid].consecutive_updates = std::max(status[pid].consecutive_updates - 2, 0);
-        }
-      }
+      //   if (post_id > proc_post_id + 3 ) {
+      //     // std::cout << "Penalizing " << pid << std::endl;
+      //     status[pid].consecutive_updates = std::max(status[pid].consecutive_updates - 2, 0);
+      //   }
+      // }
     }
 
-    for (auto& pid: ids) {
-      *counter += 1; _mm_clflush((const void*)counter); asm volatile ("mfence" ::: "memory");
-      std::cout << "PID:" << pid << ", score: " << status[pid].consecutive_updates << std::endl;
-    }
-    std::cout << std::endl;
+    // bool ok = false;
+    // for (auto& pid: ids) {
+    //   if (status[pid].consecutive_updates < 7) {
+    //     ok = true;
+    //     std::cout << "PID:" << pid << ", score: " << status[pid].consecutive_updates << std::endl;
+    //   }
+    // }
+    // if (ok) {
+    //   std::cout << std::endl;
+    // }
 
     if (leader_pid() == ctx->cc.my_id) {
-      std::cout << "I want leader" << std::endl;
-      // want_leader.store(true);
+      want_leader.store(true);
+    } else {
+      std::this_thread::sleep_for(std::chrono::microseconds(10));
+      // std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
   }
 
@@ -210,7 +239,7 @@ class LeaderHeartbeat {
 
     for (auto& pid : ids) {
       // std::cout << pid << " " << status[pid].consecutive_updates << std::endl;
-      if (status[pid].consecutive_updates > 2) {
+      if (status[pid].consecutive_updates > 7) {
         leader_id = pid;
         break;
       }
@@ -222,6 +251,7 @@ class LeaderHeartbeat {
   LeaderContext *ctx;
   std::atomic<bool> want_leader;
   std::map<int, ReliableConnection> *rcs;
+  ReliableConnection *loopback;
 
   uint64_t read_seq;
 
@@ -239,8 +269,9 @@ class LeaderHeartbeat {
 
   std::vector<int> ids;
   int max_id;
+  int my_id;
 
-  volatile uint64_t *counter;
+  uint64_t *counter_from;
 };
 }  // namespace dory
 
@@ -468,6 +499,7 @@ class LeaderSwitcher {
       // std::cout << "Process with pid " << requester
       //           << " asked for permissions" << std::endl;
       leader.store(dory::Leader(requester, reading[requester], force_reset));
+      want_leader->store(false);
     } else {
       // Check if my leader election declared me as leader
       if (want_leader->load()) {
@@ -482,7 +514,7 @@ class LeaderSwitcher {
           dory::Leader desired(c_ctx->my_id, permission_asker.requestNr());
           auto ret = leader.compare_exchange_strong(expected, desired);
           if (ret) {
-            // std::cout << "Process " << ctx.my_id << " wants to become leader"
+            // std::cout << "Process " << c_ctx->my_id << " wants to become leader"
             // << std::endl;
             want_leader->store(false);
           }
@@ -498,7 +530,7 @@ class LeaderSwitcher {
     if (current_leader != prev_leader || force_permission_request) {
       // std::cout << "Adjusting connections to leader ("
       //           << int(current_leader.requester) << " "
-      //           << current_leader.requester_value << ")" << std::endl;
+      //           << current_leader.requester_value << ") " << (current_leader != prev_leader) << " " << force_permission_request << std::endl;
 
       auto orig_leader = prev_leader;
       prev_leader = current_leader;
@@ -803,7 +835,9 @@ class LeaderElection {
 
         prev_command = current_command;
 
-        // std::this_thread::sleep_for(std::chrono::microseconds(10));
+        // std::this_thread::sleep_for(std::chrono::milliseconds(250));
+
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
 
         // if (i % 5 == 0) {
         //   std::this_thread::sleep_for(std::chrono::seconds(10));
