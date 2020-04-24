@@ -122,6 +122,8 @@ void RdmaConsensus::run() {
                                     "cq-leader-election", "cq-leader-election");
   ce_leader_election->announce_all(store, "qp-leader-election");
   ce_leader_election->announce_ready(store, "qp-leader-election", "announce");
+  ce_leader_election->addLoopback("primary", "shared-mr",
+                                    "cq-leader-election", "cq-leader-election");
 
   auto shared_memory_addr =
       reinterpret_cast<uint8_t*>(cb->mr("shared-mr").addr);
@@ -157,6 +159,8 @@ void RdmaConsensus::run() {
 
   ce_replication->wait_ready_all(store, "qp-replication", "connect");
   ce_leader_election->wait_ready_all(store, "qp-leader-election", "connect");
+  ce_leader_election->connectLoopback(ControlBlock::LOCAL_READ | ControlBlock::LOCAL_WRITE |
+          ControlBlock::REMOTE_READ | ControlBlock::REMOTE_WRITE);
 
   // Initialize the contexts
   auto& cq_leader_election = cb->cq("cq-leader-election");
