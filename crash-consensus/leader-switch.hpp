@@ -16,7 +16,13 @@
 #include "follower.hpp"
 
 #include "timers.h"
-#include <x86intrin.h> /* for clflush */
+
+#include <fcntl.h>
+#include <unistd.h>
+
+#include <sys/types.h>
+#include <sys/stat.h>
+
 
 #include "contexted-poller.hpp"
 
@@ -725,10 +731,73 @@ class LeaderElection {
     std::future<void> ftr = hb_exit_signal.get_future();
     heartbeat_thd = std::thread([this, ftr = std::move(ftr)]() {
       leader_heartbeat.startPoller();
-      for (unsigned long long i = 0;; i = (i + 1) & iterations_ftr_check) {
-        leader_heartbeat.scanHeartbeats();
 
-        // std::this_thread::sleep_for(std::chrono::seconds(1));
+      std::string fifo("/tmp/fifo-" + std::to_string(ctx.cc.my_id));
+      if (unlink(fifo.c_str())) {
+        if (errno != ENOENT) {
+          throw std::runtime_error("Could not delete the fifo: " +
+                                  std::string(std::strerror(errno)));
+        }
+      }
+
+      if (mkfifo(fifo.c_str(), 0666)) {
+        throw std::runtime_error("Could not create the fifo: " +
+                                std::string(std::strerror(errno)));
+      }
+
+      int fd = open(fifo.c_str(), O_RDWR);
+      if (fd == -1) {
+        throw std::runtime_error("Could not open the fifo: " +
+                                std::string(std::strerror(errno)));
+      }
+
+      // int flags = fcntl(fd, F_GETFL, 0);
+      // if (flags == -1) {
+      //   throw std::runtime_error("Could not get the fifo flags: " +
+      //                           std::string(std::strerror(errno)));
+      // }
+
+      // if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+      //   throw std::runtime_error("Could not set the fifo to non-blocking: " +
+      //                           std::string(std::strerror(errno)));
+      // }
+
+      std::atomic<char> command{'c'}; // 'p' for pause, 'c' for continue
+      char prev_command = 'c';
+
+      auto file_watcher_thd = std::thread([&command, &fd]() {
+        while (true) {
+          char tmp;
+          int ret = read(fd, &tmp, 1);
+          if (ret == -1) {
+            // if (errno != EAGAIN) {
+            throw std::runtime_error("Could not read from the fifo: " +
+                              std::string(std::strerror(errno)));
+            // }
+          } else if (ret == 1) {
+            // command = tmp;
+            command.store(tmp);
+          }
+        }
+      });
+
+      if (ConsensusConfig::pinThreads) {
+        pinThreadToCore(file_watcher_thd, ConsensusConfig::fileWatcherThreadCoreID);
+      }
+
+      if (ConsensusConfig::nameThreads) {
+        setThreadName(file_watcher_thd, ConsensusConfig::fileWatcherThreadName);
+      }
+
+      for (unsigned long long i = 0;; i = (i + 1) & iterations_ftr_check) {
+        char current_command = command.load();
+        if (current_command == 'c') {
+          leader_heartbeat.scanHeartbeats();
+        } else if (prev_command == 'c') {
+          leader_heartbeat.retract();
+        }
+
+        prev_command = current_command;
 
         // std::this_thread::sleep_for(std::chrono::microseconds(10));
 
@@ -743,6 +812,8 @@ class LeaderElection {
           }
         }
       }
+
+      file_watcher_thd.join();
     });
 
     if (ConsensusConfig::pinThreads) {

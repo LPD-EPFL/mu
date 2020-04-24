@@ -18,7 +18,7 @@ set(
     consensus.cpp
 )
 
-add_definitions(-DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_OFF)
+add_definitions(-DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO)
 
 # add_library(rdmaconsensus SHARED ${LIB_SRCS})
 # target_link_libraries(rdmaconsensus ${CONAN_LIBS} pthread)
@@ -30,3 +30,4 @@ add_executable(main main.cpp)
 target_link_libraries(main rdmaconsensus)
 
 add_executable(stats stats.cpp)
+add_executable(fifo fifo.cpp)
