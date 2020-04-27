@@ -2,9 +2,10 @@
 #include <iostream>
 #include <stdexcept>
 #include <vector>
+#include <chrono>
+#include <thread>
 
-#include "consensus.hpp"
-#include "pinning.hpp"
+#include "consensus-export.hpp"
 #include "timers.h"
 
 int main(int argc, char* argv[]) {
@@ -45,100 +46,90 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  std::thread proposer([&] {
-    uint64_t commit_id = 0;
-    dory::RdmaConsensus consensus(id, remote_ids);
-    consensus.commitHandler([&commit_id](uint8_t* buf, size_t len) {
-      if (len != sizeof(uint64_t)) {
-        std::cout << "The committed value must be a uint64_t for this test"
-                  << std::endl;
-      } else {
-        uint64_t val = *reinterpret_cast<uint64_t*>(buf);
-        uint64_t proposer_id = val >> 60;
-        val &= 0xfffffffffffffffUL;
-
-        (void)proposer_id;
-
-        // std::cout << "CID: " << commit_id
-        //           << ", Proposer: " << proposer_id
-        //           << ", Val: " << val << "\n";
-        commit_id += 1;
-      }
-    });
-
-    // Wait enough time for the consensus to become ready
-    std::cout << "Wait before starting to propose" << std::endl;
-    std::this_thread::sleep_for(std::chrono::seconds(30));
-    std::cout << "Started proposing" << std::endl;
-
-    if (id == 1 || id == 2) {
-      TIMESTAMP_INIT;
-
-      const uint64_t times = 1024 * 1024 * 10;
-      std::vector<TIMESTAMP_T> timestamps(times);
-
-      for (uint64_t i = 0; i < times; i++) {
-        GET_TIMESTAMP(timestamps[i]);
-        // Encode process doing the proposal
-        uint64_t encoded_i = i | (uint64_t(id) << 60);
-        int err;
-        if ((err = consensus.propose(reinterpret_cast<uint8_t*>(&encoded_i),
-                                     sizeof(encoded_i)))) {
-          // std::cout << "Proposal failed at index " << i << std::endl;
-          i -= 1;
-          switch (static_cast<dory::RdmaConsensus::ProposeError>(err)) {
-            case dory::RdmaConsensus::FastPath:
-            case dory::RdmaConsensus::SlowPathCatchProposal:
-            case dory::RdmaConsensus::SlowPathUpdateProposal:
-            case dory::RdmaConsensus::SlowPathReadRemoteLogs:
-            case dory::RdmaConsensus::SlowPathWriteAdoptedValue:
-            case dory::RdmaConsensus::SlowPathWriteNewValue:
-              std::cout << "Error: in leader mode. Code: " << err << std::endl;
-              break;
-
-            case dory::RdmaConsensus::MutexUnavailable:
-            case dory::RdmaConsensus::FollowerMode:
-              // std::cout << "Error: in follower mode. Potential leader: " <<
-              // consensus.potentialLeader() << std::endl;
-              break;
-
-            default:
-              std::cout << "Bug in code. You should only handle errors here"
-                        << std::endl;
-          }
-        } else {
-          if (i % 10000 == 0) {
-            std::cout << "Passed " << i << std::endl;
-          }
-        }
-
-        // std::this_thread::sleep_for(std::chrono::seconds(1));
-      }
-
-      std::cout << "Finished proposing, computing rtt for proposals..."
+  uint64_t commit_id = 0;
+  dory::Consensus consensus(id, remote_ids);
+  consensus.commitHandler([&commit_id](uint8_t* buf, size_t len) {
+    if (len != sizeof(uint64_t)) {
+      std::cout << "The committed value must be a uint64_t for this test"
                 << std::endl;
-      // Adjacent difference
-      std::vector<uint64_t> diffs;
-      auto it = timestamps.begin();
-      auto prev = *it++;
-      for (; it < timestamps.end(); it++) {
-        diffs.push_back(ELAPSED_NSEC(prev, (*it)));
-        prev = *it;
-      }
+    } else {
+      uint64_t val = *reinterpret_cast<uint64_t*>(buf);
+      uint64_t proposer_id = val >> 60;
+      val &= 0xfffffffffffffffUL;
 
-      for (auto n : diffs) {
-        std::cout << n << std::endl;
-      }
+      (void)proposer_id;
+
+      // std::cout << "CID: " << commit_id
+      //           << ", Proposer: " << proposer_id
+      //           << ", Val: " << val << "\n";
+      commit_id += 1;
     }
-
-    std::this_thread::sleep_for(std::chrono::hours(1));
   });
 
-  auto pinned_cpu = 6;
-  dory::pinThreadToCore(proposer, pinned_cpu);
-  dory::setThreadName(proposer, "thd_proposer");
-  std::cout << "Pinning the proposer thread on coreID " << pinned_cpu
-            << std::endl;
+  // Wait enough time for the consensus to become ready
+  std::cout << "Wait before starting to propose" << std::endl;
+  std::this_thread::sleep_for(std::chrono::seconds(30));
+  std::cout << "Started proposing" << std::endl;
+
+  if (id == 1 || id == 2) {
+    TIMESTAMP_INIT;
+
+    const uint64_t times = 1024 * 1024 * 10;
+    std::vector<TIMESTAMP_T> timestamps(times);
+
+    for (uint64_t i = 0; i < times; i++) {
+      GET_TIMESTAMP(timestamps[i]);
+      // Encode process doing the proposal
+      uint64_t encoded_i = i | (uint64_t(id) << 60);
+      dory::ProposeError err;
+      if ((err = consensus.propose(reinterpret_cast<uint8_t*>(&encoded_i),
+                                    sizeof(encoded_i))) != dory::ProposeError::NoError) {
+        // std::cout << "Proposal failed at index " << i << std::endl;
+        i -= 1;
+        switch (err) {
+          case dory::ProposeError::FastPath:
+          case dory::ProposeError::SlowPathCatchProposal:
+          case dory::ProposeError::SlowPathUpdateProposal:
+          case dory::ProposeError::SlowPathReadRemoteLogs:
+          case dory::ProposeError::SlowPathWriteAdoptedValue:
+          case dory::ProposeError::SlowPathWriteNewValue:
+            std::cout << "Error: in leader mode. Code: " << static_cast<int>(err) << std::endl;
+            break;
+
+          case dory::ProposeError::MutexUnavailable:
+          case dory::ProposeError::FollowerMode:
+            // std::cout << "Error: in follower mode. Potential leader: " <<
+            // consensus.potentialLeader() << std::endl;
+            break;
+
+          default:
+            std::cout << "Bug in code. You should only handle errors here"
+                      << std::endl;
+        }
+      } else {
+        if (i % 10000 == 0) {
+          std::cout << "Passed " << i << std::endl;
+        }
+      }
+
+      // std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    std::cout << "Finished proposing, computing rtt for proposals..."
+              << std::endl;
+    // Adjacent difference
+    std::vector<uint64_t> diffs;
+    auto it = timestamps.begin();
+    auto prev = *it++;
+    for (; it < timestamps.end(); it++) {
+      diffs.push_back(ELAPSED_NSEC(prev, (*it)));
+      prev = *it;
+    }
+
+    for (auto n : diffs) {
+      std::cout << n << std::endl;
+    }
+  }
 
   while (true) {
     std::this_thread::sleep_for(std::chrono::seconds(60));

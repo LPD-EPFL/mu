@@ -16,6 +16,7 @@ set(
     quorum-waiter.cpp
     pinning.cpp
     consensus.cpp
+    consensus-export.cpp
 )
 
 add_definitions(-DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO)
