@@ -73,5 +73,7 @@ elif compiler == 'clang':
 
 # The compilers need to be explicity set, as conan won't interfere with the
 # build system. Therefore, make sure the CC/CXX flags match the conan profile.
-subprocess.call('make CONAN_PROFILE={} CC={} CXX={} {}'.format(CONAN_PROFILE,
+ret = subprocess.call('make CONAN_PROFILE={} CC={} CXX={} {}'.format(CONAN_PROFILE,
                CC, CXX, ' '.join(targets)), shell=True)
+
+exit(ret)
