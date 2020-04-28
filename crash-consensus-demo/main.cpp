@@ -5,7 +5,7 @@
 #include <chrono>
 #include <thread>
 
-#include "consensus-export.hpp"
+#include <dory/crash-consensus.hpp>
 #include "timers.h"
 
 int main(int argc, char* argv[]) {

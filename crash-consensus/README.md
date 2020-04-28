@@ -1,29 +1,36 @@
-# Consensus fast-path
+# Crash-Consensus
 
 ## Requirements
 
 - [conan](https://conan.io/) package manager
 
-## Build
+## Install
 
-From within root:
+Run from within this folder:
 
 ```sh
-./build.sh
+conan create .
 ```
+
+Which will create this package in the local conan cache.
 
 ## Usage
 
-From within root:
+Inside a `conanfile.txt` specify:
 
-```sh
-export DORY_REGISTRY_IP=<memcached-ip>:<memcached-port>
-export MLX_QP_ALLOC_TYPE="HUGE"
-export MLX_CQ_ALLOC_TYPE="HUGE"
-# export MLX4_SINGLE_THREADED=1
-# export MLX5_SINGLE_THREADED=1
+```toml
+[requires]
+dory-crash-consensus/0.0.1
 
-numactl --membind=0 -- ./build/bin/main <process-id>
+[options]
+dory-crash-consensus:log_level=<level>
 ```
 
-_Note:_ process IDs have to start from 0.
+refer to our [wiki](https://github.com/kristianmitk/dory/wiki/Logger) to
+see the various log level options.
+
+Use the lib in the source files as follows:
+
+```cpp
+#include <dory/crash-consensus.hpp>
+```

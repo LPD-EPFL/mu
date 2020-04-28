@@ -1,7 +1,7 @@
 from conans import ConanFile, CMake
 
 class DoryCrashConensusConan(ConanFile):
-    name = "crash-consensus"
+    name = "dory-crash-consensus"
     version = "0.0.1"
     license = "MIT"
     #url = "TODO"
@@ -34,12 +34,13 @@ class DoryCrashConensusConan(ConanFile):
 
     def package(self):
         self.copy("crash-consensus.hpp", dst="include/dory", src="src")
-        self.copy("*.a", dst="lib", keep_path=False)
-        self.copy("*.so", dst="lib", keep_path=False)
+        self.copy("*.a", dst="lib", src="lib", keep_path=False)
+        self.copy("*.so", dst="lib", src="lib", keep_path=False)
 
-    def deploy(self):
-        self.copy("*", dst="lib", src="lib")
+    def imports(self):
+        self.copy("*.a", src="lib", dst="deps", keep_path=False)
+        self.copy("*.so", src="lib", dst="deps", keep_path=False)
 
     def package_info(self):
-        self.cpp_info.libs = ["crashconsensus"]
+        self.cpp_info.libs = ["dorycrashconsensus"]
         self.cpp_info.cxxflags = ["-std=c++17", "-g", "-O3", "-Wall", "-Wextra", "-Wpedantic", "-Werror", "-Wno-unused-result"]
