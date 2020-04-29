@@ -115,7 +115,7 @@ class FailureTracker {
           //           << ". Tolerated failures = " << tolerated_failures
           //           << std::endl;
         }
-#ifdef NDEBUG
+#ifndef NDEBUG
         else {
           std::cout << "Found unrelated remnants in the polled responses"
                     << std::endl;

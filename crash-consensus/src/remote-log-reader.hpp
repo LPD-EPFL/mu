@@ -92,7 +92,7 @@ class ToBePolled {
       }
 
       if (k != kind || seq != req_id) {
-#ifdef NDEBUG
+#ifndef NDEBUG
         std::cout << "Received unexpected (" << quorum::type_str(k)
                   << " instead of " << quorum::type_str(kind) << ")"
                   << " or remnant (" << seq << " instead of " << req_id

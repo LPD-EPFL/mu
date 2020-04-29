@@ -55,7 +55,7 @@ bool SerialQuorumWaiter<ID>::consume(std::vector<struct ibv_wc>& entries,
       auto [k, pid, seq] = quorum::unpackAll<uint64_t, ID>(entry.wr_id);
 
       if (k != kind) {
-#ifdef NDEBUG
+#ifndef NDEBUG
         std::cout << "Received unexpected (" << quorum::type_str(k)
                   << " instead of " << quorum::type_str(kind) << ")"
                   << " message from the completion queue, concerning process "
@@ -65,7 +65,7 @@ bool SerialQuorumWaiter<ID>::consume(std::vector<struct ibv_wc>& entries,
         continue;
       }
 
-#ifdef NDEBUG
+#ifndef NDEBUG
       if (seq != next_id) {
         std::cout << "Received remnant (" << seq << " instead of " << next_id
                   << ") message from the completion queue, concerning process "
@@ -102,7 +102,7 @@ bool SerialQuorumWaiter<ID>::fastConsume(std::vector<struct ibv_wc>& entries,
       auto [k, pid, seq] = quorum::unpackAll<uint64_t, ID>(entry.wr_id);
 
       if (k != kind) {
-#ifdef NDEBUG
+#ifndef NDEBUG
         std::cout << "Received unexpected (" << quorum::type_str(k)
                   << " instead of " << quorum::type_str(kind) << ")"
                   << " message from the completion queue, concerning process "
@@ -112,7 +112,7 @@ bool SerialQuorumWaiter<ID>::fastConsume(std::vector<struct ibv_wc>& entries,
         continue;
       }
 
-#ifdef NDEBUG
+#ifndef NDEBUG
       if (seq != next_id) {
         std::cout << "Received remnant (" << seq << " instead of " << next_id
                   << ") message from the completion queue, concerning process "
