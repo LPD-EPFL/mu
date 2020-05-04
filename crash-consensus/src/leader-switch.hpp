@@ -309,6 +309,14 @@ class LeaderPermissionAsker {
   }
 
   // TODO: Refactor
+  std::unique_ptr<MaybeError> givePermissionStep1(int pid, uint64_t response) {
+    return givePermission(pid, response);
+  }
+
+  std::unique_ptr<MaybeError> givePermissionStep2(int pid, uint64_t response) {
+    return givePermission(pid, response + modulo);
+  }
+
   std::unique_ptr<MaybeError> givePermission(int pid, uint64_t response) {
     auto &offsets = scratchpad->readLeaderChangeSlotsOffsets();
     auto offset = offsets[c_ctx->my_id];
@@ -361,7 +369,54 @@ class LeaderPermissionAsker {
     return std::make_unique<NoError>();
   }
 
-  bool waitForApproval(Leader current_leader, std::atomic<Leader> &leader) {
+  bool waitForApprovalStep1(Leader current_leader, std::atomic<Leader> &leader) {
+    auto &slots = scratchpad->readLeaderChangeSlots();
+    auto ids = c_ctx->remote_ids;
+    auto constexpr shift = 8 * sizeof(uintptr_t) - 1;
+
+    // TIMESTAMP_T start, end;
+    // GET_TIMESTAMP(start);
+    // uint64_t sec = 1000000000UL;
+
+    while (true) {
+      int eliminated_one = -1;
+      for (size_t i = 0; i < ids.size(); i++) {
+        auto pid = ids[i];
+        uint64_t volatile *temp = reinterpret_cast<uint64_t *>(slots[pid]);
+        uint64_t val = *temp;
+        val &= (1UL << shift) - 1;
+
+        // std::cout << "(" << val << ", " << pid << ")" << std::endl;
+
+        if (val + 2 * modulo == req_nr || val + modulo == req_nr) {
+          eliminated_one = i;
+          // std::cout << "Eliminating " << pid << std::endl;
+          break;
+        }
+      }
+
+      if (eliminated_one >= 0) {
+        ids[eliminated_one] = ids[ids.size() - 1];
+        ids.pop_back();
+
+        if (ids.empty()) {
+          return true;
+        }
+      }
+
+      // GET_TIMESTAMP(end);
+      // if (ELAPSED_NSEC(start, end) > 5UL * sec) {
+      //   std::cout << "WaitForApproval timed-out" << std::endl;
+      //   return false;
+      // }
+
+      if (leader.load().requester != current_leader.requester) {
+        return false;
+      }
+    }
+  }
+
+  bool waitForApprovalStep2(Leader current_leader, std::atomic<Leader> &leader) {
     auto &slots = scratchpad->readLeaderChangeSlots();
     auto ids = c_ctx->remote_ids;
     auto constexpr shift = 8 * sizeof(uintptr_t) - 1;
@@ -426,7 +481,7 @@ class LeaderPermissionAsker {
       return err;
     }
 
-    req_nr += modulo;
+    req_nr += 2*modulo;
 
     return std::make_unique<NoError>();
   }
@@ -538,15 +593,21 @@ class LeaderSwitcher {
         // std::cout << "A" << std::endl;
         if (!leader_mode.load()) {
 
+          // TIMESTAMP_T ts_start, ts_mid, ts_end;
+
+          // GET_TIMESTAMP(ts_start);
+
           // std::cout << "Asking for permissions: " << hard_reset << std::endl;
           // Ask for permission. Wait for everybody to reply
           permission_asker.askForPermissions(hard_reset);
+
+          // GET_TIMESTAMP(ts_mid);
 
           // std::cout << "Waiting for approval" << std::endl;
           // In order to avoid a distributed deadlock (when two processes try
           // to become leaders at the same time), we bail whe the leader
           // changes.
-          if (!permission_asker.waitForApproval(current_leader, leader)) {
+          if (!permission_asker.waitForApprovalStep1(current_leader, leader)) {
             force_permission_request = true;
             return false;
           };
@@ -556,9 +617,20 @@ class LeaderSwitcher {
           desired.makeUnused();
           leader.compare_exchange_strong(expected, desired);
 
+          // GET_TIMESTAMP(ts_end);
+
+          // auto elapsed_ask =  ELAPSED_NSEC(ts_start, ts_mid);
+          // auto elapsed_wait = ELAPSED_NSEC(ts_mid, ts_end);
+          // std::cout << "AskForPermissions: " << elapsed_ask / 1000 << "(us)" << std::endl;
+          // std::cout << "WaitForApproval: " << elapsed_wait / 1000 << "(us)" << std::endl;
+          // std::cout << "Total: " << (elapsed_ask + elapsed_wait) / 1000 << "(us)" << std::endl;
+
+          // std::cout << "Asking for permissions: " << hard_reset << std::endl;
+
           // std::cout << "I (process " << c_ctx->my_id << ") got leader "
           //           << "approval" << std::endl;
 
+          // GET_TIMESTAMP(ts_start);
           if (hard_reset) {
             // Reset everybody
             for (auto &[pid, rc] : *replicator_rcs) {
@@ -588,9 +660,26 @@ class LeaderSwitcher {
             }
           }
 
-          // std::cout << "Blocking the follower" << std::endl;
           follower.block();
+
+          if (!permission_asker.waitForApprovalStep2(current_leader, leader)) {
+            force_permission_request = true;
+            return false;
+          };
+
+          // GET_TIMESTAMP(ts_end);
+          // auto elapsed_switch = ELAPSED_NSEC(ts_start, ts_end);
+          // std::cout << "Switching permissions: " << elapsed_switch / 1000 << "(us)" << std::endl;
+
+          // GET_TIMESTAMP(ts_start);
+          // std::cout << "Blocking the follower" << std::endl;
+
           leader_mode.store(true);
+
+          // GET_TIMESTAMP(ts_end);
+          // auto elapsed_block = ELAPSED_NSEC(ts_start, ts_end);
+          // std::cout << "Blocking the follower: " << elapsed_block / 1000 << "(us)" << std::endl;
+
           // std::cout << "Permissions granted" << std::endl;
         } else {
           // std::cout << "C" << std::endl;
@@ -619,6 +708,10 @@ class LeaderSwitcher {
             rc.reconnect();
           }
         } else {
+          // Notify the remote party
+          permission_asker.givePermissionStep1(current_leader.requester,
+                                          current_leader.requester_value);
+
           // First revoke from old leader
           auto old_leader = replicator_rcs->find(orig_leader.requester);
           if (old_leader != replicator_rcs->end()) {
@@ -647,11 +740,10 @@ class LeaderSwitcher {
           }
         }
 
-        follower.unblock();
-
-        // Notify the remote party
-        permission_asker.givePermission(current_leader.requester,
+        permission_asker.givePermissionStep2(current_leader.requester,
                                         current_leader.requester_value);
+
+        follower.unblock();
         // std::cout << "Permissions given" << std::endl;
 
         // std::cout << "Giving permissions to " << int(current_leader.requester)
