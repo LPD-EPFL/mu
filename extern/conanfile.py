@@ -1,11 +1,17 @@
 from conans import ConanFile, CMake
 
-class HelloConan(ConanFile):
+class DoryExternals(ConanFile):
     name = "dory-external"
     version = "0.0.1"
     license = "MIT"
     description = "External header files"
+    generators = "cmake"
     exports_sources = "src/*"
+
+    def build(self):
+      cmake = CMake(self)
+      cmake.configure(source_folder="src")
+      #cmake.build()
 
     def package(self):
         self.copy("*.hpp", dst="include/dory/extern", src="src")
