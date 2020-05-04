@@ -27,26 +27,32 @@ class FixedSizeMajorityOperation {
 
     auto &rcs = ctx->ce.connections();
     for (auto &[pid, rc] : rcs) {
-      connections.push_back(Conn(pid, &rc));
+      if (std::find(remote_ids.begin(), remote_ids.end(), pid) != remote_ids.end()) {
+        connections.push_back(Conn(pid, &rc));
+      }
     }
   }
 
   FixedSizeMajorityOperation(ConnectionContext *context, QuorumWaiter qw,
-                             std::vector<int> &remote_ids, int refactor_me)
+                             std::vector<int> &remote_ids, int tolerated_failures)
       : ctx{context}, qw{qw}, kind{qw.kindOfOp()} {
-    (void)refactor_me;
 
     successful_ops.resize(remote_ids.size());
     successful_ops.clear();
 
-    auto tolerated_failures = 0;
     failed_majority = FailureTracker(kind, ctx->remote_ids, tolerated_failures);
     failed_majority.track(qw.reqID());
 
     auto &rcs = ctx->ce.connections();
     for (auto &[pid, rc] : rcs) {
-      connections.push_back(Conn(pid, &rc));
+      if (std::find(remote_ids.begin(), remote_ids.end(), pid) != remote_ids.end()) {
+        connections.push_back(Conn(pid, &rc));
+      }
     }
+  }
+
+  typename QuorumWaiter::ReqIDType reqID() {
+    return qw.reqID();
   }
 
   void recoverFromError(std::unique_ptr<MaybeError> &supplied_error) {
@@ -76,16 +82,45 @@ class FixedSizeMajorityOperation {
                                    size_t size,
                                    std::vector<uintptr_t> &from_remote_memories,
                                    std::atomic<Leader> &leader) {
-    return op_with_leader_bail(to_local_memories, size, from_remote_memories,
+    std::vector<size_t> size_v(from_remote_memories.size());
+    std::fill(size_v.begin(), size_v.end(), size);
+    return op_with_leader_bail(ReliableConnection::RdmaRead, to_local_memories, size_v, from_remote_memories,
+                               leader);
+  }
+
+  std::unique_ptr<MaybeError> read(std::vector<void *> &to_local_memories,
+                                   std::vector<size_t> &size,
+                                   std::vector<uintptr_t> &from_remote_memories,
+                                   std::atomic<Leader> &leader) {
+    return op_with_leader_bail(ReliableConnection::RdmaRead, to_local_memories, size, from_remote_memories,
                                leader);
   }
 
   std::unique_ptr<MaybeError> write(void *from_local_memory, size_t size,
                                     std::vector<uintptr_t> &to_remote_memories,
                                     std::atomic<Leader> &leader) {
-    return op_with_leader_bail(from_local_memory, size, to_remote_memories,
+    std::vector<size_t> size_v(to_remote_memories.size());
+    std::fill(size_v.begin(), size_v.end(), size);
+    return op_with_leader_bail(ReliableConnection::RdmaWrite, from_local_memory, size_v, to_remote_memories,
                                leader);
   }
+
+  std::unique_ptr<MaybeError> write(void *from_local_memory,
+                                    std::vector<size_t> &size,
+                                    std::vector<uintptr_t> &to_remote_memories,
+                                    std::atomic<Leader> &leader) {
+    return op_with_leader_bail(ReliableConnection::RdmaWrite, from_local_memory, size, to_remote_memories,
+                               leader);
+  }
+
+  std::unique_ptr<MaybeError> write(std::vector<void *> &from_local_memories,
+                                    std::vector<size_t> &size,
+                                    std::vector<uintptr_t> &to_remote_memories,
+                                    std::atomic<Leader> &leader) {
+    return op_with_leader_bail(ReliableConnection::RdmaWrite, from_local_memories, size, to_remote_memories,
+                               leader);
+  }
+
 
   template <typename Poller>
   std::unique_ptr<MaybeError> read(
@@ -168,37 +203,39 @@ class FixedSizeMajorityOperation {
 
   std::vector<int> &successes() { return successful_ops; }
 
+
  private:
   template <class T>
-  std::unique_ptr<MaybeError> op_with_leader_bail(
-      T const &local_memory, size_t size, std::vector<uintptr_t> &remote_memory,
+  std::unique_ptr<MaybeError> op_with_leader_bail(ReliableConnection::RdmaReq rdma_req,
+      T const &local_memory, std::vector<size_t> &size, std::vector<uintptr_t> &remote_memory,
       std::atomic<Leader> &leader) {
     successful_ops.clear();
 
     auto req_id = qw.reqID();
     auto next_req_id = qw.nextReqID();
 
-    auto &rcs = ctx->ce.connections();
-    for (auto &[pid, rc] : rcs) {
+    for (auto &c : connections) {
+      auto pid = c.pid;
+      auto &rc = *(c.rc);
       if constexpr (std::is_same_v<T, std::vector<void *>>) {
-        auto ok = rc.postSendSingle(ReliableConnection::RdmaRead,
+        auto ok = rc.postSendSingle(rdma_req,
                           QuorumWaiter::packer(kind, pid, req_id),
-                          local_memory[pid], size,
+                          local_memory[pid], size[pid],
                           rc.remoteBuf() + remote_memory[pid]);
         if (!ok) {
           return std::make_unique<ErrorType>(req_id);
         }
       } else {
-        auto ok = rc.postSendSingle(ReliableConnection::RdmaWrite,
+        auto ok = rc.postSendSingle(rdma_req,
                           QuorumWaiter::packer(kind, pid, req_id), local_memory,
-                          size, rc.remoteBuf() + remote_memory[pid]);
+                          size[pid], rc.remoteBuf() + remote_memory[pid]);
         if (!ok) {
           return std::make_unique<ErrorType>(req_id);
         }
       }
     }
 
-    int expected_nr = rcs.size();
+    int expected_nr = connections.size();
     int loops = 0;
     while (!qw.canContinueWith(next_req_id)) {
       entries.resize(expected_nr);
@@ -238,8 +275,9 @@ class FixedSizeMajorityOperation {
     auto req_id = qw.reqID();
     auto next_req_id = qw.nextReqID();
 
-    auto &rcs = ctx->ce.connections();
-    for (auto &[pid, rc] : rcs) {
+    for (auto &c : connections) {
+      auto pid = c.pid;
+      auto &rc = *(c.rc);
       if constexpr (std::is_same_v<T, std::vector<void *>>) {
         auto ok = rc.postSendSingle(ReliableConnection::RdmaRead,
                           QuorumWaiter::packer(kind, pid, req_id),
@@ -258,7 +296,7 @@ class FixedSizeMajorityOperation {
       }
     }
 
-    int expected_nr = rcs.size();
+    int expected_nr = connections.size();
     while (!qw.canContinueWith(next_req_id)) {
       entries.resize(expected_nr);
       if (poller(ctx->cq, entries)) {

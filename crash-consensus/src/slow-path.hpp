@@ -27,7 +27,7 @@ class CatchUpWithFollowers {
       throw std::runtime_error("Advertised proposal number must be `uint64_t`");
     }
 
-    auto quorum_size = quorum::majority(c_ctx->remote_ids.size() + 1) - 1;
+    quorum_size = quorum::majority(c_ctx->remote_ids.size() + 1) - 1;
     modulo = Identifiers::maxID(c_ctx->my_id, c_ctx->remote_ids);
 
     SequentialQuorumWaiter waiterRead(quorum::ProposalRd, c_ctx->remote_ids,
@@ -47,6 +47,36 @@ class CatchUpWithFollowers {
     for (auto addr : scratchpad.readProposalNrSlots()) {
       local_memory_locations.push_back(reinterpret_cast<void *>(addr));
     }
+
+    fuo_offset = r_ctx->log.offset(Log::FUO).first;
+    fuo_size = r_ctx->log.offset(Log::FUO).second;
+    if (r_ctx->log.offset(Log::FUO).second != sizeof(uint64_t)) {
+      throw std::runtime_error("Advertised proposal number must be `uint64_t`");
+    }
+
+    // Wait for response from everyone, but tolerate failures
+    SequentialQuorumWaiter waiterFUORead(quorum::FUORd, c_ctx->remote_ids,
+                                      c_ctx->remote_ids.size(), 1);
+    majFUOR = FUOMajorityReader(c_ctx, waiterFUORead, c_ctx->remote_ids);
+
+    SequentialQuorumWaiter waiterFUODiffWrite(quorum::FUODiffWr,
+      c_ctx->remote_ids, quorum_size, 1);
+
+    majFUOW = FUODiffMajorityWriter(c_ctx, waiterFUODiffWrite, c_ctx->remote_ids, 0);
+
+    fuo_remote_mem_locations.resize(Identifiers::maxID(c_ctx->remote_ids) + 1);
+    std::fill(fuo_remote_mem_locations.begin(), fuo_remote_mem_locations.end(),
+              r_ctx->log_offset + fuo_offset);
+
+    for (auto addr : scratchpad.readFUOSlots()) {
+      fuo_local_memory_locations.push_back(reinterpret_cast<void *>(addr));
+    }
+
+    need_update_pids.reserve(Identifiers::maxID(c_ctx->remote_ids));
+    need_update_fuo_diff.resize(Identifiers::maxID(c_ctx->remote_ids) + 1);
+    need_update_fuo_local_offset.resize(Identifiers::maxID(c_ctx->remote_ids) + 1);
+    need_update_fuo_remote_offset.resize(Identifiers::maxID(c_ctx->remote_ids) + 1);
+    need_update_quorum = 0;
   }
 
   void recoverFromError(std::unique_ptr<MaybeError> &supplied_error) {
@@ -57,8 +87,14 @@ class CatchUpWithFollowers {
       case WriteProposalMajorityError::value:
         majW.recoverFromError(supplied_error);
         break;
+      case ReadFUOMajorityError::value:
+        majFUOR.recoverFromError(supplied_error);
+        break;
+      case WriteFUODiffMajorityError::value:
+        majFUOW.recoverFromError(supplied_error);
+        break;
       case CatchProposalRetryError::value:
-        std::cout << "Nothing to recover" << std::endl;
+        // std::cout << "Nothing to recover" << std::endl;
         break;
       default:
         throw std::runtime_error("Unimplemented handing of this error");
@@ -88,6 +124,62 @@ class CatchUpWithFollowers {
 
     proposal_nr += modulo;
     return std::make_unique<CatchProposalRetryError>(max_proposal);
+  }
+
+  std::unique_ptr<MaybeError> catchFUO(std::atomic<Leader> &leader) {
+    // Read from a majority - 1 (because we will also include ourselves)
+    auto err = majFUOR.read(fuo_local_memory_locations, fuo_size,
+                         fuo_remote_mem_locations, leader);
+
+    if (!err->ok()) {
+      return err;
+    }
+
+    need_update_pids.clear();
+
+    auto my_fuo = r_ctx->log.headerFirstUndecidedOffset();
+    // Under normal conditions, all respond because we wait for all,
+    // but we tolerate a minority to fail.
+    auto &successful_pids = majFUOR.successes();
+
+    for (auto pid : successful_pids) {
+      auto remote_fuo = *reinterpret_cast<uint64_t *>(scratchpad.readFUOSlots()[pid]);
+      if (my_fuo > remote_fuo) {
+        need_update_pids.push_back(pid);
+        need_update_fuo_diff[pid] = my_fuo - remote_fuo;
+        need_update_fuo_local_offset[pid] = r_ctx->log.headerPtr() + remote_fuo;
+        need_update_fuo_remote_offset[pid] = r_ctx->log_offset + remote_fuo;
+      }
+    }
+
+    int already_up_to_date = successful_pids.size() - need_update_pids.size();
+    if (already_up_to_date >= quorum_size) {
+      need_update_quorum = 0;
+    } else {
+      need_update_quorum = quorum_size - already_up_to_date;
+    }
+
+    return std::make_unique<NoError>();
+  }
+
+  // Update only the followers that are behind
+  std::unique_ptr<MaybeError> updateFollowers(std::atomic<Leader> &leader) {
+
+    if (need_update_pids.size() > 0) {
+      SequentialQuorumWaiter waiterFUODiffWrite(quorum::FUODiffWr,
+        need_update_pids, need_update_quorum, majFUOW.reqID());
+
+      majFUOW = FUODiffMajorityWriter(c_ctx, waiterFUODiffWrite, need_update_pids,
+        need_update_pids.size() - need_update_quorum);
+
+      auto err = majFUOW.write(need_update_fuo_local_offset, need_update_fuo_diff, need_update_fuo_remote_offset, leader);
+
+      if (!err->ok()) {
+        return err;
+      }
+    }
+
+    return std::make_unique<NoError>();
   }
 
   std::unique_ptr<MaybeError> updateWithCurrentProposal(
@@ -135,7 +227,27 @@ class CatchUpWithFollowers {
   std::vector<uintptr_t> remote_mem_locations;
   std::vector<void *> local_memory_locations;
 
+
+  using FUOMajorityReader = FixedSizeMajorityOperation<SequentialQuorumWaiter,
+                                                    ReadFUOMajorityError>;
+  using FUODiffMajorityWriter = FixedSizeMajorityOperation<SequentialQuorumWaiter,
+                                                    WriteFUODiffMajorityError>;
+
+  FUOMajorityReader majFUOR;
+  FUODiffMajorityWriter majFUOW;
+
+  std::vector<uintptr_t> fuo_remote_mem_locations;
+  std::vector<void *> fuo_local_memory_locations;
+  std::vector<int> need_update_pids;
+  std::vector<size_t> need_update_fuo_diff;
+  std::vector<void *> need_update_fuo_local_offset;
+  std::vector<uintptr_t> need_update_fuo_remote_offset;
+
+  int need_update_quorum;
+  int quorum_size;
+
   uint64_t proposal_offset, proposal_size;
+  uint64_t fuo_offset, fuo_size;
   int modulo;
 };
 

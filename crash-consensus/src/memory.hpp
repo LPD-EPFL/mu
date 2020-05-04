@@ -48,6 +48,7 @@ class ScratchpadMemory {
   inline size_t slotSize() const;
 
   // Add more entries here
+  std::vector<uint8_t *> &readFUOSlots();
   std::vector<uint8_t *> &readProposalNrSlots();
   std::vector<uint8_t *> &readLogEntrySlots();
   std::vector<uint8_t *> &readLeaderChangeSlots();
@@ -59,6 +60,7 @@ class ScratchpadMemory {
   std::vector<uint8_t *> &readLeaderHeartbeatSlots();
 
   // Add more entries here
+  std::vector<ptrdiff_t> &readFUOSlotsOffsets();
   std::vector<ptrdiff_t> &readProposalNrSlotsOffsets();
   std::vector<ptrdiff_t> &readLogEntrySlotsOffsets();
   std::vector<ptrdiff_t> &readLeaderChangeSlotsOffsets();
@@ -74,6 +76,7 @@ class ScratchpadMemory {
   void setup();
 
   // Add more entries here
+  void setupReadFUOSlots();
   void setupReadProposalNrSlots();
   void setupReadLogEntrySlots();
   void setupReadLeaderChangeSlots();
@@ -93,6 +96,7 @@ class ScratchpadMemory {
   int max_id;
 
   // Add more entries here
+  std::vector<uint8_t *> read_fuo_slots;
   std::vector<uint8_t *> read_proposal_nr_slots;
   std::vector<uint8_t *> read_log_entry_slots;
   std::vector<uint8_t *> read_leader_change_slots;
@@ -104,6 +108,7 @@ class ScratchpadMemory {
   std::vector<uint8_t *> read_leader_heartbeat_slots;
 
   // Add more entries here
+  std::vector<ptrdiff_t> read_fuo_slots_offsets;
   std::vector<ptrdiff_t> read_proposal_nr_slots_offsets;
   std::vector<ptrdiff_t> read_log_entry_slots_offsets;
   std::vector<ptrdiff_t> read_leader_change_slots_offsets;

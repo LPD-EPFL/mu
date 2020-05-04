@@ -268,6 +268,28 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
         return ret_error(lock, ProposeError::FastPath, true);
       }
     } else {  // Slow-path
+      auto update_followers_fuo_err = catchup->catchFUO(leader);
+      if (!update_followers_fuo_err->ok()) {
+        LOGGER_TRACE(
+            logger,
+            "Error in slow-path: occurred when getting the FUO of remote logs ({})",
+            MaybeError::type_str(update_followers_fuo_err->type()));
+        catchup->recoverFromError(update_followers_fuo_err);
+
+        return ret_error(lock, ProposeError::SlowPathCatchFUO, true);
+      }
+
+      auto update_followers_err = catchup->updateFollowers(leader);
+      if (!update_followers_err->ok()) {
+        LOGGER_TRACE(
+            logger,
+            "Error in slow-path: occurred when updating the remote logs of followers ({})",
+            MaybeError::type_str(update_followers_err->type()));
+        catchup->recoverFromError(update_followers_err);
+
+        return ret_error(lock, ProposeError::SlowPathUpdateFollowers, true);
+      }
+
       auto catchup_proposal_err = catchup->catchProposal(leader);
 
       bool encountered_error = false;

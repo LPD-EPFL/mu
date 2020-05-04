@@ -25,7 +25,8 @@ enum Kind : uint64_t {
   ProposalWr = 1,  // Used when writing a proposal number to the the log header
                    // of remote replicas
   FUORd = 2,
-  FUOWr = 3,
+  FUODiffWr = 3,
+
   EntryRd = 4,
   EntryWr = 5,
 
@@ -40,7 +41,7 @@ enum Kind : uint64_t {
       {Kind::ProposalRd, "Kind::ProposalRd"},
       {Kind::ProposalWr, "Kind::ProposalWr"},
       {Kind::FUORd, "Kind::FUORd"},
-      {Kind::FUOWr, "Kind::FUOWr"},
+      {Kind::FUODiffWr, "Kind::FUODiffWr"},
       {Kind::EntryRd, "Kind::EntryRd"},
       {Kind::EntryWr, "Kind::EntryWr"},
       {Kind::LeaderReqWr, "Kind::LeaderReqWr"},

@@ -12,6 +12,7 @@ namespace dory {
 template <class ID>
 class SerialQuorumWaiter {
  public:
+  using ReqIDType = ID;
   SerialQuorumWaiter() = default;
 
   SerialQuorumWaiter(quorum::Kind kind, std::vector<int>& remote_ids,

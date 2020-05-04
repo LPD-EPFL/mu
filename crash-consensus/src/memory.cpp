@@ -90,6 +90,7 @@ ScratchpadMemory::ScratchpadMemory(std::vector<int>& ids, Memory const& mem)
 }
 
 void ScratchpadMemory::setup() {
+  setupReadFUOSlots();
   setupReadProposalNrSlots();
   setupReadLogEntrySlots();
   setupReadLeaderChangeSlots();
@@ -105,6 +106,14 @@ size_t ScratchpadMemory::requiredSize() const { return next - mem.ptr; }
 
 inline size_t ScratchpadMemory::slotSize() const {
   return dory::constants::MAX_ENTRY_SIZE;
+}
+
+std::vector<uint8_t*>& ScratchpadMemory::readFUOSlots() {
+  return read_fuo_slots;
+}
+
+std::vector<ptrdiff_t>& ScratchpadMemory::readFUOSlotsOffsets() {
+  return read_fuo_slots_offsets;
 }
 
 std::vector<uint8_t*>& ScratchpadMemory::readProposalNrSlots() {
@@ -167,6 +176,10 @@ std::vector<uint8_t*>& ScratchpadMemory::readLeaderHeartbeatSlots() {
 
 std::vector<ptrdiff_t>& ScratchpadMemory::readLeaderHeartbeatSlotsOffsets() {
   return read_leader_heartbeat_slots_offsets;
+}
+
+void ScratchpadMemory::setupReadFUOSlots() {
+  setupSlots(read_fuo_slots, read_fuo_slots_offsets);
 }
 
 void ScratchpadMemory::setupReadProposalNrSlots() {

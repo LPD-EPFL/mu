@@ -73,6 +73,9 @@ class MaybeError {
     WriteProposalMajorityError,
     CatchProposalRetryError,
 
+    ReadFUOMajorityError,
+    WriteFUODiffMajorityError,
+
     LeaderSwitchRequestError
   };
 
@@ -90,6 +93,12 @@ class MaybeError {
          "ErrorType::WriteProposalMajorityError"},
         {ErrorType::CatchProposalRetryError,
          "ErrorType::CatchProposalRetryError"},
+
+        {ErrorType::ReadFUOMajorityError,
+         "ErrorType::ReadFUOMajorityError"},
+        {ErrorType::WriteFUODiffMajorityError,
+         "ErrorType::WriteFUODiffMajorityError"},
+
 
         {ErrorType::LeaderSwitchRequestError,
          "ErrorType::LeaderSwitchRequestError"},
@@ -224,6 +233,40 @@ class LeaderSwitchRequestError : public MaybeError {
 
  private:
   uint64_t req_nr;
+};
+
+class ReadFUOMajorityError : public MaybeError {
+ public:
+  ReadFUOMajorityError(uint64_t req_id) : req_id{req_id} {}
+
+  inline bool ok() override { return false; }
+  inline ErrorType type() override {
+    return MaybeError::ReadFUOMajorityError;
+  }
+  inline uint64_t req() { return req_id; }
+
+  static const MaybeError::ErrorType value =
+      MaybeError::ReadFUOMajorityError;
+
+ private:
+  uint64_t req_id;
+};
+
+class WriteFUODiffMajorityError : public MaybeError {
+ public:
+  WriteFUODiffMajorityError(uint64_t req_id) : req_id{req_id} {}
+
+  inline bool ok() override { return false; }
+  inline ErrorType type() override {
+    return MaybeError::WriteFUODiffMajorityError;
+  }
+  inline uint64_t req() { return req_id; }
+
+  static const MaybeError::ErrorType value =
+      MaybeError::WriteFUODiffMajorityError;
+
+ private:
+  uint64_t req_id;
 };
 
 }  // namespace dory
