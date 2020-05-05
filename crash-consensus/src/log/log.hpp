@@ -191,6 +191,18 @@ class Log {
     }
   }
 
+  inline size_t spaceLeft() {
+    return header->free_bytes;
+  }
+
+  inline void resetFUO() {
+    header->first_undecided_offset = initial_fuo;
+  }
+
+  inline void bzero() {
+    memset(headerPtr() + initial_fuo, 0, initial_free_bytes);
+  }
+
   // inline uint8_t* firstUndecidedOffsetEntry() volatile {
   //   return reinterpret_cast<uint8_t*>(header) + headerFirstUndecidedOffset();
   // }
@@ -232,6 +244,8 @@ class Log {
   std::vector<uint8_t> dump() const;
 
  private:
+  size_t initial_fuo;
+  size_t initial_free_bytes;
   uint8_t* buf;
   size_t len;
   LogHeader* header;

@@ -87,7 +87,9 @@ Log::Log(void *underlying_buf, size_t buf_len)
   offsets[Entries] =
       std::make_pair(len - header->free_bytes, dory::constants::MAX_ENTRY_SIZE);
 
-  header->first_undecided_offset = len - header->free_bytes;
+  initial_fuo = len - header->free_bytes;
+  initial_free_bytes = header->free_bytes;
+  header->first_undecided_offset = initial_fuo;
 }
 
 Log::Entry Log::newEntry() {
