@@ -84,6 +84,7 @@ class RdmaConsensus {
     NoError = 0,  // Placeholder for the 0 value
     MutexUnavailable,
     FastPath,
+    FastPathRecyclingTriggered,
     SlowPathCatchFUO,
     SlowPathUpdateFollowers,
     SlowPathCatchProposal,
@@ -91,7 +92,8 @@ class RdmaConsensus {
     SlowPathReadRemoteLogs,
     SlowPathWriteAdoptedValue,
     SlowPathWriteNewValue,
-    FollowerMode
+    FollowerMode,
+    SlowPathLogRecycled
   };
 
  private:

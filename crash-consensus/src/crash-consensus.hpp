@@ -11,6 +11,7 @@ enum class ProposeError {
   NoError = 0,  // Placeholder for the 0 value
   MutexUnavailable,
   FastPath,
+  FastPathRecyclingTriggered,
   SlowPathCatchFUO,
   SlowPathUpdateFollowers,
   SlowPathCatchProposal,
@@ -18,7 +19,8 @@ enum class ProposeError {
   SlowPathReadRemoteLogs,
   SlowPathWriteAdoptedValue,
   SlowPathWriteNewValue,
-  FollowerMode
+  FollowerMode,
+  SlowPathLogRecycled
 };
 
 class Consensus {
