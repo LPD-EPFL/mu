@@ -71,9 +71,9 @@ class Follower {
     ctx = o.ctx;
     iter = o.iter;
     commit_iter = o.commit_iter;
-    follower_thd = std::move(o.follower_thd);
     block_thread_req.store(o.block_thread_req.load());
     blocked_thread.store(o.blocked_thread.load());
+    blocked_state = o.blocked_state;
     return *this;
   }
 
