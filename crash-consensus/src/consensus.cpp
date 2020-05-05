@@ -241,8 +241,8 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
       auto ok =
           majW->fastWrite(address, size, to_remote_memory, offset, leader);
       if (likely(ok)) {
-        re_ctx->log.updateHeaderFirstUndecidedOffset(
-            LogConfig::round_up_powerof2(offset + size));
+        auto fuo = LogConfig::round_up_powerof2(offset + size);
+        re_ctx->log.updateHeaderFirstUndecidedOffset(fuo);
         auto has_next = iter.sampleNext();
         if (has_next) {
           ParsedSlot pslot(iter.location());
@@ -252,7 +252,6 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
           // auto [buf, len] = pslot.payload();
 
           // Now that I got something, I will use the commit iterator
-          auto fuo = pslot.firstUndecidedOffset();
           while (commit_iter.hasNext(fuo)) {
             commit_iter.next();
 
@@ -413,8 +412,8 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
           majW->recoverFromError(err);
           return ret_error(lock, ProposeError::SlowPathWriteAdoptedValue, true);
         } else {
-          re_ctx->log.updateHeaderFirstUndecidedOffset(
-              LogConfig::round_up_powerof2(local_fuo + size));
+          auto fuo = LogConfig::round_up_powerof2(local_fuo + size);
+          re_ctx->log.updateHeaderFirstUndecidedOffset(fuo);
           auto has_next = iter.sampleNext();
           if (has_next) {
             ParsedSlot pslot(iter.location());
@@ -425,7 +424,6 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
             // auto [buf, len] = pslot.payload();
 
             // Now that I got something, I will use the commit iterator
-            auto fuo = pslot.firstUndecidedOffset();
             while (commit_iter.hasNext(fuo)) {
               commit_iter.next();
 
@@ -456,8 +454,8 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
           majW->recoverFromError(err);
           return ret_error(lock, ProposeError::SlowPathWriteNewValue, true);
         } else {
-          re_ctx->log.updateHeaderFirstUndecidedOffset(
-              LogConfig::round_up_powerof2(offset + size));
+          auto fuo = LogConfig::round_up_powerof2(offset + size);
+          re_ctx->log.updateHeaderFirstUndecidedOffset(fuo);
           auto has_next = iter.sampleNext();
           if (has_next) {
             ParsedSlot pslot(iter.location());
@@ -468,7 +466,6 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
             // auto [buf, len] = pslot.payload();
 
             // Now that I got something, I will use the commit iterator
-            auto fuo = pslot.firstUndecidedOffset();
             while (commit_iter.hasNext(fuo)) {
               commit_iter.next();
 
