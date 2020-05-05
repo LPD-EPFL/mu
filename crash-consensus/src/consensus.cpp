@@ -192,6 +192,8 @@ void RdmaConsensus::run() {
   lsr = std::make_unique<LogSlotReader>(re_ctx.get(), *scratchpad.get(),
                                         next_log_entry_offset);
 
+  follower.attach(&lsr, scratchpad.get());
+
   sqw = std::make_unique<SequentialQuorumWaiter>(
       quorum::EntryWr, re_ctx->cc.remote_ids, quorum_size, 1);
   majW = std::make_unique<FixedSizeMajorityOperation<SequentialQuorumWaiter,

@@ -33,6 +33,11 @@ class Follower {
     }
   }
 
+  void attach(std::unique_ptr<LogSlotReader> *lsreader, ScratchpadMemory *scratchpad_memory) {
+    lsr = lsreader;
+    scratchpad = scratchpad_memory;
+  }
+
   void block() {
     if (!blocked_state) {
       block_thread_req.store(true);
@@ -138,6 +143,8 @@ class Follower {
     ReplicationContext *ctx;
     BlockingIterator *iter;
     LiveIterator *commit_iter;
+    std::unique_ptr<LogSlotReader> *lsr;
+    ScratchpadMemory *scratchpad;
     std::function<void(uint8_t*, size_t)> commit;
 
     std::thread follower_thd;
