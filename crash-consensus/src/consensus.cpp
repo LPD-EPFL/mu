@@ -23,7 +23,8 @@ RdmaConsensus::RdmaConsensus(int my_id, std::vector<int>& remote_ids)
   iter = re_ctx->log.blockingIterator();
   commit_iter = re_ctx->log.liveIterator();
 
-  follower = Follower(re_ctx.get(), &iter, &commit_iter);
+  follower = Follower(re_ctx.get(), leader_election->context(), &iter, &commit_iter);
+  follower.waitForPoller();
 }
 
 RdmaConsensus::~RdmaConsensus() { consensus_thd.join(); }
@@ -230,6 +231,10 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
     auto& leader = leader_election->leaderSignal();
 
     if (likely(fast_path)) {  // Fast-path
+      if (unlikely(re_ctx->log.spaceLeftCritical())) {
+        return ret_error(lock, ProposeError::FastPathRecyclingTriggered);
+      }
+
       Slot slot(re_ctx->log);
 
       // TODO: Are these values correct?
@@ -439,6 +444,48 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
       } else {
         fast_path = true;
         LOGGER_TRACE(logger, "Proposing the new value in the slow-path");
+
+        // std::cout << "Space left " << re_ctx->log.spaceLeft() << std::endl;
+        if (unlikely(re_ctx->log.spaceLeftCritical())) {
+          // Send log recycle request in the form:
+          Slot slot(re_ctx->log);
+          slot.storeAcceptedProposal(proposal_nr);
+          slot.storeFirstUndecidedOffset(0);
+          // std::cout << "Sending recycling request with fuo:" << local_fuo << std::endl;
+          auto recycling_req = log_recycling->generateRequest(local_fuo);
+          slot.storePayload(reinterpret_cast<uint8_t *>(&recycling_req), sizeof(recycling_req));
+
+          auto [address, offset, size] = slot.location();
+          std::transform(to_remote_memory.begin(), to_remote_memory.end(),
+                        dest.begin(), bind2nd(std::plus<uintptr_t>(), offset));
+          auto err = majW->write(address, size, dest, leader);
+
+          if (!err->ok()) {
+            majW->recoverFromError(err);
+            return ret_error(lock, ProposeError::SlowPathWriteNewValue, true);
+          } else {
+            re_ctx->log.resetFUO();
+            re_ctx->log.rebuildLog();
+
+            iter = re_ctx->log.blockingIterator();
+            commit_iter = re_ctx->log.liveIterator();
+
+            auto next_log_entry_offset = re_ctx->log.headerFirstUndecidedOffset();
+            lsr = std::make_unique<LogSlotReader>(re_ctx.get(), *scratchpad.get(),
+                                        next_log_entry_offset);
+
+            // Wait for all to clean-up their log
+            log_recycling->waitForReplies();
+
+            re_ctx->log.bzero();
+
+            // std::cout << "Sleeping..." << std::endl;
+            // std::this_thread::sleep_for(std::chrono::seconds(2));
+
+            return ret_error(lock, ProposeError::SlowPathLogRecycled);
+          }
+        }
+
         Slot slot(re_ctx->log);
 
         // TODO: Are these values correct?

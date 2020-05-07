@@ -33,6 +33,9 @@ enum Kind : uint64_t {
   LeaderReqWr = 6,    // Used to ask for permissions from followers
   LeaderGrantWr = 7,  // Used from followers when they grant you permissions
   LeaderHeartbeat = 8,
+
+  RecyclingDone = 9,
+
   MAX = 15
 };
 

@@ -59,7 +59,7 @@ class LeaderHeartbeat {
     status = std::vector<ReadingStatus>(max_id + 1);
 
     ctx->poller.registerContext(quorum::LeaderHeartbeat);
-    ctx->poller.endRegistrations(3);
+    ctx->poller.endRegistrations(4);
 
     heartbeat_poller = ctx->poller.getContext(quorum::LeaderHeartbeat);
 
@@ -290,7 +290,7 @@ class LeaderPermissionAsker {
   void startPoller() {
     ctx->poller.registerContext(quorum::LeaderReqWr);
     ctx->poller.registerContext(quorum::LeaderGrantWr);
-    ctx->poller.endRegistrations(3);
+    ctx->poller.endRegistrations(4);
 
     ask_perm_poller = ctx->poller.getContext(quorum::LeaderReqWr);
     give_perm_poller = ctx->poller.getContext(quorum::LeaderGrantWr);
