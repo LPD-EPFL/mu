@@ -7,6 +7,8 @@
 
 #include <atomic>
 #include "log.hpp"
+#include "contexted-poller.hpp"
+#include "memory.hpp"
 
 namespace dory {
 struct Leader {
@@ -50,4 +52,15 @@ struct ReplicationContext {
   Log &log;
   ptrdiff_t log_offset;
 };
+
+struct LeaderContext {
+  LeaderContext(ConnectionContext &cc, ScratchpadMemory &scratchpad)
+      : cc{cc}, scratchpad{scratchpad}, poller{&cc} {
+
+  }
+  ConnectionContext &cc;
+  ScratchpadMemory &scratchpad;
+  ContextedPoller poller;
+};
+
 }  // namespace dory

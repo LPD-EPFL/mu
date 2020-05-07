@@ -27,18 +27,6 @@
 #include "contexted-poller.hpp"
 
 namespace dory {
-struct LeaderContext {
-  LeaderContext(ConnectionContext &cc, ScratchpadMemory &scratchpad)
-      : cc{cc}, scratchpad{scratchpad}, poller{&cc} {
-
-  }
-  ConnectionContext &cc;
-  ScratchpadMemory &scratchpad;
-  ContextedPoller poller;
-};
-}  // namespace dory
-
-namespace dory {
 class LeaderHeartbeat {
  private:
     // static constexpr std::chrono::nanoseconds heartbeatRefreshRate = std::chrono::nanoseconds(500);
@@ -824,6 +812,8 @@ class LeaderElection {
     startHeartbeat();
     startLeaderSwitcher();
   }
+
+  LeaderContext *context() { return &ctx; }
 
   ~LeaderElection() {
     stopLeaderSwitcher();

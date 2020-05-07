@@ -12,6 +12,7 @@ add_library(
     log/log-iterators.cpp
     log/log.cpp
 
+    contexted-poller.cpp
     response-tracker.cpp
     quorum-waiter.cpp
     pinning.cpp
