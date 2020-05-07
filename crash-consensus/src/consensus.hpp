@@ -61,6 +61,7 @@
 #include <random>  // TODO: Remove if leader-switch is finished
 #include "follower.hpp"
 #include "leader-switch.hpp"
+#include "log-recycling.hpp"
 #include "readerwriterqueue.h"
 
 namespace dory {
@@ -146,6 +147,7 @@ class RdmaConsensus {
   std::unique_ptr<LeaderElection> leader_election;
   std::unique_ptr<CatchUpWithFollowers> catchup;
   std::unique_ptr<LogSlotReader> lsr;
+  std::unique_ptr<LogRecycling> log_recycling;
   std::unique_ptr<SequentialQuorumWaiter> sqw;
   std::unique_ptr<
       FixedSizeMajorityOperation<SequentialQuorumWaiter, WriteLogMajorityError>>

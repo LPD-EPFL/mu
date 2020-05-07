@@ -95,6 +95,8 @@ void ScratchpadMemory::setup() {
   setupReadLogEntrySlots();
   setupReadLeaderChangeSlots();
   setupWriteLeaderChangeSlots();
+  setupReadLogRecyclingSlots();
+  setupLogRecyclingResponseSlot();
   setupWriteSlot();
   setupLeaderRequestSlot();
   setupLeaderResponseSlot();
@@ -148,6 +150,16 @@ std::vector<ptrdiff_t>& ScratchpadMemory::writeLeaderChangeSlotsOffsets() {
   return write_leader_change_slots_offsets;
 }
 
+std::vector<uint8_t*>& ScratchpadMemory::readLogRecyclingSlots() {
+  return read_log_recycling_slots;
+}
+
+std::vector<ptrdiff_t>& ScratchpadMemory::readLogRecyclingSlotsOffsets() {
+  return read_log_recycling_slots_offsets;
+}
+
+uint8_t* ScratchpadMemory::logRecyclingResponseSlot() { return log_recycling_response_slot; }
+
 uint8_t* ScratchpadMemory::writeSlot() { return write_slot; }
 
 ptrdiff_t ScratchpadMemory::writeSlotOffset() { return write_slot_offset; }
@@ -196,6 +208,14 @@ void ScratchpadMemory::setupReadLeaderChangeSlots() {
 
 void ScratchpadMemory::setupWriteLeaderChangeSlots() {
   setupSlots(write_leader_change_slots, write_leader_change_slots_offsets);
+}
+
+void ScratchpadMemory::setupReadLogRecyclingSlots() {
+  setupSlots(read_log_recycling_slots, read_log_recycling_slots_offsets);
+}
+
+void ScratchpadMemory::setupLogRecyclingResponseSlot() {
+  setupSlot(log_recycling_response_slot, log_recycling_response_slot_offset);
 }
 
 void ScratchpadMemory::setupWriteSlot() {

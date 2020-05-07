@@ -194,6 +194,8 @@ void RdmaConsensus::run() {
 
   follower.attach(&lsr, scratchpad.get());
 
+  log_recycling = std::make_unique<LogRecycling>(re_ctx.get(), *scratchpad.get());
+
   sqw = std::make_unique<SequentialQuorumWaiter>(
       quorum::EntryWr, re_ctx->cc.remote_ids, quorum_size, 1);
   majW = std::make_unique<FixedSizeMajorityOperation<SequentialQuorumWaiter,

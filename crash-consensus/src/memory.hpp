@@ -53,6 +53,8 @@ class ScratchpadMemory {
   std::vector<uint8_t *> &readLogEntrySlots();
   std::vector<uint8_t *> &readLeaderChangeSlots();
   std::vector<uint8_t *> &writeLeaderChangeSlots();
+  std::vector<uint8_t *> &readLogRecyclingSlots();
+  uint8_t *logRecyclingResponseSlot();
   uint8_t *writeSlot();
   uint8_t *leaderRequestSlot();
   uint8_t *leaderResponseSlot();
@@ -65,6 +67,8 @@ class ScratchpadMemory {
   std::vector<ptrdiff_t> &readLogEntrySlotsOffsets();
   std::vector<ptrdiff_t> &readLeaderChangeSlotsOffsets();
   std::vector<ptrdiff_t> &writeLeaderChangeSlotsOffsets();
+  std::vector<ptrdiff_t> &readLogRecyclingSlotsOffsets();
+  ptrdiff_t logRecyclingResponseSlotOffset();
   ptrdiff_t writeSlotOffset();
   ptrdiff_t leaderRequestSlotOffset();
   ptrdiff_t leaderResponseSlotOffset();
@@ -81,6 +85,8 @@ class ScratchpadMemory {
   void setupReadLogEntrySlots();
   void setupReadLeaderChangeSlots();
   void setupWriteLeaderChangeSlots();
+  void setupReadLogRecyclingSlots();
+  void setupLogRecyclingResponseSlot();
   void setupWriteSlot();
   void setupLeaderRequestSlot();
   void setupLeaderResponseSlot();
@@ -101,6 +107,8 @@ class ScratchpadMemory {
   std::vector<uint8_t *> read_log_entry_slots;
   std::vector<uint8_t *> read_leader_change_slots;
   std::vector<uint8_t *> write_leader_change_slots;
+  std::vector<uint8_t *> read_log_recycling_slots;
+  uint8_t *log_recycling_response_slot;
   uint8_t *write_slot;
   uint8_t *leader_req_slot;
   uint8_t *leader_resp_slot;
@@ -113,6 +121,8 @@ class ScratchpadMemory {
   std::vector<ptrdiff_t> read_log_entry_slots_offsets;
   std::vector<ptrdiff_t> read_leader_change_slots_offsets;
   std::vector<ptrdiff_t> write_leader_change_slots_offsets;
+  std::vector<ptrdiff_t> read_log_recycling_slots_offsets;
+  ptrdiff_t log_recycling_response_slot_offset;
   ptrdiff_t write_slot_offset;
   ptrdiff_t leader_req_slot_offset;
   ptrdiff_t leader_resp_slot_offset;
