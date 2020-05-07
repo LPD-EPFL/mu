@@ -195,6 +195,10 @@ class Log {
     return header->free_bytes;
   }
 
+  inline bool spaceLeftCritical() {
+    return spaceLeft() < constants::CRITICAL_LOG_FREE_SPACE;
+  }
+
   inline void resetFUO() {
     header->first_undecided_offset = initial_fuo;
   }
