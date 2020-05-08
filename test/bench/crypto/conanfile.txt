@@ -1,0 +1,7 @@
+[requires]
+dory-memstore/0.0.1
+dory-crypto/0.0.1
+dory-shared/0.0.1
+
+[generators]
+cmake

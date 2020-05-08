@@ -4,7 +4,12 @@
 #include <cstring>
 #include <map>
 #include <memory>
+#include <queue>
+#include <shared_mutex>
 #include <vector>
+
+// #include <foonathan/memory/memory_pool.hpp>
+// #include <foonathan/memory/namespace_alias.hpp>
 
 #include "broadcastable.hpp"
 #include "consts.hpp"
@@ -26,6 +31,7 @@
  **/
 class MemorySlot {
  public:
+  // enum SlotType { BROADCAST, REPLAY, REPLAY_READ_TMP };
   /**
    * @param start: reference to the the entry
    **/
@@ -50,7 +56,25 @@ class MemorySlot {
    * @returns: a pointer to the signature
    **/
   volatile const uint8_t *signature() const {
-    throw std::runtime_error("Signatures are not supported yet");
+    return reinterpret_cast<const volatile uint8_t *>(
+        &buf[dory::neb::SLOT_SIGNATURE_OFFSET]);
+  }
+
+  /**
+   * @returns: bool indicating if the signature part is not equal to the
+   * default empty val
+   **/
+  bool has_signature() const {
+    uint8_t default_val = 0;
+
+    auto start = signature();
+
+    for (size_t i = 0; i < dory::crypto::SIGN_BYTES; i++) {
+      if (start[i] != default_val) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -66,10 +90,24 @@ class MemorySlot {
                 const_cast<uint8_t const *>(buf), dory::neb::MEMORY_SLOT_SIZE);
   }
 
-  bool same_content_as(const MemorySlot &entry) const {
+  inline void copy_content_to(const MemorySlot &entry) const {
+    std::memcpy(reinterpret_cast<void *>(entry.addr()),
+                const_cast<uint8_t const *>(buf),
+                dory::neb::SLOT_SIGN_DATA_SIZE);
+  }
+
+  inline void copy_signature_to(const MemorySlot &entry) const {
+    std::memcpy(
+        reinterpret_cast<void *>(entry.addr() +
+                                 dory::neb::SLOT_SIGNATURE_OFFSET),
+        const_cast<uint8_t const *>(buf) + dory::neb::SLOT_SIGNATURE_OFFSET,
+        dory::crypto::SIGN_BYTES);
+  }
+
+  bool has_same_data_content_as(const MemorySlot &entry) const {
     return 0 == std::memcmp(const_cast<uint8_t const *>(buf),
                             const_cast<uint8_t const *>(entry.buf),
-                            dory::neb::MEMORY_SLOT_SIZE);
+                            dory::neb::SLOT_SIGN_DATA_SIZE);
   }
 
   bool operator==(const MemorySlot &other) const { return buf == other.buf; }
@@ -105,7 +143,7 @@ class BroadcastBuffer {
    * @returns: the entry associated with the provided index
    * @thorws: std::out_of_range
    **/
-  std::unique_ptr<MemorySlot> slot(uint64_t index) const;
+  MemorySlot slot(uint64_t index) const;
 
   size_t write(uint64_t index, uint64_t k, dory::neb::Broadcastable &msg);
 
@@ -142,7 +180,7 @@ class ReplayBufferWriter {
    * @param proc_id: the process id
    * @param index: index of the entry
    **/
-  std::unique_ptr<MemorySlot> slot(int proc_id, uint64_t index) const;
+  MemorySlot slot(int proc_id, uint64_t index) const;
 
  private:
   volatile const uint8_t *const buf;
@@ -150,47 +188,46 @@ class ReplayBufferWriter {
   std::map<int, size_t> process_index;
 };
 
-/**
- * This buffer overlay is for reading gathered remote replay entries.
- *
- * The buffer space is split among all processes in the cluster. Additionally,
- * for every index there is a slot for every process to store the replayed
- * values.
- *
- * We don't support any direct write opertaions since the RNIC will write to
- * this buffer.
- **/
 class ReplayBufferReader {
  public:
   uint32_t lkey;
   /**
-   * @param addr: address of the buffer
-   * @param buf_size: the size of the buffer in bytes
+   * @param remote_ids: vector holding the remote ids
+   * @param addr: address to the begining of the buffer
+   * @param size: size of the buffer
    * @param lkey: local key for the memory region
-   * @param procs: a vector holding all process ids
    **/
-  ReplayBufferReader(uintptr_t addr, size_t buf_size, uint32_t lkey,
-                     std::vector<int> procs);
-
+  ReplayBufferReader(std::vector<int> remote_ids, uintptr_t addr,
+                     uint32_t lkey);
   /**
    * @param origin_id: id of the process who's value is replayed
    * @param replayer_id: id of the process who replayed the value
    * @param index: index of the entry
    **/
-  uint64_t get_byte_offset(int origin_id, int replayer_id,
-                           uint64_t index) const;
+  MemorySlot slot(int origin, int replayer, uint64_t index);
 
   /**
+   * Marks the slot corresponding to the provided arguments as free s.t. it
+   * can be reused. Also empties its contents.
    * @param origin_id: id of the process who's value is replayed
    * @param replayer_id: id of the process who replayed the value
    * @param index: index of the entry
    **/
-  std::unique_ptr<MemorySlot> slot(int origin_id, int replayer_id,
-                                   uint64_t index) const;
+  void free(int replayer, int origin, uint64_t index);
 
  private:
+  inline void empty(uint8_t *slot) {
+    std::memset(slot, 0, dory::neb::MEMORY_SLOT_SIZE);
+  }
+
   volatile const uint8_t *const buf;
-  uint64_t num_proc;
-  uint64_t num_entries_per_proc;
-  std::map<int, size_t> process_index;
+  // size_t buf_size;
+  std::queue<uint8_t *> free_slots;
+  std::shared_mutex queue_mux;
+  // replayer -> origin -> index
+  std::unordered_map<
+      int, std::unordered_map<
+               int, std::pair<std::shared_mutex,
+                              std::unordered_map<uint64_t, uint8_t *>>>>
+      raws;
 };

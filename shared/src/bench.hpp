@@ -11,14 +11,13 @@ namespace dory {
  * evaluation. It may be used in two different ways described below:
  *
  * Example use with explicit stop() call:
- *
- *  BenchTimer t("foo");
- *  t.start();
- *  ...
- *  t.stop();     # this will print out the resulting time in ns
- *
+ *  {
+ *    BenchTimer t("foo");
+ *    t.start();
+ *    ...
+ *    t.stop();     # this will print out the resulting time in ns
+ *  }
  * ----------
- *
  * Example use with implicit stop() call:
  *  {
  *    BenchTimer t("foo");
@@ -26,20 +25,35 @@ namespace dory {
  *    ...
  *    ...
  *  } # the destructor calls the stop() method, once it goes out of scope
+ * ----------
+ * Example usage with implicit start() call:
+ *  {
+ *    BenchTimer t("bar", true);
+ *    ...
+ *    ...
+ *  }
+ * ----------
  **/
 class BenchTimer {
  public:
   BenchTimer(std::string ucase)
       : logger(std_out_logger("BENCH")), ucase(ucase) {}
 
+  BenchTimer(std::string ucase, bool start_flag)
+      : logger(std_out_logger("BENCH")), ucase(ucase) {
+    if (start_flag) {
+      start();
+    }
+  }
+
   ~BenchTimer() { stop(); }
 
   /**
    * Sets the starting time point.
    **/
-  void start() {
+  inline void start() {
     SPDLOG_LOGGER_INFO(logger, "Starting benchmark for {}", ucase);
-    begin = std::chrono::high_resolution_clock::now();
+    begin = std::chrono::steady_clock::now();
   }
 
   /**
@@ -50,21 +64,18 @@ class BenchTimer {
   inline void stop() {
     if (completed) return;
 
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::steady_clock::now();
 
-    auto from = std::chrono::time_point_cast<std::chrono::nanoseconds>(begin);
-    auto to = std::chrono::time_point_cast<std::chrono::nanoseconds>(end);
+    auto diff =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin);
 
-    auto diff = to - from;
-    auto ns = std::chrono::duration<long, std::nano>(diff);
-
-    SPDLOG_LOGGER_INFO(logger, "{} took: {} ns", ucase, ns.count());
+    SPDLOG_LOGGER_INFO(logger, "{} took: {} ns", ucase, diff.count());
 
     completed = true;
   }
 
  private:
-  std::chrono::time_point<std::chrono::high_resolution_clock> begin;
+  std::chrono::time_point<std::chrono::steady_clock> begin;
   dory::logger logger;
   std::string ucase;
   volatile bool completed = false;

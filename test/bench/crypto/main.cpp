@@ -18,20 +18,22 @@ int main() {
 
   unsigned char sig[dory::crypto::SIGN_BYTES];
 
-  char msg[] = "HELLO WORLD";
-  unsigned long long msg_len = 12;
+  static constexpr unsigned long long len = 64;
+  char msg[len];
+
+  msg[0] = 'a';
 
   {
     dory::BenchTimer timer("sign", true);
-    dory::crypto::sign(sig, reinterpret_cast<unsigned char*>(msg), msg_len);
+    dory::crypto::sign(sig, reinterpret_cast<unsigned char*>(msg), len);
   }
 
   auto pk = dory::crypto::get_public_key("p1-pk");
 
-  {
+  for (int i = 0; i < 200000; i++) {
     dory::BenchTimer timer("verify", true);
     assert(dory::crypto::verify(const_cast<const unsigned char*>(sig),
-                                reinterpret_cast<unsigned char*>(msg), msg_len,
+                                reinterpret_cast<unsigned char*>(msg), len,
                                 pk.get()));
   }
 
