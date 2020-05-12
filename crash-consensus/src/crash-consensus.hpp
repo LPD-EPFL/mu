@@ -28,7 +28,7 @@ class Consensus {
   Consensus(int my_id, std::vector<int> &remote_ids);
   ~Consensus();
 
-  void commitHandler(std::function<void(uint8_t *buf, size_t len)> committer);
+  void commitHandler(std::function<void(bool leader, uint8_t *buf, size_t len)> committer);
 
   ProposeError propose(uint8_t *buf, size_t len);
   int potentialLeader();

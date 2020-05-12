@@ -264,7 +264,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
 
             ParsedSlot pslot(commit_iter.location());
             auto [buf, len] = pslot.payload();
-            commit(buf, len);
+            commit(true, buf, len);
           }
         }
       } else {
@@ -436,7 +436,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
 
               ParsedSlot pslot(commit_iter.location());
               auto [buf, len] = pslot.payload();
-              commit(buf, len);
+              commit(true, buf, len);
             }
           }
         }
@@ -520,7 +520,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
 
               ParsedSlot pslot(commit_iter.location());
               auto [buf, len] = pslot.payload();
-              commit(buf, len);
+              commit(true, buf, len);
             }
           }
         }

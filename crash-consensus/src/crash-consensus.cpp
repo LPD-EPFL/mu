@@ -8,7 +8,7 @@ Consensus::Consensus(int my_id, std::vector<int> &remote_ids)
 Consensus::~Consensus() {}
 
 void Consensus::commitHandler(
-    std::function<void(uint8_t *buf, size_t len)> committer) {
+    std::function<void(bool leader, uint8_t *buf, size_t len)> committer) {
   impl->commitHandler(committer);
 }
 

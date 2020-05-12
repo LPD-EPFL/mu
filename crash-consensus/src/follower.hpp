@@ -165,7 +165,7 @@ class Follower {
         // std::endl;
         // std::cout << std::endl;
 
-        commit(buf, len);
+        commit(false, buf, len);
 
         // Bookkeeping
         ctx->log.updateHeaderFirstUndecidedOffset(fuo);
@@ -248,7 +248,7 @@ class Follower {
     LiveIterator *commit_iter;
     std::unique_ptr<LogSlotReader> *lsr;
     ScratchpadMemory *scratchpad;
-    std::function<void(uint8_t*, size_t)> commit;
+    std::function<void(bool, uint8_t*, size_t)> commit;
 
     std::thread follower_thd;
 

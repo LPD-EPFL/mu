@@ -130,7 +130,7 @@ class RdmaConsensus {
 
   std::atomic<bool> am_I_leader;
 
-  std::function<void(uint8_t *, size_t)> commit;
+  std::function<void(bool, uint8_t *, size_t)> commit;
 
   Devices d;
   OpenDevice od;
