@@ -7,8 +7,14 @@ class HelloConan(ConanFile):
     #url = "TODO"
     description = "Shared sources"
     settings = "os", "compiler", "build_type", "arch"
-    options = {"shared": [True, False]}
-    default_options = {"shared": False}
+    options = {
+        "shared": [True, False],
+        "fPIC": [True, False]
+    }
+    default_options = {
+        "shared": False,
+        "fPIC": True
+    }
     generators = "cmake"
     exports_sources = "src/*"
 
@@ -23,6 +29,7 @@ class HelloConan(ConanFile):
     def package(self):
         self.copy("*.hpp", dst="include/dory/shared", src="src")
         self.copy("*.a", dst="lib", keep_path=False)
+        self.copy("*.so", dst="lib", keep_path=False)
 
     def package_info(self):
         self.cpp_info.libs = ["_shared"]

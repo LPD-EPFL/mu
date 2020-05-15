@@ -8,8 +8,24 @@ class DoryControlConan(ConanFile):
     description = "RDMA control over native ibverbs"
     topics = ("rdma", "ibverbs")
     settings = "os", "compiler", "build_type", "arch"
-    options = {"shared": [True, False], "log_level": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR", "CRITICAL", "OFF"]}
-    default_options = {"shared": False, "log_level": "INFO"}
+    options = {
+        "shared": [True, False],
+        "fPIC": [True, False],
+        "log_level": [
+            "TRACE",
+            "DEBUG",
+            "INFO",
+            "WARN",
+            "ERROR",
+            "CRITICAL",
+            "OFF"
+        ]
+    }
+    default_options = {
+        "shared": False,
+        "fPIC": True,
+        "log_level": "INFO"
+    }
     generators = "cmake"
     exports_sources = "src/*"
 
@@ -30,6 +46,7 @@ class DoryControlConan(ConanFile):
     def package(self):
         self.copy("*.hpp", dst="include/dory/ctrl", src="src")
         self.copy("*.a", dst="lib", keep_path=False)
+        self.copy("*.so", dst="lib", keep_path=False)
 
     def package_info(self):
         self.cpp_info.libs = ["ctrl"]

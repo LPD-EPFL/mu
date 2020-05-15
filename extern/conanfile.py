@@ -5,6 +5,10 @@ class HelloConan(ConanFile):
     version = "0.0.1"
     license = "MIT"
     description = "External header files"
+    options = {
+        "shared": [True, False]
+    }
+    default_options = {"shared": False}
     exports_sources = "src/*"
 
     def package(self):

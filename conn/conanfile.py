@@ -7,9 +7,23 @@ class DoryConnectionConan(ConanFile):
     #url = "TODO"
     description = "RDMA connection abstractions"
     settings = "os", "compiler", "build_type", "arch"
-    options = {"shared": [True, False], "log_level": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR", "CRITICAL", "OFF"]}
-    default_options = {"shared": False, "log_level": "INFO",
-        "dory-ctrl:log_level": "OFF"}
+    options = {
+        "shared": [True, False],
+        "fPIC": [True, False], 
+        "log_level": ["TRACE",
+                      "DEBUG",
+                      "INFO",
+                      "WARN",
+                      "ERROR",
+                      "CRITICAL",
+                      "OFF"]
+    }
+    default_options = {
+        "shared": False,
+        "fPIC": True, 
+        "log_level": "INFO",
+        "dory-ctrl:log_level": "OFF"
+    }
     generators = "cmake"
     exports_sources = "src/*"
 
@@ -33,6 +47,7 @@ class DoryConnectionConan(ConanFile):
     def package(self):
         self.copy("*.hpp", dst="include/dory/conn", src="src")
         self.copy("*.a", dst="lib", keep_path=False)
+        self.copy("*.so", dst="lib", keep_path=False)
 
     def package_info(self):
         self.cpp_info.libs = ["conn"]

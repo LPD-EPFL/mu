@@ -7,13 +7,29 @@ class DoryCrashConensusConan(ConanFile):
     #url = "TODO"
     description = "RDMA crash consensus"
     settings = "os", "compiler", "build_type", "arch"
-    options = {"shared": [True, False], "log_level": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR", "CRITICAL", "OFF"]}
-    default_options = {"shared": False, "log_level": "INFO",
+    options = {
+        "shared": [True, False],
+        "fPIC": [True, False],
+        "log_level": [
+            "TRACE",
+            "DEBUG",
+            "INFO",
+            "WARN",
+            "ERROR",
+            "CRITICAL",
+            "OFF"
+        ]
+    }
+    default_options = {
+        "shared": False,
+        "fPIC": True,
+        "log_level": "INFO",
+
         "dory-ctrl:log_level": "INFO",
-        "dory-connection:log_level": "INFO"}
+        "dory-connection:log_level": "INFO"
+    }
     generators = "cmake"
     exports_sources = "src/*"
-
 
     def _configure_cmake(self):
         cmake = CMake(self)
@@ -34,12 +50,13 @@ class DoryCrashConensusConan(ConanFile):
 
     def package(self):
         self.copy("crash-consensus.hpp", dst="include/dory", src="src")
+        self.copy("crash-consensus.h", dst="include/dory", src="src")
         self.copy("*.a", dst="lib", src="lib", keep_path=False)
         self.copy("*.so", dst="lib", src="lib", keep_path=False)
 
     def imports(self):
         self.copy("*.a", src="lib", dst="deps", keep_path=False)
-        self.copy("*.so", src="lib", dst="deps", keep_path=False)
+        # self.copy("*.so", src="lib", dst="deps", keep_path=False)
 
     def package_info(self):
         self.cpp_info.libs = ["dorycrashconsensus"]
