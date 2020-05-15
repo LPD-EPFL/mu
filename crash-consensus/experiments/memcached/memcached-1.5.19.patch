@@ -1,0 +1,428 @@
+Common subdirectories: a/.deps and b/.deps
+diff -u a/memcached.c b/memcached.c
+--- a/memcached.c	2019-10-01 04:33:41.000000000 +0200
++++ b/memcached.c	2020-05-14 15:24:44.760770000 +0200
+@@ -53,6 +53,52 @@
+ #include <sysexits.h>
+ #include <stddef.h>
+
++/*
++* Added by lovitana
++*/
++#include <signal.h>
++#include "../../exported/include/dory/crash-consensus.h"
++#include "../../exported/include/timers.h"
++const int MEDIAN_SAMPLE_SIZE = 1000000;
++int port_number = 11211;
++
++consensus_t consensus;
++TIMESTAMP_T *before_timestamps = NULL;
++TIMESTAMP_T *after_timestamps = NULL;
++uint64_t *elapsed_times = NULL;
++uint64_t timestamp_idx = 0;
++
++static void dump_data() {
++    __sync_synchronize();
++
++    // Skip the first measurement, because it is too slow.
++    before_timestamps++;
++    after_timestamps++;
++    int SIZE = MEDIAN_SAMPLE_SIZE - 1;
++
++    for (int i = 0; i < SIZE; i++) {
++      elapsed_times[i] = ELAPSED_NSEC(before_timestamps[i], after_timestamps[i]);
++    }
++
++    char hostname[1024];
++    gethostname(hostname, 1024);
++    char name[1024];
++    snprintf(name, 1024, "dump-%s.txt", hostname);
++
++    FILE *fptr = fopen(name, "w");
++    if (fptr == NULL) {
++        fprintf(stderr, "Could not open file\n");
++        exit(EXIT_FAILURE);
++    }
++
++    for (int i = 0; i < SIZE; i++) {
++        fprintf(fptr, "%0.3f us\n", (double)elapsed_times[i] / 1000.0);
++    }
++    fprintf(fptr, "\n");
++    fclose(fptr);
++}
++
++
+ #ifdef HAVE_GETOPT_LONG
+ #include <getopt.h>
+ #endif
+@@ -77,6 +123,19 @@
+ #endif
+
+ /*
++ *ADDED BY lovitana
++ */
++
++void launch_dummy_thread(void);
++void drain_dummy_client(int fd);
++void *dummy_client(void *arg);
++void committer(bool leader, uint8_t *buf, size_t len, void *ctx);
++
++/*
++ * END
++ */
++
++/*
+  * forward declarations
+  */
+ static void drive_machine(conn *c);
+@@ -3012,6 +3071,42 @@
+     item *new_it = NULL;
+     uint32_t flags;
+
++
++    /*
++    *ADDED BY lovitana
++    */
++    // size_t q_size = it->nbytes + c->last_cmd_size + 2;
++    // char* query = calloc(q_size + 1, sizeof(char));
++    // char *tmp_ptr = query;
++    // tmp_ptr += sprintf(query,"%s\r\n",c->last_cmd);
++    // memcpy(tmp_ptr,ITEM_data(it),it->nbytes);
++    // query[q_size] = '\0';
++    // free(c->last_cmd);
++    // free(query);
++
++    char query[2048];
++    size_t q_size = it->nbytes + c->last_cmd_size + 2;
++
++    if (q_size > 2048) {
++        fprintf(stderr, "Query size exceeded\n");
++        exit(EXIT_FAILURE);
++    }
++
++    memcpy(query, c->last_cmd, c->last_cmd_size - 1);
++    query[c->last_cmd_size - 1] = '\r';
++    query[c->last_cmd_size] = '\n';
++    memcpy(query + c->last_cmd_size + 1, ITEM_data(it), it->nbytes);
++    query[q_size] = '\0';
++
++    GET_TIMESTAMP(before_timestamps[timestamp_idx]);
++    consensus_propose(consensus, (uint8_t*)query, q_size);
++    GET_TIMESTAMP(after_timestamps[timestamp_idx]);
++    timestamp_idx++;
++
++    /*
++    *END ADDITION
++    */
++
+     if (old_it != NULL && comm == NREAD_ADD) {
+         /* add only adds a nonexistent item, but promote to head of LRU */
+         do_item_update(old_it);
+@@ -5755,6 +5850,23 @@
+ #endif
+ static void process_command(conn *c, char *command) {
+
++    /*
++    * ADDED by lovitana
++    */
++
++    // fprintf(stderr,"\ncopy cmd\n");
++    c->last_cmd_size = strlen(command)+1;
++    if (c->last_cmd_size > 2048) {
++        fprintf(stderr, "Query size exceeded\n");
++        exit(EXIT_FAILURE);
++    }
++
++    memcpy(c->last_cmd, command, c->last_cmd_size);
++    // fprintf(stderr,"\ncopy cmd\n");
++    /*
++    *END
++    */
++
+     token_t tokens[MAX_TOKENS];
+     size_t ntokens;
+     int comm;
+@@ -7805,6 +7917,7 @@
+
+ static void sig_usrhandler(const int sig) {
+     printf("Graceful shutdown signal handled: %s.\n", strsignal(sig));
++    dump_data();
+     stop_main_loop = true;
+ }
+
+@@ -8238,7 +8351,188 @@
+     return reuse_mmap;
+ }
+
++
++/*
++ *ADDED BY lovitana
++ */
++int  dummy_client_sockfd = -1;
++// pthread_mutex_t dummy_client_mutex = PTHREAD_MUTEX_INITIALIZER;
++// pthread_cond_t dummy_client_cond = PTHREAD_COND_INITIALIZER;
++
++void drain_dummy_client(int fd) {
++    char tmp[1024];
++    // printf("Reading pump started\n");
++
++    while (true) {
++        int ret = read(fd, tmp, 1024);
++        if (ret == -1) {
++            perror("read");
++        }
++
++        // tmp[ret] = 0;
++        // printf("Read: %s", tmp);
++    }
++}
++
++void *dummy_client(void *arg) {
++    (void) arg;
++
++    fprintf(stderr, "Waiting 15s for memcached to start...\n");
++    sleep(15);
++    fprintf(stderr, "We hope that memcached started. We spawn the dummy client now...\n");
++    // Connect using tcp
++    int sockfd;
++    struct sockaddr_in servaddr;
++
++    // socket create and varification
++    sockfd = socket(AF_INET, SOCK_STREAM, 0);
++    if (sockfd == -1) {
++        fprintf(stderr,"socket creation failed...\n");
++        exit(0);
++    }
++    else
++        fprintf(stderr,"Socket successfully created..\n");
++    bzero(&servaddr, sizeof(servaddr));
++
++    // assign IP, PORT
++    servaddr.sin_family = AF_INET;
++    servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
++    servaddr.sin_port = htons(port_number);
++
++    // connect the client socket to server socket
++    if (connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) != 0) {
++        fprintf(stderr,"connection with the server failed...\n");
++        exit(0);
++    }
++    else
++        fprintf(stderr,"connected to the server, on port %d\n", (int) port_number);
++
++    // We're going to manipulate done and use the cond, so we need the mutex
++    // pthread_mutex_lock(&dummy_client_mutex);
++
++    // Increase the count of threads that have finished their work.
++    dummy_client_sockfd = sockfd;
++    fprintf(stderr,"[thread] dummy_client_sockfd is now %d.\n", dummy_client_sockfd);
++
++    __sync_synchronize();
++
++    // wait up the main thread (if it is sleeping) to test the value of done
++    // pthread_cond_signal(&dummy_client_cond);
++    // pthread_mutex_unlock(&dummy_client_mutex);
++
++    drain_dummy_client(sockfd);
++
++    return NULL;
++}
++
++void launch_dummy_thread() {
++    // Thread id
++    pthread_t threadId;
++
++    // Create a thread that will funtion threadFunc()
++    int err = pthread_create(&threadId, NULL, &dummy_client, NULL);
++
++    // Check if thread is created sucessfuly
++    if (err) {
++        fprintf(stderr, "Thread creation failed : %s\n", strerror(err));
++    }
++
++    err = pthread_detach(threadId);
++    if (err) {
++        fprintf(stderr, "Failed to detach Thread : %s\n", strerror(err));
++    }
++}
++
++void committer(bool leader, uint8_t *buf, size_t len, void *ctx) {
++    if (leader) {
++        return;
++    }
++
++    int fd = *(int *)ctx;
++
++    len--;
++
++    // fprintf(stderr, "Write started (%d)\n[", data_len);
++    // for (int i = 0; i < data_len; i++) {
++    //     if (buf[i] == '\n') {
++    //         fprintf(stderr, "\\n");
++    //     } else if (buf[i] == '\r') {
++    //         fprintf(stderr, "\\r");
++    //     } else {
++    //         fprintf(stderr, "%c", buf[i]);
++    //     }
++    // }
++    // fprintf(stderr, "]\n");
++
++    ssize_t bytes_written = write(fd, buf, len);
++    if (bytes_written == -1) {
++        perror("write");
++    }
++
++    while ((size_t)bytes_written < len) {
++        ssize_t ret = write(fd, buf + bytes_written, len - bytes_written);
++        if (ret == -1) {
++            perror("write");
++        }
++
++        bytes_written += ret;
++    }
++    // fprintf(stderr, "Write ended\n");
++}
++
++/*
++* END
++*/
++
+ int main (int argc, char **argv) {
++    // Added by SaGGy00
++    TIMESTAMP_INIT;
++
++    before_timestamps = malloc((MEDIAN_SAMPLE_SIZE+1) * sizeof(*before_timestamps));
++    assert(before_timestamps);
++    memset(before_timestamps, 0, (MEDIAN_SAMPLE_SIZE+1) * sizeof(*before_timestamps));
++
++    after_timestamps = malloc((MEDIAN_SAMPLE_SIZE+1) * sizeof(*after_timestamps));
++    assert(after_timestamps);
++    memset(after_timestamps, 0, (MEDIAN_SAMPLE_SIZE+1) * sizeof(*after_timestamps));
++
++    elapsed_times = malloc(MEDIAN_SAMPLE_SIZE * sizeof(*elapsed_times));
++    assert(elapsed_times);
++
++    __sync_synchronize();
++
++    printf("PID :: %d\n", (int)getpid());
++
++    /*
++     * ADDED BY lovitana
++     */
++    int my_id = atoi(getenv("SID"));
++
++    int remote_ids[1024];
++    int length=0;
++    char ids[1024];
++    strcpy(ids, getenv("IDS"));
++    char *aux;
++    aux = strtok(ids, ",");
++    while(aux) {
++        int id = atoi(aux);
++        if (id != my_id) {
++            remote_ids[length]=atoi(aux);
++            length++;
++        }
++        aux=strtok(NULL, ",");
++    }
++
++
++    consensus = new_consensus(my_id, remote_ids, length);
++    consensus_attach_commit_handler(consensus, committer, &dummy_client_sockfd);
++    if (my_id != 1) launch_dummy_thread();
++    __sync_synchronize();
++
++    /*
++    * END
++    */
++
+     int c;
+     bool lock_memory = false;
+     bool do_daemonize = false;
+@@ -8552,6 +8846,7 @@
+             break;
+         case 'p':
+             settings.port = atoi(optarg);
++            port_number = settings.port;
+             tcp_specified = true;
+             break;
+         case 's':
+diff -u a/memcached.h b/memcached.h
+--- a/memcached.h	2019-10-01 04:33:41.000000000 +0200
++++ b/memcached.h	2020-05-14 15:24:47.928712000 +0200
+@@ -717,6 +717,12 @@
+     ssize_t (*read)(conn  *c, void *buf, size_t count);
+     ssize_t (*sendmsg)(conn *c, struct msghdr *msg, int flags);
+     ssize_t (*write)(conn *c, void *buf, size_t count);
++
++    /*
++     * ADDED BY lovitana
++     */
++    char last_cmd[2048]; //contains the last commands buffer
++    size_t last_cmd_size;
+ };
+
+ /* array of conn structures, indexed by file descriptor */
+diff -u a/thread.c b/thread.c
+--- a/thread.c	2019-10-01 04:33:41.000000000 +0200
++++ b/thread.c	2020-05-14 15:24:38.020614000 +0200
+@@ -21,6 +21,18 @@
+ #include <openssl/ssl.h>
+ #endif
+
++/*
++* Added by lovitana
++*/
++#include "../../exported/include/dory/crash-consensus.h"
++#include "../../exported/include/timers.h"
++
++extern consensus_t consensus;
++extern TIMESTAMP_T *before_timestamps;
++extern TIMESTAMP_T *after_timestamps;
++extern uint64_t timestamp_idx;
++extern const int MEDIAN_SAMPLE_SIZE;
++
+ #define ITEMS_PER_ALLOC 64
+
+ /* An item in the connection queue. */
+@@ -652,11 +664,35 @@
+  * lazy-expiring as needed.
+  */
+ item *item_get(const char *key, const size_t nkey, conn *c, const bool do_update) {
++    // fprintf(stderr, "ITEM GET\n");
+     item *it;
+     uint32_t hv;
+     hv = hash(key, nkey);
+     item_lock(hv);
++
++    /*
++     *ADDED BY lovitana
++     */
++    char query[2048] = {'g', 'e', 't', ' '};
++    if (4 + nkey + 4 > 2048) {
++        fprintf(stderr, "Query size exceeded\n");
++        exit(EXIT_FAILURE);
++    }
++
++    char suffix[] = {' ', '\r', '\n', '\0'};
++    memcpy(query + 4, key, nkey);
++    memcpy(query + 4 + nkey,  suffix, 3);
++
++    GET_TIMESTAMP(before_timestamps[timestamp_idx]);
++    consensus_propose(consensus, (uint8_t*)query, 4 + nkey + 4);
++    GET_TIMESTAMP(after_timestamps[timestamp_idx]);
++    timestamp_idx++;
++    /*
++     *END ADDITION
++     */
++
+     it = do_item_get(key, nkey, hv, c, do_update);
++
+     item_unlock(hv);
+     return it;
+ }
+@@ -924,4 +960,3 @@
+     wait_for_thread_registration(nthreads);
+     pthread_mutex_unlock(&init_lock);
+ }
+-
