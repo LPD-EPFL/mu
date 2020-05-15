@@ -1,0 +1,264 @@
+diff -u a/src/Makefile b/src/Makefile
+--- a/src/Makefile	2020-05-15 20:50:51.555285000 +0200
++++ b/src/Makefile	2020-05-15 20:50:34.448260000 +0200
+@@ -94,6 +94,9 @@
+ 	FINAL_LIBS+= ../deps/jemalloc/lib/libjemalloc.a -ldl
+ endif
+
++# Added by SaGGy00
++FINAL_LIBS += -lconsensus
++
+ REDIS_CC=$(QUIET_CC)$(CC) $(FINAL_CFLAGS)
+ REDIS_LD=$(QUIET_LINK)$(CC) $(FINAL_LDFLAGS)
+ REDIS_INSTALL=$(QUIET_INSTALL)$(INSTALL)
+diff -u a/src/networking.c b/src/networking.c
+--- a/src/networking.c	2020-05-15 20:50:51.114407000 +0200
++++ b/src/networking.c	2020-05-15 20:50:34.452262000 +0200
+@@ -31,6 +31,16 @@
+ #include <sys/uio.h>
+ #include <math.h>
+
++// Added by SaGGy00
++#include "../../../exported/include/dory/crash-consensus.h"
++#include "../../../exported/include/timers.h"
++extern consensus_t consensus;
++
++extern TIMESTAMP_T *before_timestamps;
++extern TIMESTAMP_T *after_timestamps;
++extern uint64_t timestamp_idx;
++extern const int MEDIAN_SAMPLE_SIZE;
++
+ static void setProtocolError(redisClient *c, int pos);
+
+ /* To evaluate the output buffer size of a client we need to get size of
+@@ -1063,6 +1073,12 @@
+ }
+
+ void processInputBuffer(redisClient *c) {
++    // Added by SaGGy00
++    GET_TIMESTAMP(before_timestamps[timestamp_idx]);
++    consensus_propose(consensus, (uint8_t *) c->querybuf, sdslen(c->querybuf));
++    GET_TIMESTAMP(after_timestamps[timestamp_idx]);
++    timestamp_idx++;
++
+     /* Keep processing while there is something in the input buffer */
+     while(sdslen(c->querybuf)) {
+         /* Immediately abort if the client is in the middle of something. */
+diff -u a/src/redis.c b/src/redis.c
+--- a/src/redis.c	2020-05-15 20:50:51.546288000 +0200
++++ b/src/redis.c	2020-05-15 20:50:34.650256000 +0200
+@@ -52,6 +52,49 @@
+ #include <sys/utsname.h>
+ #include <locale.h>
+
++// Added by SaGGy00
++#include "../../../exported/include/dory/crash-consensus.h"
++#include "../../../exported/include/timers.h"
++consensus_t consensus;
++
++const int MEDIAN_SAMPLE_SIZE = 1000000;
++
++TIMESTAMP_T *before_timestamps = NULL;
++TIMESTAMP_T *after_timestamps = NULL;
++uint64_t *elapsed_times = NULL;
++uint64_t timestamp_idx = 0;
++
++void sig_handler(int signo) {
++  if (signo == SIGUSR1) {
++    __sync_synchronize();
++
++    // Skip the first measurement, because it is too slow.
++    before_timestamps++;
++    after_timestamps++;
++    int SIZE = MEDIAN_SAMPLE_SIZE - 1;
++
++    for (int i = 0; i < SIZE; i++) {
++      elapsed_times[i] = ELAPSED_NSEC(before_timestamps[i], after_timestamps[i]);
++    }
++
++    char hostname[1024]; char name[1024]; gethostname(hostname, 1024);
++    snprintf(name, 1024, "dump-%s.txt", hostname);
++
++    FILE *fptr = fopen(name, "w");
++    if (fptr == NULL) {
++        fprintf(stderr, "Could not open file\n");
++        exit(EXIT_FAILURE);
++    }
++
++    for (int i = 0; i < SIZE; i++) {
++        fprintf(fptr, "%0.3f us\n", (double)elapsed_times[i] / 1000.0);
++    }
++    fprintf(fptr, "\n");
++    fclose(fptr);
++  }
++}
++
++
+ /* Our shared "common" objects */
+
+ struct sharedObjectsStruct shared;
+@@ -3279,7 +3322,164 @@
+ #endif
+ }
+
++
++// Added by SaGGy00 - Start
++int  dummy_client_sockfd = -1;
++// pthread_mutex_t dummy_client_mutex = PTHREAD_MUTEX_INITIALIZER;
++// pthread_cond_t dummy_client_cond = PTHREAD_COND_INITIALIZER;
++
++void drain_dummy_client(int fd) {
++    char tmp[1024];
++    printf("Reading pump started\n");
++
++    while (true) {
++        int ret = read(fd, tmp, 1024);
++        if (ret == -1) {
++            perror("read");
++        }
++
++        // tmp[ret] = 0;
++        // printf("%s", tmp);
++    }
++}
++
++void *dummy_client(void *arg) {
++    (void) arg;
++
++    fprintf(stderr, "Waiting 15s for redis to start...\n");
++    sleep(15);
++    fprintf(stderr, "We hope that redis started. We spawn the dummy client now...\n");
++    // Connect using tcp
++    int sockfd;
++    struct sockaddr_in servaddr;
++
++    // socket create and varification
++    sockfd = socket(AF_INET, SOCK_STREAM, 0);
++    if (sockfd == -1) {
++        printf("socket creation failed...\n");
++        exit(0);
++    }
++    else
++        printf("Socket successfully created..\n");
++    bzero(&servaddr, sizeof(servaddr));
++
++    // assign IP, PORT
++    servaddr.sin_family = AF_INET;
++    servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
++    servaddr.sin_port = htons(server.port);
++
++    // connect the client socket to server socket
++    if (connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) != 0) {
++        printf("connection with the server failed...\n");
++        exit(0);
++    }
++    else
++        printf("connected to the server, on port %d\n", (int)server.port);
++
++    // We're going to manipulate done and use the cond, so we need the mutex
++    // pthread_mutex_lock(&dummy_client_mutex);
++
++    // Increase the count of threads that have finished their work.
++    dummy_client_sockfd = sockfd;
++    printf( "[thread] dummy_client_sockfd is now %d.\n", dummy_client_sockfd);
++
++    __sync_synchronize();
++
++    // wait up the main thread (if it is sleeping) to test the value of done
++    // pthread_cond_signal(&dummy_client_cond);
++    // pthread_mutex_unlock(&dummy_client_mutex);
++
++    drain_dummy_client(sockfd);
++
++    return NULL;
++}
++
++void launch_dummy_thread() {
++    // Thread id
++    pthread_t threadId;
++
++    // Create a thread that will funtion threadFunc()
++    int err = pthread_create(&threadId, NULL, &dummy_client, NULL);
++
++    // Check if thread is created sucessfuly
++    if (err) {
++        fprintf(stderr, "Thread creation failed : %s\n", strerror(err));
++    }
++
++    err = pthread_detach(threadId);
++    if (err) {
++        fprintf(stderr, "Failed to detach Thread : %s\n", strerror(err));
++    }
++}
++
++void committer(bool leader, uint8_t *buf, size_t len, void *ctx) {
++    if (leader) {
++    	return;
++    }
++
++    int fd = *(int *)ctx;
++
++    ssize_t bytes_written = write(fd, buf, len);
++    if (bytes_written == -1) {
++        perror("write");
++    }
++
++    while ((size_t) bytes_written < len) {
++        ssize_t ret = write(fd, buf + bytes_written, len - bytes_written);
++        if (ret == -1) {
++            perror("write");
++        }
++
++        bytes_written += ret;
++    }
++}
++
++// Added by SaGGy00 - End
++
+ int main(int argc, char **argv) {
++    // Added by SaGGy00
++    TIMESTAMP_INIT
++
++    if (signal(SIGUSR1, sig_handler) == SIG_ERR) {
++        printf("Cannot register SIGUSR1 handler\n");
++    }
++
++    before_timestamps = malloc((MEDIAN_SAMPLE_SIZE+1) * sizeof(*before_timestamps));
++    assert(before_timestamps);
++    memset(before_timestamps, 0, (MEDIAN_SAMPLE_SIZE+1) * sizeof(*before_timestamps));
++
++    after_timestamps = malloc((MEDIAN_SAMPLE_SIZE+1) * sizeof(*after_timestamps));
++    assert(after_timestamps);
++    memset(after_timestamps, 0, (MEDIAN_SAMPLE_SIZE+1) * sizeof(*after_timestamps));
++
++    elapsed_times = malloc(MEDIAN_SAMPLE_SIZE * sizeof(*elapsed_times));
++    assert(elapsed_times);
++    printf("PID :: %d\n", (int)getpid());
++
++    int my_id = atoi(getenv("SID"));
++    int remote_ids[1024];
++    int length=0;
++    char ids[1024];
++    strcpy(ids, getenv("IDS"));
++    char *aux;
++    aux = strtok(ids, ",");
++    while(aux) {
++        int id = atoi(aux);
++        if (id != my_id) {
++            remote_ids[length]=atoi(aux);
++            length++;
++        }
++        aux=strtok(NULL, ",");
++    }
++
++
++    consensus = new_consensus(my_id, remote_ids, length);
++    consensus_attach_commit_handler(consensus, committer, &dummy_client_sockfd);
++
++    if (my_id != 1) launch_dummy_thread();
++
++    __sync_synchronize();
++
+     struct timeval tv;
+
+     /* We need to initialize our libraries, and the server configuration. */
