@@ -8,6 +8,10 @@ if sys.version_info[0] < 3:
 import subprocess
 import os
 
+# Change to the directory of this script
+current_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(current_dir)
+
 make_list = subprocess.check_output(['make', 'list'])
 make_list = make_list.decode('utf-8').split()
 make_list = [x.strip() for x in filter(lambda x: not x.endswith('mangled'), make_list)]
@@ -58,7 +62,6 @@ if isinstance(results.TARGET, str):
 else:
     targets = list(results.TARGET)
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
 if compiler == 'gcc':
     CONAN_PROFILE = os.path.join(current_dir, 'conan-profiles',
                                  'gcc-release.profile')
