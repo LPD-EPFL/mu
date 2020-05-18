@@ -101,7 +101,8 @@ class RdmaConsensus {
   void spawn_follower();
   void run();
 
-  inline int ret_error(std::unique_lock<std::mutex> &lock, ProposeError error, bool ask_connection_reset = false) {
+  inline int ret_error(std::unique_lock<std::mutex> &lock, ProposeError error,
+                       bool ask_connection_reset = false) {
     became_leader = true;
 
     if (ask_connection_reset) {
@@ -117,6 +118,13 @@ class RdmaConsensus {
   }
 
   inline int ret_no_error() { return 0; }
+
+ public:
+  std::thread handover_thd;
+  std::atomic<bool> handover;
+  uint8_t *handover_buf;
+  size_t handover_buf_len;
+  int handover_ret;
 
  private:
   int my_id;

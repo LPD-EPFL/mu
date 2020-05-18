@@ -77,6 +77,22 @@ class Log {
           space{remaining_space},
           len{0} {}
 
+    inline void fast_store(uint64_t const x, uint64_t const y, uint8_t* buf,
+                           size_t buf_len) {
+      auto temp = start;
+
+      *reinterpret_cast<uint64_t*>(start) = x;
+      start += sizeof(x);
+
+      *reinterpret_cast<uint64_t*>(start) = y;
+      start += sizeof(y);
+
+      memcpy(start, buf, buf_len);
+      start += buf_len;
+
+      len += start - temp;
+    }
+
     inline void store_uint64(uint64_t const& x) {
       if (len + sizeof(x) > space) {
         throw std::runtime_error("Log ran out of space. Entry cannot fit.");
@@ -191,17 +207,13 @@ class Log {
     }
   }
 
-  inline size_t spaceLeft() {
-    return header->free_bytes;
-  }
+  inline size_t spaceLeft() { return header->free_bytes; }
 
   inline bool spaceLeftCritical() {
     return spaceLeft() < constants::CRITICAL_LOG_FREE_SPACE;
   }
 
-  inline void resetFUO() {
-    header->first_undecided_offset = initial_fuo;
-  }
+  inline void resetFUO() { header->first_undecided_offset = initial_fuo; }
 
   inline void bzero() {
     memset(headerPtr() + initial_fuo, 0, initial_free_bytes);
@@ -259,6 +271,14 @@ class Log {
 class Slot {
  public:
   Slot(Log& log) : log{log}, seq{0} { entry = log.newEntry(); }
+
+  Slot(Log& log, uint64_t proposal_nr, uint64_t fuo, uint8_t* buf,
+       size_t buf_len)
+      : log{log} {
+    entry = log.newEntry();
+    entry.fast_store(proposal_nr, fuo, buf, buf_len);
+    log.finalizeEntry(entry);
+  }
 
   inline void storeAcceptedProposal(uint64_t proposal) {
     check_sequence(0);

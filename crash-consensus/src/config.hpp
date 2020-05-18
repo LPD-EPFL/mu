@@ -9,13 +9,15 @@ static constexpr bool pinThreads = true;
 // In hyperthreaded CPUs, numactl first lists the non-hyperthreaded cores
 // and then the hyperthreaded ones.
 
-static constexpr int consensusThreadCoreID = 0;
-static constexpr int switcherThreadCoreID = 2;
-static constexpr int heartbeatThreadCoreID = 4;
-static constexpr int followerThreadCoreID = 6;
-static constexpr int fileWatcherThreadCoreID = 8;
+static constexpr int handoverThreadCoreID = 0;
+static constexpr int consensusThreadCoreID = 2;
+static constexpr int switcherThreadCoreID = 4;
+static constexpr int heartbeatThreadCoreID = 6;
+static constexpr int followerThreadCoreID = 8;
+static constexpr int fileWatcherThreadCoreID = 10;
 
 static constexpr bool nameThreads = true;
+static const char handoverThreadName[] = "thd_handover";
 static const char consensusThreadName[] = "thd_consensus";
 static const char switcherThreadName[] = "thd_switcher";
 static const char heartbeatThreadName[] = "thd_heartbeat";

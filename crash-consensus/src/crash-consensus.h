@@ -4,9 +4,9 @@
 #include <cstdint>
 extern "C" {
 #else
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdbool.h>
 #endif
 
 typedef enum {
@@ -35,6 +35,12 @@ void free_consensus(consensus_t c);
 
 void consensus_attach_commit_handler(consensus_t c, committer_t f,
                                      void *committer_ctx);
+
+void consensus_spawn_thread(consensus_t c);
+
+ConsensusProposeError consensus_propose_thread(consensus_t c, uint8_t *buf,
+                                               size_t len);
+
 ConsensusProposeError consensus_propose(consensus_t c, uint8_t *buf,
                                         size_t len);
 int consensus_potential_leader(consensus_t c);
