@@ -15,4 +15,4 @@ class HelloConan(ConanFile):
         self.copy("*.hpp", dst="include/dory/extern", src="src")
 
     def package_info(self):
-        self.cpp_info.system_libs = ["memcached", "ibverbs"]
+        self.cpp_info.system_libs = ["ibverbs", "memcached"]
