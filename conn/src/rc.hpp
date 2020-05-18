@@ -139,6 +139,17 @@ class ReliableConnection {
  private:
   bool post_send(ibv_send_wr &wr);
 
+  static void wr_deleter(struct ibv_send_wr *wr) { free(wr); }
+
+  int roundUp(int numToRound, int multiple) {
+    if (multiple == 0) return numToRound;
+
+    int remainder = numToRound % multiple;
+    if (remainder == 0) return numToRound;
+
+    return numToRound + multiple - remainder;
+  }
+
   ControlBlock &cb;
   struct ibv_pd *pd;
   struct ibv_qp_init_attr create_attr;
@@ -147,9 +158,8 @@ class ReliableConnection {
   ControlBlock::MemoryRegion mr;
   RemoteConnection rconn;
   ControlBlock::MemoryRights init_rights;
+  deleted_unique_ptr<struct ibv_send_wr> wr_cached;
 
-  struct ibv_sge sg_cached[1];
-  struct ibv_send_wr wr_cached;
   LOGGER_DECL(logger);
 };
 }  // namespace dory

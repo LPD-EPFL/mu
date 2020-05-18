@@ -206,18 +206,24 @@ void ReliableConnection::connect(RemoteConnection &rc) {
 
   rconn = rc;
 
-  memset(sg_cached, 0, sizeof(sg_cached));
-  memset(&wr_cached, 0, sizeof(wr_cached));
-
   // This has to happen here, because when the object is copied, the pointer
   // breaks!
-  wr_cached.sg_list = sg_cached;
+  struct ibv_send_wr *wr_ = (ibv_send_wr *)aligned_alloc(
+      64, roundUp(sizeof(ibv_send_wr), 64) + sizeof(ibv_sge));
+  struct ibv_sge *sg_ =
+      (ibv_sge *)(((char *)wr_) + roundUp(sizeof(ibv_send_wr), 64));
 
-  wr_cached.num_sge = 1;
-  wr_cached.send_flags |= IBV_SEND_SIGNALED;
+  memset(sg_, 0, sizeof(*sg_));
+  memset(wr_, 0, sizeof(*wr_));
 
-  sg_cached[0].lkey = mr.lkey;
-  wr_cached.wr.rdma.rkey = rconn.rci.rkey;
+  wr_->sg_list = sg_;
+  wr_->num_sge = 1;
+  wr_->send_flags |= IBV_SEND_SIGNALED;
+
+  sg_->lkey = mr.lkey;
+  wr_->wr.rdma.rkey = rconn.rci.rkey;
+
+  wr_cached = deleted_unique_ptr<struct ibv_send_wr>(wr_, wr_deleter);
 }
 
 bool ReliableConnection::needsReset() {
@@ -242,13 +248,15 @@ bool ReliableConnection::changeRights(ControlBlock::MemoryRights rights) {
   return ret == 0;
 }
 
-bool ReliableConnection::changeRightsIfNeeded(ControlBlock::MemoryRights rights) {
+bool ReliableConnection::changeRightsIfNeeded(
+    ControlBlock::MemoryRights rights) {
   auto converted_rights = static_cast<int>(rights);
 
   struct ibv_qp_attr attr;
   struct ibv_qp_init_attr init_attr;
 
-  if (ibv_query_qp(uniq_qp.get(), &attr, IBV_QP_STATE | IBV_QP_ACCESS_FLAGS, &init_attr)) {
+  if (ibv_query_qp(uniq_qp.get(), &attr, IBV_QP_STATE | IBV_QP_ACCESS_FLAGS,
+                   &init_attr)) {
     throw std::runtime_error("Failed to query QP state: " +
                              std::string(std::strerror(errno)));
   }
@@ -287,26 +295,22 @@ bool ReliableConnection::post_send(ibv_send_wr &wr) {
 bool ReliableConnection::postSendSingleCached(RdmaReq req, uint64_t req_id,
                                               void *buf, uint64_t len,
                                               uintptr_t remote_addr) {
-  sg_cached[0].addr = reinterpret_cast<uintptr_t>(buf);
-  sg_cached[0].length = len;
+  wr_cached->sg_list->addr = reinterpret_cast<uintptr_t>(buf);
+  wr_cached->sg_list->length = len;
 
-  wr_cached.wr_id = req_id;
-  wr_cached.opcode = static_cast<enum ibv_wr_opcode>(req);
+  wr_cached->wr_id = req_id;
+  wr_cached->opcode = static_cast<enum ibv_wr_opcode>(req);
 
-  if (wr_cached.opcode == IBV_WR_RDMA_WRITE && len <= MaxInlining) {
-    wr_cached.send_flags |= IBV_SEND_INLINE;
+  if (wr_cached->opcode == IBV_WR_RDMA_WRITE && len <= MaxInlining) {
+    wr_cached->send_flags |= IBV_SEND_INLINE;
   } else {
-    wr_cached.send_flags &= ~IBV_SEND_INLINE;
+    wr_cached->send_flags &= ~IBV_SEND_INLINE;
   }
 
-  wr_cached.wr.rdma.remote_addr = remote_addr;
-
-  // std::cout << "Address of sg_list = " << uintptr_t(wr_cached.sg_list) <<
-  // std::endl; std::cout << "Address inside the wr is " <<
-  // wr_cached.sg_list[0].addr << std::endl;
+  wr_cached->wr.rdma.remote_addr = remote_addr;
 
   struct ibv_send_wr *bad_wr = nullptr;
-  auto ret = ibv_post_send(uniq_qp.get(), &wr_cached, &bad_wr);
+  auto ret = ibv_post_send(uniq_qp.get(), wr_cached.get(), &bad_wr);
 
   if (bad_wr != nullptr) {
     LOGGER_DEBUG(logger, "Got bad wr with id: {}", bad_wr->wr_id);
