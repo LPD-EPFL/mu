@@ -235,18 +235,13 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
         return ret_error(lock, ProposeError::FastPathRecyclingTriggered);
       }
 
-      Slot slot(re_ctx->log);
-
-      // TODO: Are these values correct?
       auto local_fuo = re_ctx->log.headerFirstUndecidedOffset();
-      slot.storeAcceptedProposal(proposal_nr);
-      slot.storeFirstUndecidedOffset(local_fuo);
-      slot.storePayload(buf, buf_len);
-
+      Slot slot(re_ctx->log, proposal_nr, local_fuo, buf, buf_len);
       auto [address, offset, size] = slot.location();
 
       auto ok =
           majW->fastWrite(address, size, to_remote_memory, offset, leader);
+
       if (likely(ok)) {
         auto fuo = LogConfig::round_up_powerof2(offset + size);
         re_ctx->log.updateHeaderFirstUndecidedOffset(fuo);
@@ -529,6 +524,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
   } else {
     LOGGER_TRACE(logger, "Reject proposal request because I am a follower");
     became_leader = true;
+    fast_path = false;
     auto& leader = leader_election->leaderSignal();
     potential_leader = leader.load().requester;
     return ret_error(lock, ProposeError::FollowerMode);
