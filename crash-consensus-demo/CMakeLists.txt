@@ -3,7 +3,8 @@ project(crash-consensus-demo CXX)
 
 add_compile_options(-std=c++17 -g -O3 -Wall -Wextra -Wpedantic -Werror -Wno-unused-result)
 
-link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../crash-consensus/exported)
+# link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../crash-consensus/exported)
+link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../crash-consensus/shared-lib/build/lib)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../crash-consensus/exported/include)
 
 add_executable(main main.cpp)
