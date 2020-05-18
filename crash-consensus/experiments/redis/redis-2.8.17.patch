@@ -38,7 +38,7 @@ diff -u a/src/networking.c b/src/networking.c
  void processInputBuffer(redisClient *c) {
 +    // Added by SaGGy00
 +    GET_TIMESTAMP(before_timestamps[timestamp_idx]);
-+    consensus_propose(consensus, (uint8_t *) c->querybuf, sdslen(c->querybuf));
++    consensus_propose_thread(consensus, (uint8_t *) c->querybuf, sdslen(c->querybuf));
 +    GET_TIMESTAMP(after_timestamps[timestamp_idx]);
 +    timestamp_idx++;
 +
@@ -88,7 +88,7 @@ diff -u a/src/redis.c b/src/redis.c
 +    }
 +
 +    for (int i = 0; i < SIZE; i++) {
-+        fprintf(fptr, "%0.3f us\n", (double)elapsed_times[i] / 1000.0);
++        fprintf(fptr, "%lld\n", elapsed_times[i]);
 +    }
 +    fprintf(fptr, "\n");
 +    fclose(fptr);
@@ -270,7 +270,7 @@ diff -u a/src/redis.c b/src/redis.c
 +
 +
 +    consensus = new_consensus(my_id, remote_ids, length);
-+    consensus_attach_commit_handler(consensus, committer, &dummy_client_sockfd);
++    consensus_attach_commit_handler(consensus, committer, &dummy_client_sockfd); consensus_spawn_thread(consensus);
 +
 +    if (my_id != 1) launch_dummy_thread();
 +
