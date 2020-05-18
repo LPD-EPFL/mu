@@ -76,8 +76,8 @@ diff -u a/src/redis.c b/src/redis.c
 +      elapsed_times[i] = ELAPSED_NSEC(before_timestamps[i], after_timestamps[i]);
 +    }
 +
-+    char hostname[1024]; char name[1024]; gethostname(hostname, 1024);
-+    snprintf(name, 1024, "dump-%s.txt", hostname);
++    char name[1024];
++    snprintf(name, 1024, "dump-%s.txt", getenv("SID"));
 +
 +    FILE *fptr = fopen(name, "w");
 +    if (fptr == NULL) {

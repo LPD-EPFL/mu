@@ -33,10 +33,10 @@ diff -u a/memcached.c b/memcached.c
 +      elapsed_times[i] = ELAPSED_NSEC(before_timestamps[i], after_timestamps[i]);
 +    }
 +
-+    char hostname[1024];
-+    gethostname(hostname, 1024);
++    // char hostname[1024];
++    // gethostname(hostname, 1024);
 +    char name[1024];
-+    snprintf(name, 1024, "dump-%s.txt", hostname);
++    snprintf(name, 1024, "dump-%s.txt", getenv("SID"));
 +
 +    FILE *fptr = fopen(name, "w");
 +    if (fptr == NULL) {
@@ -45,7 +45,7 @@ diff -u a/memcached.c b/memcached.c
 +    }
 +
 +    for (int i = 0; i < SIZE; i++) {
-+        fprintf(fptr, "%0.3f us\n", (double)elapsed_times[i] / 1000.0);
++        fprintf(fptr, "%ld\n", elapsed_times[i]);
 +    }
 +    fprintf(fptr, "\n");
 +    fclose(fptr);
@@ -107,7 +107,7 @@ diff -u a/memcached.c b/memcached.c
 +    query[q_size] = '\0';
 +
 +    GET_TIMESTAMP(before_timestamps[timestamp_idx]);
-+    consensus_propose(consensus, (uint8_t*)query, q_size);
++    consensus_propose_thread(consensus, (uint8_t*)query, q_size);
 +    GET_TIMESTAMP(after_timestamps[timestamp_idx]);
 +    timestamp_idx++;
 +
@@ -328,7 +328,7 @@ diff -u a/memcached.c b/memcached.c
 +
 +
 +    consensus = new_consensus(my_id, remote_ids, length);
-+    consensus_attach_commit_handler(consensus, committer, &dummy_client_sockfd);
++    consensus_attach_commit_handler(consensus, committer, &dummy_client_sockfd); consensus_spawn_thread(consensus);
 +    if (my_id != 1) launch_dummy_thread();
 +    __sync_synchronize();
 +
@@ -409,7 +409,7 @@ diff -u a/thread.c b/thread.c
 +    memcpy(query + 4 + nkey,  suffix, 3);
 +
 +    GET_TIMESTAMP(before_timestamps[timestamp_idx]);
-+    consensus_propose(consensus, (uint8_t*)query, 4 + nkey + 4);
++    consensus_propose_thread(consensus, (uint8_t*)query, 4 + nkey + 4);
 +    GET_TIMESTAMP(after_timestamps[timestamp_idx]);
 +    timestamp_idx++;
 +    /*
