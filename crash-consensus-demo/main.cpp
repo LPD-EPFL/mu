@@ -48,7 +48,7 @@ int main(int argc, char* argv[]) {
 
   uint64_t commit_id = 0;
   dory::Consensus consensus(id, remote_ids);
-  consensus.commitHandler([&commit_id](uint8_t* buf, size_t len) {
+  consensus.commitHandler([&commit_id, &id]([[maybe_unused]] bool leader, uint8_t* buf, size_t len) {
     if (len != sizeof(uint64_t)) {
       std::cout << "The committed value must be a uint64_t for this test"
                 << std::endl;
@@ -68,13 +68,13 @@ int main(int argc, char* argv[]) {
 
   // Wait enough time for the consensus to become ready
   std::cout << "Wait before starting to propose" << std::endl;
-  std::this_thread::sleep_for(std::chrono::seconds(30));
+  std::this_thread::sleep_for(std::chrono::seconds(5));
   std::cout << "Started proposing" << std::endl;
 
   if (id == 1 || id == 2) {
     TIMESTAMP_INIT;
 
-    const uint64_t times = 1024 * 1024 * 10;
+    const uint64_t times = 1024 * 1024;
     std::vector<TIMESTAMP_T> timestamps(times);
 
     for (uint64_t i = 0; i < times; i++) {
@@ -82,12 +82,16 @@ int main(int argc, char* argv[]) {
       // Encode process doing the proposal
       uint64_t encoded_i = i | (uint64_t(id) << 60);
       dory::ProposeError err;
+      // std::cout << "Proposing " << i << std::endl;
       if ((err = consensus.propose(reinterpret_cast<uint8_t*>(&encoded_i),
                                     sizeof(encoded_i))) != dory::ProposeError::NoError) {
         // std::cout << "Proposal failed at index " << i << std::endl;
         i -= 1;
         switch (err) {
           case dory::ProposeError::FastPath:
+          case dory::ProposeError::FastPathRecyclingTriggered:
+          case dory::ProposeError::SlowPathCatchFUO:
+          case dory::ProposeError::SlowPathUpdateFollowers:
           case dory::ProposeError::SlowPathCatchProposal:
           case dory::ProposeError::SlowPathUpdateProposal:
           case dory::ProposeError::SlowPathReadRemoteLogs:
@@ -96,10 +100,15 @@ int main(int argc, char* argv[]) {
             std::cout << "Error: in leader mode. Code: " << static_cast<int>(err) << std::endl;
             break;
 
+          case dory::ProposeError::SlowPathLogRecycled:
+            std::cout << "Log recycled, waiting a bit..." << std::endl;
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            break;
+
           case dory::ProposeError::MutexUnavailable:
           case dory::ProposeError::FollowerMode:
-            // std::cout << "Error: in follower mode. Potential leader: " <<
-            // consensus.potentialLeader() << std::endl;
+            std::cout << "Error: in follower mode. Potential leader: " <<
+            consensus.potentialLeader() << std::endl;
             break;
 
           default:
@@ -107,12 +116,15 @@ int main(int argc, char* argv[]) {
                       << std::endl;
         }
       } else {
-        if (i % 10000 == 0) {
+        // std::cout << "Proposed " << i << std::endl;
+
+        if (i % 5 == 0) {
           std::cout << "Passed " << i << std::endl;
         }
       }
 
-      // std::this_thread::sleep_for(std::chrono::seconds(1));
+      // std::cout << std::endl;
+      std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
     std::cout << "Finished proposing, computing rtt for proposals..."
