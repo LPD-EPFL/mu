@@ -13,7 +13,7 @@ RdmaConsensus::RdmaConsensus(int my_id, std::vector<int>& remote_ids)
       LOGGER_INIT(logger, ConsensusConfig::logger_prefix) {
   using namespace units;
 
-  allocated_size = 10_GiB;
+  allocated_size = 2_GiB;
   alignment = 64;
 
   run();
@@ -217,6 +217,49 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
     auto& leader = leader_election->leaderSignal();
     potential_leader = leader.load().requester;
     return ret_error(lock, ProposeError::MutexUnavailable);
+  }
+
+  // Make fast-path slightly faster
+  // TODO eliminate duplicate code from down below
+  if (likely(fast_path) && likely(am_I_leader.load())) {
+    auto& leader = leader_election->leaderSignal();
+
+    auto local_fuo = re_ctx->log.headerFirstUndecidedOffset();
+    Slot slot(re_ctx->log, proposal_nr, local_fuo, buf, buf_len);
+    auto [address, offset, size] = slot.location();
+
+    auto ok = majW->fastWrite(address, size, to_remote_memory, offset, leader);
+
+    if (likely(ok)) {
+      auto fuo = LogConfig::round_up_powerof2(offset + size);
+      re_ctx->log.updateHeaderFirstUndecidedOffset(fuo);
+      auto has_next = iter.sampleNext();
+      if (has_next) {
+        ParsedSlot pslot(iter.location());
+
+        LOGGER_TRACE(logger, "Accepted proposal: {}, FUO: {}",
+                      pslot.acceptedProposal(), pslot.firstUndecidedOffset());
+        // auto [buf, len] = pslot.payload();
+
+        // Now that I got something, I will use the commit iterator
+        while (commit_iter.hasNext(fuo)) {
+          commit_iter.next();
+
+          ParsedSlot pslot(commit_iter.location());
+          auto [buf, len] = pslot.payload();
+          commit(true, buf, len);
+        }
+      }
+    } else {
+      LOGGER_ERROR(logger,
+                    "Error in fast-path: occurred when writing the new "
+                    "value to a majority");
+      auto err = majW->fastWriteError();
+      majW->recoverFromError(err);
+      return ret_error(lock, ProposeError::FastPath, true);
+    }
+
+    return ret_no_error();
   }
 
   if (am_I_leader.load()) {  // Leader (slow and fast-path)
