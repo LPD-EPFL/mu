@@ -48,7 +48,7 @@ int main(int argc, char* argv[]) {
 
   uint64_t commit_id = 0;
   dory::Consensus consensus(id, remote_ids);
-  consensus.commitHandler([&commit_id, &id]([[maybe_unused]] bool leader, uint8_t* buf, size_t len) {
+  consensus.commitHandler([&commit_id]([[maybe_unused]] bool leader, uint8_t* buf, size_t len) {
     if (len != sizeof(uint64_t)) {
       std::cout << "The committed value must be a uint64_t for this test"
                 << std::endl;
@@ -68,7 +68,8 @@ int main(int argc, char* argv[]) {
 
   // Wait enough time for the consensus to become ready
   std::cout << "Wait before starting to propose" << std::endl;
-  std::this_thread::sleep_for(std::chrono::seconds(5));
+  // Give some slack to id 1 to become leader
+  std::this_thread::sleep_for(std::chrono::seconds(5 + 3 * id));
   std::cout << "Started proposing" << std::endl;
 
   if (id == 1 || id == 2) {
