@@ -167,7 +167,7 @@ class CatchUpWithFollowers {
 
     if (need_update_pids.size() > 0) {
       SequentialQuorumWaiter waiterFUODiffWrite(quorum::FUODiffWr,
-        need_update_pids, need_update_quorum, majFUOW.reqID());
+        need_update_pids, need_update_pids.size(), majFUOW.reqID());
 
       majFUOW = FUODiffMajorityWriter(c_ctx, waiterFUODiffWrite, need_update_pids,
         need_update_pids.size() - need_update_quorum);
