@@ -40,3 +40,10 @@ popd
 popd
 
 mv build/archiving/$LIB_NAME.a exported
+
+cd shared-lib
+./build.sh
+mv build/lib/$LIB_NAME.so ../exported
+
+cd ../
+rm -rf build
