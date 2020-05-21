@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 #include <functional>
+#include <utility>
 
 namespace dory {
 class RdmaConsensus;
@@ -32,6 +33,7 @@ class Consensus {
 
   ProposeError propose(uint8_t *buf, size_t len);
   int potentialLeader();
+  std::pair<uint64_t, uint64_t> proposedReplicatedRange();
 
  private:
   std::unique_ptr<RdmaConsensus> impl;

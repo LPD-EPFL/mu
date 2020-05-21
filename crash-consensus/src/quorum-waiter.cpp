@@ -140,7 +140,12 @@ bool SerialQuorumWaiter<ID>::fastConsume(std::vector<struct ibv_wc>& entries,
 
 template <class ID>
 inline bool SerialQuorumWaiter<ID>::canContinueWith(ID expected) const {
-  return next_id == expected;
+  return next_id >= expected;
+}
+
+template <class ID>
+inline bool SerialQuorumWaiter<ID>::canContinueWithOutstanding(int outstanding, ID expected) const {
+  return next_id + outstanding >= expected;
 }
 
 template <class ID>

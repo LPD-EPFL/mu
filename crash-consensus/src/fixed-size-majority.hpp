@@ -156,6 +156,8 @@ class FixedSizeMajorityOperation {
                  std::atomic<Leader> &leader) {
     IGNORE(leader);
 
+    const int outstanding_req = 1;
+
     auto req_id = qw.reqID();
     auto next_req_id = qw.nextReqID();
 
@@ -170,14 +172,14 @@ class FixedSizeMajorityOperation {
       }
     }
 
-    int expected_nr = quorum_size;
+    int expected_nr = outstanding_req * quorum_size;
     auto cq = ctx->cq.get();
     entries.resize(expected_nr);
     int num = 0;
     int loops = 0;
     constexpr unsigned mask = (1 << 14) - 1;  // Must be power of 2 minus 1
 
-    while (!qw.canContinueWith(next_req_id)) {
+    while (!qw.canContinueWithOutstanding(outstanding_req, next_req_id)) {
       num = ibv_poll_cq(cq, expected_nr, &entries[0]);
       if (num >= 0) {
         if (!qw.fastConsume(entries, num, expected_nr)) {
@@ -196,6 +198,9 @@ class FixedSizeMajorityOperation {
       }
     }
 
+    range_start = req_id;
+    range_end = qw.reqID();
+
     return true;
   }
 
@@ -205,6 +210,8 @@ class FixedSizeMajorityOperation {
   }
 
   std::vector<int> &successes() { return successful_ops; }
+
+  uint64_t latestReplicatedID() { return uint64_t(qw.reqID()); }
 
  private:
   template <class T>
@@ -337,5 +344,8 @@ class FixedSizeMajorityOperation {
   std::vector<struct ibv_wc> entries;
   std::vector<int> successful_ops;
   std::vector<Conn> connections;
+
+ public:
+  uint64_t range_start = 0, range_end = 0;
 };
 }  // namespace dory

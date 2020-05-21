@@ -18,4 +18,8 @@ ProposeError Consensus::propose(uint8_t *buf, size_t len) {
 }
 
 int Consensus::potentialLeader() { return impl->potentialLeader(); }
+
+std::pair<uint64_t, uint64_t> Consensus::proposedReplicatedRange() {
+  return impl->proposedReplicatedRange();
+}
 }  // namespace dory

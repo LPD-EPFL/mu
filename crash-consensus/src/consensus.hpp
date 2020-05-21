@@ -81,6 +81,10 @@ class RdmaConsensus {
 
   inline int potentialLeader() { return potential_leader; }
 
+  inline std::pair<uint64_t, uint64_t> proposedReplicatedRange() {
+    return std::make_pair(majW->range_start, majW->range_end);
+  }
+
   enum ProposeError {
     NoError = 0,  // Placeholder for the 0 value
     MutexUnavailable,

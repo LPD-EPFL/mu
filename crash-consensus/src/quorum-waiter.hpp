@@ -26,6 +26,7 @@ class SerialQuorumWaiter {
                std::vector<int>& successful_ops);
 
   bool canContinueWith(ID expected) const;
+  bool canContinueWithOutstanding(int outstanding, ID expected) const;
 
   int maximumResponses() const;
 
