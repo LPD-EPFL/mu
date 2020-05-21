@@ -23,11 +23,11 @@ int VALUE_SIZE = 0;
 #ifdef MEDIAN_SAMPLE_SIZE
 #  undef MEDIAN_SAMPLE_SIZE
 #endif
-#define MEDIAN_SAMPLE_SIZE 1000000
+#define MEDIAN_SAMPLE_SIZE 500000
 // WARNING: Also change the define MEDIAN_SAMPLE_SIZE in redis
 
 #ifdef UDS
-#  define SV_SOCK_PATH "/home/xygkis/rdma-playground/redis/redis.sock"
+#  define SV_SOCK_PATH "/path/to/redis.sock"
 #endif
 
 // #define REDIS_IP "127.0.0.1"
@@ -55,8 +55,9 @@ void dump_times() {
       elapsed_times[i] = ELAPSED_NSEC(write_timestamps[i], read_timestamps[i]);
     }
 
-    char name[64];
-    snprintf(name, 64, "dump-redis-%d.txt", (int)getpid());
+    // char name[64];
+    // snprintf(name, 64, "dump-redis-%d.txt", (int)getpid());
+    const char *name = "redis-cli.txt";
 
     FILE *fptr = fopen(name, "w");
     if (fptr == NULL) {
@@ -65,7 +66,7 @@ void dump_times() {
     }
 
     for (int i = 0; i < SIZE; i++) {
-        fprintf(fptr, "%0.3f us\n", (double)elapsed_times[i] / 1000.0);
+        fprintf(fptr, "%ld\n", elapsed_times[i]);
     }
     fprintf(fptr, "\n");
     fclose(fptr);

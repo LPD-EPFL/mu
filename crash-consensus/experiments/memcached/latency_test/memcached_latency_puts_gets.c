@@ -21,7 +21,7 @@ int VALUE_SIZE = 0;
 #ifdef MEDIAN_SAMPLE_SIZE
 #  undef MEDIAN_SAMPLE_SIZE
 #endif
-#define MEDIAN_SAMPLE_SIZE 1000000
+#define MEDIAN_SAMPLE_SIZE 500000
 // WARNING: Also change the define MEDIAN_SAMPLE_SIZE in memcached
 
 TIMESTAMP_T write_timestamps[MEDIAN_SAMPLE_SIZE+1];
@@ -45,8 +45,9 @@ void dump_times() {
       elapsed_times[i] = ELAPSED_NSEC(write_timestamps[i], read_timestamps[i]);
     }
 
-    char name[64];
-    snprintf(name, 64, "dump-memcached-%d.txt", (int)getpid());
+    // char name[64];
+    // snprintf(name, 64, "dump-memcached-%d.txt", (int)getpid());
+    const char *name = "memcached-cli.txt";
 
     FILE *fptr = fopen(name, "w");
     if (fptr == NULL) {
@@ -55,7 +56,7 @@ void dump_times() {
     }
 
     for (int i = 0; i < SIZE; i++) {
-        fprintf(fptr, "%0.3f us\n", (double)elapsed_times[i] / 1000.0);
+        fprintf(fptr, "%ld\n", elapsed_times[i]);
     }
     fprintf(fptr, "\n");
     fclose(fptr);
