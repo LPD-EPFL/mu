@@ -22,10 +22,10 @@ list_descendants ()
 # SHARED_LIB_PATH=~/dory/crash-consensus/shared-lib/build/lib
 
 # session="memcached_exper_$INSTANCE_NUM"
-# COMMAND='numactl -C 0,12,14,16,18 --membind 0 -- ./memcached-replicated -p $EXPER_PORT'
+# COMMAND='numactl -C 12,14,16,18 --membind 0 -- ./memcached-replicated -p $EXPER_PORT'
 
 BIN_PATH=~/dory/crash-consensus/experiments/redis/bin
 SHARED_LIB_PATH=~/dory/crash-consensus/shared-lib/build/lib
 
 session="redis_exper_$INSTANCE_NUM"
-COMMAND='numactl -C 0,12,14,16,18 --membind 0 -- ./redis-server-replicated --port $EXPER_PORT'
+COMMAND='numactl -C 12,14,16,18 --membind 0 -- ./redis-server-replicated --port $EXPER_PORT'
