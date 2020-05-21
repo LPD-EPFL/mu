@@ -88,7 +88,7 @@ diff -u a/src/redis.c b/src/redis.c
 +    }
 +
 +    for (int i = 0; i < SIZE; i++) {
-+        fprintf(fptr, "%lld\n", elapsed_times[i]);
++        fprintf(fptr, "%ld\n", elapsed_times[i]);
 +    }
 +    fprintf(fptr, "\n");
 +    fclose(fptr);
@@ -240,15 +240,15 @@ diff -u a/src/redis.c b/src/redis.c
 +        printf("Cannot register SIGUSR1 handler\n");
 +    }
 +
-+    before_timestamps = malloc((MEDIAN_SAMPLE_SIZE+1) * sizeof(*before_timestamps));
++    before_timestamps = malloc((2*MEDIAN_SAMPLE_SIZE+1) * sizeof(*before_timestamps));
 +    assert(before_timestamps);
-+    memset(before_timestamps, 0, (MEDIAN_SAMPLE_SIZE+1) * sizeof(*before_timestamps));
++    memset(before_timestamps, 0, (2*MEDIAN_SAMPLE_SIZE+1) * sizeof(*before_timestamps));
 +
-+    after_timestamps = malloc((MEDIAN_SAMPLE_SIZE+1) * sizeof(*after_timestamps));
++    after_timestamps = malloc((2*MEDIAN_SAMPLE_SIZE+1) * sizeof(*after_timestamps));
 +    assert(after_timestamps);
-+    memset(after_timestamps, 0, (MEDIAN_SAMPLE_SIZE+1) * sizeof(*after_timestamps));
++    memset(after_timestamps, 0, (2*MEDIAN_SAMPLE_SIZE+1) * sizeof(*after_timestamps));
 +
-+    elapsed_times = malloc(MEDIAN_SAMPLE_SIZE * sizeof(*elapsed_times));
++    elapsed_times = malloc(2*MEDIAN_SAMPLE_SIZE * sizeof(*elapsed_times));
 +    assert(elapsed_times);
 +    printf("PID :: %d\n", (int)getpid());
 +
