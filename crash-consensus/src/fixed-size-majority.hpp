@@ -17,6 +17,7 @@ class FixedSizeMajorityOperation {
                              std::vector<int> &remote_ids)
       : ctx{context}, qw{qw}, kind{qw.kindOfOp()} {
     quorum_size = quorum::majority(ctx->remote_ids.size() + 1) - 1;
+    replicas_size = ctx->remote_ids.size();
 
     successful_ops.resize(remote_ids.size());
     successful_ops.clear();
@@ -153,13 +154,11 @@ class FixedSizeMajorityOperation {
 
   bool fastWrite(void *from_local_memory, size_t size,
                  std::vector<uintptr_t> &to_remote_memories, uintptr_t offset,
-                 std::atomic<Leader> &leader) {
+                 std::atomic<Leader> &leader, int outstanding_req) {
     IGNORE(leader);
 
-    const int outstanding_req = 1;
-
-    auto req_id = qw.reqID();
-    auto next_req_id = qw.nextReqID();
+    auto req_id = qw.fetchAndIncFastID();
+    auto next_req_id = qw.nextFastReqID();
 
     for (auto &c : connections) {
       auto ok = c.rc->postSendSingleCached(
@@ -172,7 +171,7 @@ class FixedSizeMajorityOperation {
       }
     }
 
-    int expected_nr = outstanding_req * quorum_size;
+    int expected_nr = outstanding_req * replicas_size + quorum_size;
     auto cq = ctx->cq.get();
     entries.resize(expected_nr);
     int num = 0;
@@ -272,6 +271,7 @@ class FixedSizeMajorityOperation {
       }
     }
 
+    qw.setFastReqID(next_req_id);
     return std::make_unique<NoError>();
   }
 
@@ -321,6 +321,7 @@ class FixedSizeMajorityOperation {
       }
     }
 
+    qw.setFastReqID(next_req_id);
     return std::make_unique<NoError>();
   }
 
@@ -337,7 +338,7 @@ class FixedSizeMajorityOperation {
   QuorumWaiter qw;
   quorum::Kind kind;
 
-  int quorum_size;
+  int quorum_size, replicas_size;
 
   FailureTracker failed_majority;
 

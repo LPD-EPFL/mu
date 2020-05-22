@@ -5,11 +5,12 @@
 // #include <functional>
 
 namespace dory {
-RdmaConsensus::RdmaConsensus(int my_id, std::vector<int>& remote_ids)
+RdmaConsensus::RdmaConsensus(int my_id, std::vector<int>& remote_ids, int outstanding_req)
     : my_id{my_id},
       remote_ids{remote_ids},
       am_I_leader{false},
       ask_reset{false},
+      outstanding_req{outstanding_req},
       LOGGER_INIT(logger, ConsensusConfig::logger_prefix) {
   using namespace units;
 
@@ -228,7 +229,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
     Slot slot(re_ctx->log, proposal_nr, local_fuo, buf, buf_len);
     auto [address, offset, size] = slot.location();
 
-    auto ok = majW->fastWrite(address, size, to_remote_memory, offset, leader);
+    auto ok = majW->fastWrite(address, size, to_remote_memory, offset, leader, outstanding_req);
 
     if (likely(ok)) {
       auto fuo = LogConfig::round_up_powerof2(offset + size);
@@ -283,7 +284,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
       auto [address, offset, size] = slot.location();
 
       auto ok =
-          majW->fastWrite(address, size, to_remote_memory, offset, leader);
+          majW->fastWrite(address, size, to_remote_memory, offset, leader, outstanding_req);
 
       if (likely(ok)) {
         auto fuo = LogConfig::round_up_powerof2(offset + size);

@@ -67,7 +67,7 @@
 namespace dory {
 class RdmaConsensus {
  public:
-  RdmaConsensus(int my_id, std::vector<int> &remote_ids);
+  RdmaConsensus(int my_id, std::vector<int> &remote_ids, int outstanding_req = 0);
   ~RdmaConsensus();
 
   template <typename Func>
@@ -178,6 +178,7 @@ class RdmaConsensus {
   int potential_leader = -1;
 
   std::atomic<bool> ask_reset;
+  int outstanding_req;
   LOGGER_DECL(logger);
 };
 }  // namespace dory

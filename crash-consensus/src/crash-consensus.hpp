@@ -26,7 +26,7 @@ enum class ProposeError {
 
 class Consensus {
  public:
-  Consensus(int my_id, std::vector<int> &remote_ids);
+  Consensus(int my_id, std::vector<int> &remote_ids, int outstanding_req = 0);
   ~Consensus();
 
   void commitHandler(std::function<void(bool leader, uint8_t *buf, size_t len)> committer);

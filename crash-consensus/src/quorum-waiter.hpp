@@ -20,6 +20,17 @@ class SerialQuorumWaiter {
 
   inline ID reqID() const { return next_id; }
   inline ID nextReqID() const { return next_id + modulo; }
+  inline void setFastReqID(ID id) {
+    fast_id = id;
+  }
+
+  inline ID fetchAndIncFastID() {
+    auto ret = fast_id;
+    fast_id += modulo;
+    return ret;
+  }
+
+  inline ID nextFastReqID() const { return fast_id; }
 
   bool fastConsume(std::vector<struct ibv_wc>& entries, int num, int& ret_left);
   bool consume(std::vector<struct ibv_wc>& entries,
@@ -50,6 +61,7 @@ class SerialQuorumWaiter {
   std::vector<ID> scoreboard;
   int quorum_size;
   ID next_id;
+  ID fast_id;
   int left;
   int modulo;
 };

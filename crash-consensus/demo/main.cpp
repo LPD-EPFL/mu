@@ -146,8 +146,11 @@ int main(int argc, char* argv[]) {
 
       GET_TIMESTAMP(timestamps_end[i]);
 
+      auto [start, end] = consensus.proposedReplicatedRange();
+      std::cout << "proposedReplicatedRange: [" << start << ", " << end << ")" << std::endl;
+
       // std::cout << std::endl;
-      // std::this_thread::sleep_for(std::chrono::seconds(1));
+      std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
     std::cout << "Finished proposing, computing rtt for proposals..."

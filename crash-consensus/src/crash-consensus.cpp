@@ -2,8 +2,8 @@
 #include "consensus.hpp"
 
 namespace dory {
-Consensus::Consensus(int my_id, std::vector<int> &remote_ids)
-    : impl{std::make_unique<RdmaConsensus>(my_id, remote_ids)} {}
+Consensus::Consensus(int my_id, std::vector<int> &remote_ids, int outstanding_req)
+    : impl{std::make_unique<RdmaConsensus>(my_id, remote_ids, outstanding_req)} {}
 
 Consensus::~Consensus() {}
 
