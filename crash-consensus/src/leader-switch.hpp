@@ -807,8 +807,8 @@ class LeaderSwitcher {
 namespace dory {
 class LeaderElection {
  public:
-  LeaderElection(ConnectionContext &cc, ScratchpadMemory &scratchpad)
-      : ctx{cc, scratchpad}, hb_started{false}, switcher_started{false} {
+  LeaderElection(ConnectionContext &cc, ScratchpadMemory &scratchpad, ConsensusConfig::ThreadConfig threadConfig)
+      : ctx{cc, scratchpad}, threadConfig{threadConfig}, hb_started{false}, switcher_started{false} {
     startHeartbeat();
     startLeaderSwitcher();
   }
@@ -895,8 +895,8 @@ class LeaderElection {
         }
       });
 
-      if (ConsensusConfig::pinThreads) {
-        pinThreadToCore(file_watcher_thd, ConsensusConfig::fileWatcherThreadCoreID);
+      if (threadConfig.pinThreads) {
+        pinThreadToCore(file_watcher_thd, threadConfig.fileWatcherThreadCoreID);
       }
 
       if (ConsensusConfig::nameThreads) {
@@ -921,13 +921,15 @@ class LeaderElection {
             break;
           }
         }
+
+        std::this_thread::sleep_for(std::chrono::seconds(10));
       }
 
       file_watcher_thd.join();
     });
 
-    if (ConsensusConfig::pinThreads) {
-      pinThreadToCore(heartbeat_thd, ConsensusConfig::heartbeatThreadCoreID);
+    if (threadConfig.pinThreads) {
+      pinThreadToCore(heartbeat_thd, threadConfig.heartbeatThreadCoreID);
     }
 
     if (ConsensusConfig::nameThreads) {
@@ -964,8 +966,8 @@ class LeaderElection {
       }
     });
 
-    if (ConsensusConfig::pinThreads) {
-      pinThreadToCore(switcher_thd, ConsensusConfig::switcherThreadCoreID);
+    if (threadConfig.pinThreads) {
+      pinThreadToCore(switcher_thd, threadConfig.switcherThreadCoreID);
     }
 
     if (ConsensusConfig::nameThreads) {
@@ -985,6 +987,7 @@ class LeaderElection {
   // Must be power of 2 minus 1
   static constexpr unsigned long long iterations_ftr_check = (2 >> 13) - 1;
   LeaderContext ctx;
+  ConsensusConfig::ThreadConfig threadConfig;
   std::map<int, ReliableConnection> *replicator_conns;
 
   // For heartbeat thread

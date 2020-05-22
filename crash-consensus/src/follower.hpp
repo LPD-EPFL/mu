@@ -15,8 +15,8 @@ class Follower {
   public:
   Follower() {}
 
-  Follower(ReplicationContext *ctx, LeaderContext *le_ctx, BlockingIterator *iter, LiveIterator *commit_iter)
-    : ctx{ ctx }, le_ctx{le_ctx}, iter{ iter }, commit_iter{ commit_iter }, block_thread_req{false}, blocked_thread{false}, blocked_state{false}
+  Follower(ReplicationContext *ctx, LeaderContext *le_ctx, BlockingIterator *iter, LiveIterator *commit_iter, ConsensusConfig::ThreadConfig threadConfig)
+    : ctx{ ctx }, le_ctx{le_ctx}, iter{ iter }, commit_iter{ commit_iter }, block_thread_req{false}, blocked_thread{false}, blocked_state{false}, threadConfig{threadConfig}
     {
     }
 
@@ -25,8 +25,8 @@ class Follower {
       run();
     });
 
-    if (ConsensusConfig::pinThreads) {
-      pinThreadToCore(follower_thd, ConsensusConfig::followerThreadCoreID);
+    if (threadConfig.pinThreads) {
+      pinThreadToCore(follower_thd, threadConfig.followerThreadCoreID);
     }
 
     if (ConsensusConfig::nameThreads) {
@@ -86,6 +86,7 @@ class Follower {
     block_thread_req.store(o.block_thread_req.load());
     blocked_thread.store(o.blocked_thread.load());
     blocked_state = o.blocked_state;
+    threadConfig = o.threadConfig;
     return *this;
   }
 
@@ -257,6 +258,7 @@ class Follower {
     alignas(64) std::mutex log_mutex;
 
     bool blocked_state;
+    ConsensusConfig::ThreadConfig threadConfig;
     PollingContext recycling_req_poller;
     LogRecyclingRequest recycling_req;
     std::vector<struct ibv_wc> entries;

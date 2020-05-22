@@ -24,9 +24,14 @@ enum class ProposeError {
   SlowPathLogRecycled
 };
 
+enum class ThreadBank {
+  A,
+  B
+};
+
 class Consensus {
  public:
-  Consensus(int my_id, std::vector<int> &remote_ids, int outstanding_req = 0);
+  Consensus(int my_id, std::vector<int> &remote_ids, int outstanding_req = 0, ThreadBank threadBank = ThreadBank::A);
   ~Consensus();
 
   void commitHandler(std::function<void(bool leader, uint8_t *buf, size_t len)> committer);

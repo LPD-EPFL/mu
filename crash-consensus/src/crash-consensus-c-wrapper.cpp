@@ -39,8 +39,8 @@ void consensus_spawn_thread(consensus_t c) {
     }
   });
 
-  if (dory::ConsensusConfig::pinThreads) {
-    dory::pinThreadToCore(cons->handover_thd, dory::ConsensusConfig::handoverThreadCoreID);
+  if (cons->threadConfig.pinThreads) {
+    dory::pinThreadToCore(cons->handover_thd, cons->threadConfig.handoverThreadCoreID);
   }
 
   if (dory::ConsensusConfig::nameThreads) {

@@ -5,12 +5,13 @@
 // #include <functional>
 
 namespace dory {
-RdmaConsensus::RdmaConsensus(int my_id, std::vector<int>& remote_ids, int outstanding_req)
+RdmaConsensus::RdmaConsensus(int my_id, std::vector<int>& remote_ids, int outstanding_req, ConsensusConfig::ThreadConfig threadConfig)
     : my_id{my_id},
       remote_ids{remote_ids},
       am_I_leader{false},
       ask_reset{false},
       outstanding_req{outstanding_req},
+      threadConfig{threadConfig},
       LOGGER_INIT(logger, ConsensusConfig::logger_prefix) {
   using namespace units;
 
@@ -24,7 +25,7 @@ RdmaConsensus::RdmaConsensus(int my_id, std::vector<int>& remote_ids, int outsta
   iter = re_ctx->log.blockingIterator();
   commit_iter = re_ctx->log.liveIterator();
 
-  follower = Follower(re_ctx.get(), leader_election->context(), &iter, &commit_iter);
+  follower = Follower(re_ctx.get(), leader_election->context(), &iter, &commit_iter, threadConfig);
   follower.waitForPoller();
 }
 
@@ -63,8 +64,8 @@ void RdmaConsensus::spawn_follower() {
     }
   });
 
-  if (ConsensusConfig::pinThreads) {
-    pinThreadToCore(consensus_thd, ConsensusConfig::consensusThreadCoreID);
+  if (threadConfig.pinThreads) {
+    pinThreadToCore(consensus_thd, threadConfig.consensusThreadCoreID);
   }
 
   if (ConsensusConfig::nameThreads) {
@@ -179,7 +180,7 @@ void RdmaConsensus::run() {
 
   // Initialize Leader election
   leader_election =
-      std::make_unique<LeaderElection>(*le_conn_ctx.get(), *scratchpad.get());
+      std::make_unique<LeaderElection>(*le_conn_ctx.get(), *scratchpad.get(), threadConfig);
   leader_election->attachReplicatorContext(re_ctx.get());
 
   // Initialize replication
