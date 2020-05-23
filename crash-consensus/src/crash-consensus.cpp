@@ -13,6 +13,7 @@ Consensus::Consensus(int my_id, std::vector<int> &remote_ids, int outstanding_re
       config.switcherThreadCoreID = ConsensusConfig::switcherThreadBankB_ID;
       config.heartbeatThreadCoreID = ConsensusConfig::heartbeatThreadBankB_ID;
       config.followerThreadCoreID = ConsensusConfig::followerThreadBankB_ID;
+      config.prefix = "Secondary-";
       impl = std::make_unique<RdmaConsensus>(my_id, remote_ids, outstanding_req, config);
       break;
   }

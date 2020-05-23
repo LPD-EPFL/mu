@@ -36,7 +36,8 @@ struct ThreadConfig {
         switcherThreadCoreID{switcherThreadBankA_ID},
         heartbeatThreadCoreID{heartbeatThreadBankA_ID},
         followerThreadCoreID{followerThreadBankA_ID},
-        fileWatcherThreadCoreID{fileWatcherThreadBankAB_ID} {}
+        fileWatcherThreadCoreID{fileWatcherThreadBankAB_ID},
+        prefix{""} {}
 
   bool pinThreads;
 
@@ -51,6 +52,7 @@ struct ThreadConfig {
   int heartbeatThreadCoreID;
   int followerThreadCoreID;
   int fileWatcherThreadCoreID;
+  std::string prefix;
 };
 
 }  // namespace ConsensusConfig

@@ -12,6 +12,7 @@ RdmaConsensus::RdmaConsensus(int my_id, std::vector<int>& remote_ids, int outsta
       ask_reset{false},
       outstanding_req{outstanding_req},
       threadConfig{threadConfig},
+      store(threadConfig.prefix),
       LOGGER_INIT(logger, ConsensusConfig::logger_prefix) {
   using namespace units;
 
@@ -76,9 +77,6 @@ void RdmaConsensus::spawn_follower() {
 void RdmaConsensus::run() {
   std::vector<int> ids(remote_ids);
   ids.push_back(my_id);
-
-  // Exchange info using memcached
-  auto& store = MemoryStore::getInstance();
 
   // Get the last device
   {

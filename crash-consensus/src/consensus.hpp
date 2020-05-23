@@ -184,6 +184,7 @@ public:
   ConsensusConfig::ThreadConfig threadConfig;
 
 private:
+  MemoryStore store;
   LOGGER_DECL(logger);
 };
 }  // namespace dory
