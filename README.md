@@ -20,8 +20,8 @@
     conan profile new default --detect  # Generates default profile detecting GCC and sets old ABI
     conan profile update settings.compiler.libcxx=libstdc++11 default  # Sets libcxx to C++11 ABI
     ```
-- cmake
-- clang-format v6.0.0
+- cmake v3.9.x
+- clang-format >= v6.0.0
 
 ## Build
 

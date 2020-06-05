@@ -42,7 +42,7 @@ class MemoryStore {
  private:
   MemoryStore();
 
-  std::pair<std::string, unsigned> ip_port_from_env_var(
+  std::pair<std::string, uint16_t> ip_port_from_env_var(
       char const *const name) const;
   static constexpr auto RegIPName = "DORY_REGISTRY_IP";
   static constexpr auto MemcacheDDefaultPort = MEMCACHED_DEFAULT_PORT;  // 11211

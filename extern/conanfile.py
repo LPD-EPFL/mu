@@ -1,5 +1,6 @@
 from conans import ConanFile, CMake
 
+
 class DoryExternals(ConanFile):
     name = "dory-external"
     version = "0.0.1"
@@ -9,9 +10,8 @@ class DoryExternals(ConanFile):
     exports_sources = "src/*"
 
     def build(self):
-      cmake = CMake(self)
-      cmake.configure(source_folder="src")
-      #cmake.build()
+        cmake = CMake(self)
+        cmake.configure(source_folder="src")
 
     def package(self):
         self.copy("*.hpp", dst="include/dory/extern", src="src")

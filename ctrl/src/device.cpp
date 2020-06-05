@@ -127,11 +127,11 @@ ResolvedPort::ResolvedPort(OpenDevice &od) : open_dev{od}, port_index{-1} {
 
 bool ResolvedPort::bindTo(size_t index) {
   size_t skipped_active_ports = 0;
-  for (unsigned i = 1; i <= open_dev.device_attributes().phys_port_cnt; i++) {
+  for (uint8_t i = 1; i <= open_dev.device_attributes().phys_port_cnt; i++) {
     struct ibv_port_attr port_attr;
     memset(&port_attr, 0, sizeof(ibv_port_attr));
 
-    if (ibv_query_port(open_dev.context(), i, &port_attr) != 0) {
+    if (ibv_query_port(open_dev.context(), i, &port_attr)) {
       throw std::runtime_error("Failed to query port: " +
                                std::string(std::strerror(errno)));
     }

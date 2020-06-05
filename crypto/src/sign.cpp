@@ -25,7 +25,9 @@ void init() {
 
   initialized = true;
 
-  sodium_init();
+  if (sodium_init() == -1) {
+    throw std::runtime_error("Initializing libsodium failed.");
+  }
 
   crypto_sign_keypair(own_pk, own_sk);
 }

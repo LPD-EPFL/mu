@@ -69,7 +69,7 @@ bool MemoryStore::get(std::string const &key, std::string &value) {
   return false;
 }
 
-std::pair<std::string, unsigned> MemoryStore::ip_port_from_env_var(
+std::pair<std::string, uint16_t> MemoryStore::ip_port_from_env_var(
     char const *const name) const {
   char const *env = getenv(name);
   if (env == nullptr) {

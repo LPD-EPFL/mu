@@ -180,7 +180,8 @@ int ControlBlock::lid() const { return resolved_port.portLID(); }
 
 bool ControlBlock::pollCqIsOK(deleted_unique_ptr<struct ibv_cq> &cq,
                               std::vector<struct ibv_wc> &entries) {
-  auto num = ibv_poll_cq(cq.get(), entries.size(), &entries[0]);
+  auto num =
+      ibv_poll_cq(cq.get(), static_cast<int>(entries.size()), &entries[0]);
 
   if (num >= 0) {
     entries.erase(entries.begin() + num, entries.end());

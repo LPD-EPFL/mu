@@ -102,7 +102,7 @@ std::pair<bool, int> ConnectionExchanger::valid_ids() const {
     return std::make_pair(false, 0);
   }
 
-  if (double(max) > gapFactor * (remote_ids.size() + 1)) {
+  if (double(max) > gapFactor * static_cast<double>((remote_ids.size() + 1))) {
     return std::make_pair(false, 0);
   }
 

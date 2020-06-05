@@ -11,48 +11,49 @@ namespace dory {
 class SendWrBuilder {
  public:
   SendWrBuilder& req(ReliableConnection::RdmaReq v) {
-    __req = v;
+    req_ = v;
     return *this;
   }
   SendWrBuilder& signaled(bool v) {
-    __signaled = v;
+    signaled_ = v;
     return *this;
   }
   SendWrBuilder& req_id(uint64_t v) {
-    __req_id = v;
+    req_id_ = v;
     return *this;
   }
   SendWrBuilder& buf(void* v) {
-    __buf = v;
+    buf_ = v;
     return *this;
   }
-  SendWrBuilder& len(uint64_t v) {
-    __len = v;
+  SendWrBuilder& len(uint32_t v) {
+    len_ = v;
     return *this;
   }
   SendWrBuilder& lkey(uint32_t v) {
-    __lkey = v;
+    lkey_ = v;
     return *this;
   }
   SendWrBuilder& remote_addr(uintptr_t v) {
-    __remote_addr = v;
+    remote_addr_ = v;
     return *this;
   }
   SendWrBuilder& rkey(uint32_t v) {
-    __rkey = v;
+    rkey_ = v;
     return *this;
   }
   SendWrBuilder& next(ibv_send_wr* v) {
-    __next = v;
+    next_ = v;
     return *this;
   }
 
   void build(ibv_send_wr& wr, ibv_sge& sg) const { fill(wr, sg); }
 
   dory::deleted_unique_ptr<struct ibv_send_wr> build() const {
-    struct ibv_sge* sg = (ibv_sge*)malloc(sizeof(ibv_sge));
+    struct ibv_sge* sg = reinterpret_cast<ibv_sge*>(malloc(sizeof(ibv_sge)));
 
-    struct ibv_send_wr* wr = (ibv_send_wr*)malloc(sizeof(ibv_send_wr));
+    struct ibv_send_wr* wr =
+        reinterpret_cast<ibv_send_wr*>(malloc(sizeof(ibv_send_wr)));
 
     fill(*wr, *sg);
 
@@ -64,27 +65,27 @@ class SendWrBuilder {
     memset(&wr, 0, sizeof(ibv_send_wr));
     memset(&sg, 0, sizeof(ibv_sge));
 
-    sg.addr = reinterpret_cast<uintptr_t>(__buf);
-    sg.length = __len;
-    sg.lkey = __lkey;
+    sg.addr = reinterpret_cast<uintptr_t>(buf_);
+    sg.length = len_;
+    sg.lkey = lkey_;
 
-    wr.wr_id = __req_id;
+    wr.wr_id = req_id_;
     wr.sg_list = &sg;
     wr.num_sge = 1;
-    wr.opcode = static_cast<enum ibv_wr_opcode>(__req);  // TODO
-    wr.next = __next;
+    wr.opcode = static_cast<enum ibv_wr_opcode>(req_);  // TODO
+    wr.next = next_;
 
-    if (__signaled) {
+    if (signaled_) {
       wr.send_flags |= IBV_SEND_SIGNALED;
     }
 
     if (wr.opcode == IBV_WR_RDMA_WRITE &&
-        __len <= ReliableConnection::MaxInlining) {
+        len_ <= ReliableConnection::MaxInlining) {
       wr.send_flags |= IBV_SEND_INLINE;
     }
 
-    wr.wr.rdma.remote_addr = __remote_addr;
-    wr.wr.rdma.rkey = __rkey;
+    wr.wr.rdma.remote_addr = remote_addr_;
+    wr.wr.rdma.rkey = rkey_;
   }
 
   static void wr_deleter(struct ibv_send_wr* wr) {
@@ -95,15 +96,15 @@ class SendWrBuilder {
     free(wr);
   }
 
-  ReliableConnection::RdmaReq __req;
-  bool __signaled;
-  uint64_t __req_id;
-  void* __buf;
-  uint64_t __len;
-  uint32_t __lkey;
-  uintptr_t __remote_addr;
-  uint32_t __rkey;
-  ibv_send_wr* __next;
+  ReliableConnection::RdmaReq req_;
+  bool signaled_;
+  uint64_t req_id_;
+  void* buf_;
+  uint32_t len_;
+  uint32_t lkey_;
+  uintptr_t remote_addr_;
+  uint32_t rkey_;
+  ibv_send_wr* next_;
 };
 
 // TODO(Kristian): test this

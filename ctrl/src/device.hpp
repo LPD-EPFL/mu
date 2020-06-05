@@ -119,7 +119,7 @@ class ResolvedPort {
    **/
   uint8_t portID() const { return port_id; }
 
-  uint8_t portLID() const { return port_lid; }
+  uint16_t portLID() const { return port_lid; }
 
   OpenDevice &device() { return open_dev; }
 
@@ -141,6 +141,6 @@ class ResolvedPort {
   OpenDevice &open_dev;
   int port_index;
   uint8_t port_id;
-  uint8_t port_lid;
+  uint16_t port_lid;
 };
 }  // namespace dory

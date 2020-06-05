@@ -60,13 +60,13 @@ else:
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if compiler == 'gcc':
-    CONAN_PROFILE = os.path.join(current_dir, 'conan-profiles',
+    CONAN_PROFILE = os.path.join(current_dir, 'conan/profiles',
                                  'gcc-release.profile')
     CC='gcc'
     CXX='g++'
 
 elif compiler == 'clang':
-    CONAN_PROFILE = os.path.join(current_dir, 'conan-profiles',
+    CONAN_PROFILE = os.path.join(current_dir, 'conan/profiles',
                                  'clang-release.profile')
     CC='clang'
     CXX='clang++'

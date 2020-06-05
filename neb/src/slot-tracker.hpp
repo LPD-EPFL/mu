@@ -116,7 +116,7 @@ class PendingSlots {
   using map_entry_refs =
       std::vector<std::pair<const uint64_t&, std::unique_ptr<SlotTracker>&>>;
 
-  map_entry_refs deliverable_after_remove_of(int pid, int quorum_size) {
+  map_entry_refs deliverable_after_remove_of(int pid, size_t quorum_size) {
     std::shared_lock lock(mux);
     map_entry_refs deliverable;
 

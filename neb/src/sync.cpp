@@ -19,7 +19,9 @@ inline std::tuple<int, int, uint64_t> unpack_read_id(uint64_t wr_id) {
 inline uint64_t pack_read_id(int replayer, int origin, uint64_t msg_id) {
   return uint64_t(replayer) << 48 | uint64_t(origin) << 32 | msg_id;
 }
-inline int unpack_receiver_id(uint64_t wr_id) { return wr_id >> 48; }
+inline int unpack_receiver_id(uint64_t wr_id) {
+  return static_cast<int>(wr_id >> 48);
+}
 inline std::pair<int, uint64_t> unpack_write_id(uint64_t wr_id) {
   return {unpack_receiver_id(wr_id), unpack_msg_id(wr_id)};
 }
@@ -27,13 +29,14 @@ inline uint64_t pack_write_id(int receiver, uint64_t msg_id) {
   return (uint64_t(receiver) << 48) | msg_id;
 }
 
-void write(std::vector<std::pair<std::chrono::steady_clock::time_point,
-                                 std::chrono::steady_clock::time_point>> &ttd) {
+inline void write(
+    std::vector<std::pair<std::chrono::steady_clock::time_point,
+                          std::chrono::steady_clock::time_point>> &ttd) {
   std::ofstream fs;
   fs.open("/tmp/neb-bench-lat");
   for (auto &p : ttd) {
     auto diff = std::chrono::duration<double, std::micro>(p.second - p.first);
-    if (diff.count() != 0) fs << diff.count() << "\n";
+    if (diff.count() > 0) fs << diff.count() << "\n";
   }
 }
 
@@ -360,7 +363,8 @@ inline void NonEquivocatingBroadcast::poll_bcast_bufs() {
     auto tracker = replayed.get(origin).insert(next_idx);
     pending_remote_slots++;
 
-    ttd[origin * next_idx].first = std::chrono::steady_clock::now();
+    ttd[static_cast<uint64_t>(origin) * next_idx].first =
+        std::chrono::steady_clock::now();
 
     // if there is only one remote process which is the message sender,
     // then we can directly deliver without replay reading
@@ -402,7 +406,7 @@ inline void NonEquivocatingBroadcast::consume_write_wcs(
                           write_wcs.size());
       {
         std::unique_lock<std::mutex> lock(write_mux);
-        pending_writes -= write_wcs.size();
+        pending_writes -= static_cast<unsigned>(write_wcs.size());
       }
       write_cond.notify_one();
     }
@@ -614,7 +618,7 @@ inline void NonEquivocatingBroadcast::remove_remote(int pid) {
   if (p_writes > 0) {
     {
       std::unique_lock<std::mutex> lock(write_mux);
-      pending_writes -= pending_writes_at[pid];
+      pending_writes -= static_cast<unsigned>(pending_writes_at[pid]);
     }
     write_cond.notify_one();
   }
@@ -644,7 +648,7 @@ inline bool NonEquivocatingBroadcast::verify_slot(MemorySlot &slot,
 }
 
 inline void NonEquivocatingBroadcast::post_write(int pid, uint64_t wrid,
-                                                 uintptr_t lbuf, size_t lsize,
+                                                 uintptr_t lbuf, uint32_t lsize,
                                                  uint32_t lkey,
                                                  size_t roffset) {
   post_writer.enqueue([=]() {
@@ -682,7 +686,7 @@ inline void NonEquivocatingBroadcast::post_write(int pid, uint64_t wrid,
 }
 
 inline void NonEquivocatingBroadcast::post_read(int pid, uint64_t wrid,
-                                                uintptr_t lbuf, size_t lsize,
+                                                uintptr_t lbuf, uint32_t lsize,
                                                 uint32_t lkey, size_t roffset) {
   post_reader.enqueue([=]() {
     if (pending_reads + 1 > dory::ControlBlock::CQDepth) {
@@ -728,7 +732,8 @@ inline void NonEquivocatingBroadcast::deliver(MemorySlot &slot,
     tracker.delivered = true;
 
     if (origin != self_id) {
-      ttd[origin * slot.id()].second = std::chrono::steady_clock::now();
+      ttd[static_cast<uint64_t>(origin) * slot.id()].second =
+          std::chrono::steady_clock::now();
 
       {
         std::unique_lock<std::mutex> lock(bcast_poll_mux);

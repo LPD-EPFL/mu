@@ -7,13 +7,20 @@ endif
 DEPDIR := .deps
 
 define invoke
-	export CONAN_DEFAULT_PROFILE_PATH=$(CONAN_PROFILE);		\
-	cd $(patsubst %-mangled,%,$(1));						\
-	if [ -f "build.sh" ]; then								\
-		./build.sh && touch ../$(DEPDIR)/$(1).conandep;		\
-	else													\
-		conan create . --build=outdated &&					\
-		touch ../$(DEPDIR)/$(1).conandep;					\
+	$(eval TARGET := $(patsubst %-mangled,%,$(1)))				\
+	export CONAN_DEFAULT_PROFILE_PATH=$(CONAN_PROFILE);			\
+	if [ "$(filter $(TARGET),$(EXPORTS))" = $(TARGET) ]; then	\
+		cd conan/exports/$(TARGET);								\
+		conan export . dory/stable &&							\
+		touch ../../../$(DEPDIR)/$(1).conandep;					\
+	else														\
+		cd $(TARGET);											\
+		if [ -f "build.sh" ]; then								\
+			./build.sh && touch ../$(DEPDIR)/$(1).conandep;		\
+		else													\
+			conan create . --build=outdated &&					\
+			touch ../$(DEPDIR)/$(1).conandep;					\
+		fi;														\
 	fi
 endef
 
@@ -34,9 +41,11 @@ endef
 
 .PHONY: clean
 
-LIST = $(shell find $(patsubst %-mangled,%,$(basename $(@F)))	\
-			-type f 											\
-			-not -path "$(patsubst %-mangled,%,$(basename $(@F)))/build/*")
+LIST = $(shell find \
+			$(patsubst %-mangled,%,$(basename $(@F)))				\
+			$(patsubst %-mangled,conan/exports/%,$(basename $(@F)))	\
+				-type f 											\
+				-not -path "$(patsubst %-mangled,%,$(basename $(@F)))/build/*" 2> /dev/null)
 
 $(DEPDIR): ; $(SILENCE) mkdir -p $@
 clean: ; $(SILENCE) rm -rf $(DEPDIR)
@@ -49,21 +58,25 @@ $(DEPDIR)/%.conandep: $$(LIST) | $(DEPDIR)
 	$(SILENCE) $(call invoke,$(basename $(@F)))
 
 ############################ Start of editable area ############################
+.PHONY: compiler-options
 .PHONY: shared extern memstore crypto ctrl conn
-.PHONY: crash-consensus neb
+# .PHONY: crash-consensus neb
+.PHONY: neb
 
 # Define the targets you want to compile as conan libraries/conan binaries.
-TARGETS := extern shared memstore crypto ctrl conn crash-consensus neb
-
+#TARGETS := compiler-options extern shared memstore crypto ctrl conn crash-consensus neb
+TARGETS := compiler-options extern shared memstore crypto ctrl conn neb
+# Define targets which should be exported rather than build or packaged
+EXPORTS := compiler-options
 # Specify only the local dependencies for the given conan libraries/binaries
 #  (that have local dependencies)
-memstore : shared extern
-ctrl : shared extern
-conn : shared ctrl memstore
-crypto : shared memstore
+memstore : compiler-options shared extern
+ctrl : compiler-options shared extern
+conn : compiler-options shared ctrl memstore
+crypto : compiler-options shared memstore
 
-crash-consensus: extern shared memstore ctrl conn
-neb: extern shared memstore ctrl conn crypto
+#crash-consensus: compiler-options extern shared memstore ctrl conn
+neb: compiler-options extern shared memstore ctrl conn crypto
 
 ############################# End of editable area #############################
 .PHONY: all

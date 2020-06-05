@@ -30,7 +30,7 @@ using namespace neb;
 class NonEquivocatingBroadcast {
  public:
   using deliver_callback =
-      std::function<void(uint64_t k, volatile const void *m, size_t proc_id)>;
+      std::function<void(uint64_t k, volatile const void *m, int proc_id)>;
 
   /**
    * @param id: of the local process
@@ -309,10 +309,10 @@ class NonEquivocatingBroadcast {
 
   inline bool verify_slot(MemorySlot &slot, dory::crypto::pub_key &key);
 
-  inline void post_write(int pid, uint64_t wrid, uintptr_t lbuf, size_t lsize,
+  inline void post_write(int pid, uint64_t wrid, uintptr_t lbuf, uint32_t lsize,
                          uint32_t lkey, size_t roffset);
 
-  inline void post_read(int pid, uint64_t wrid, uintptr_t lbuf, size_t lsize,
+  inline void post_read(int pid, uint64_t wrid, uintptr_t lbuf, uint32_t lsize,
                         uint32_t lkey, size_t roffset);
 
   inline void deliver(MemorySlot &slot, SlotTracker &tracker, int origin);

@@ -141,8 +141,8 @@ void ReliableConnection::init(ControlBlock::MemoryRights rights) {
   memset(&init_attr, 0, sizeof(struct ibv_qp_attr));
   init_attr.qp_state = IBV_QPS_INIT;
   init_attr.pkey_index = 0;
-  init_attr.port_num = cb.port();
-  init_attr.qp_access_flags = static_cast<int>(rights);
+  init_attr.port_num = static_cast<uint8_t>(cb.port());
+  init_attr.qp_access_flags = rights;
 
   auto ret = ibv_modify_qp(
       uniq_qp.get(), &init_attr,
@@ -167,7 +167,7 @@ void ReliableConnection::connect(RemoteConnection &rc) {
   conn_attr.ah_attr.is_global = 0;
   conn_attr.ah_attr.sl = 0;  // TODO: Igor has it to 1
   conn_attr.ah_attr.src_path_bits = 0;
-  conn_attr.ah_attr.port_num = cb.port();
+  conn_attr.ah_attr.port_num = static_cast<uint8_t>(cb.port());
 
   conn_attr.dest_qp_num = rc.rci.qpn;
   conn_attr.ah_attr.dlid = rc.rci.lid;
@@ -241,7 +241,7 @@ bool ReliableConnection::post_send(ibv_send_wr &wr) {
 }
 
 bool ReliableConnection::postSendSingleCached(RdmaReq req, uint64_t req_id,
-                                              void *buf, uint64_t len,
+                                              void *buf, uint32_t len,
                                               uintptr_t remote_addr) {
   sg_cached[0].addr = reinterpret_cast<uintptr_t>(buf);
   sg_cached[0].length = len;
@@ -252,7 +252,7 @@ bool ReliableConnection::postSendSingleCached(RdmaReq req, uint64_t req_id,
   if (wr_cached.opcode == IBV_WR_RDMA_WRITE && len <= MaxInlining) {
     wr_cached.send_flags |= IBV_SEND_INLINE;
   } else {
-    wr_cached.send_flags &= ~IBV_SEND_INLINE;
+    wr_cached.send_flags &= ~static_cast<unsigned int>(IBV_SEND_INLINE);
   }
 
   wr_cached.wr.rdma.remote_addr = remote_addr;
@@ -279,12 +279,12 @@ bool ReliableConnection::postSendSingleCached(RdmaReq req, uint64_t req_id,
 }
 
 bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf,
-                                        uint64_t len, uintptr_t remote_addr) {
+                                        uint32_t len, uintptr_t remote_addr) {
   return postSendSingle(req, req_id, buf, len, mr.lkey, remote_addr);
 }
 
 bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf,
-                                        uint64_t len, uint32_t lkey,
+                                        uint32_t len, uint32_t lkey,
                                         uintptr_t remote_addr) {
   // TODO(Kristian): if not used concurrently, we could reuse the same wr
   struct ibv_send_wr wr;
@@ -312,10 +312,12 @@ bool ReliableConnection::pollCqIsOK(CQ cq,
 
   switch (cq) {
     case RecvCQ:
-      num = ibv_poll_cq(create_attr.recv_cq, entries.size(), &entries[0]);
+      num = ibv_poll_cq(create_attr.recv_cq, static_cast<int>(entries.size()),
+                        &entries[0]);
       break;
     case SendCQ:
-      num = ibv_poll_cq(create_attr.send_cq, entries.size(), &entries[0]);
+      num = ibv_poll_cq(create_attr.send_cq, static_cast<int>(entries.size()),
+                        &entries[0]);
       break;
     default:
       throw std::runtime_error("Invalid CQ");
@@ -330,7 +332,8 @@ bool ReliableConnection::pollCqIsOK(CQ cq,
 }
 
 RemoteConnection ReliableConnection::remoteInfo() const {
-  RemoteConnection rc(cb.lid(), uniq_qp->qp_num, mr.addr, mr.size, mr.rkey);
+  RemoteConnection rc(static_cast<uint16_t>(cb.lid()), uniq_qp->qp_num, mr.addr,
+                      mr.size, mr.rkey);
   return rc;
 }
 
