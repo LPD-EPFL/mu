@@ -1,0 +1,2 @@
+[build]
+rustflags = ["-C", "target_cpu=native"]

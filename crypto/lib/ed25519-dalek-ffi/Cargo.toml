@@ -1,0 +1,18 @@
+[package]
+name = "ed25519-ffi"
+version = "0.1.0"
+authors = ["ubuntu"]
+edition = "2018"
+
+
+[dependencies]
+libc = "0.2"
+rand = "0.7"
+
+[dependencies.ed25519-dalek]
+version = "1.0.0-pre.3"
+features = ["nightly", "simd_backend"]
+
+[lib]
+name = "ed25519_dalek_ffi"
+crate-type = ["dylib"] # could be `staticlib` as well

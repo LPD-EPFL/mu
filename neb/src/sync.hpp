@@ -5,7 +5,7 @@
 #include <cstring>
 #include <dory/conn/exchanger.hpp>
 #include <dory/conn/rc.hpp>
-#include <dory/crypto/sign.hpp>
+#include <dory/crypto/sign/sodium.hpp>
 #include <dory/ctrl/block.hpp>
 #include <dory/shared/logger.hpp>
 #include <dory/shared/pointer-wrapper.hpp>
@@ -65,8 +65,8 @@ class NonEquivocatingBroadcast {
    * `remote_ids`
    * @param keys: map holding the public keys
    **/
-  void set_remote_keys(std::map<int, dory::crypto::pub_key> &keys);
-  void set_remote_keys(std::map<int, dory::crypto::pub_key> &&keys);
+  void set_remote_keys(std::map<int, dory::crypto::sodium::pub_key> &keys);
+  void set_remote_keys(std::map<int, dory::crypto::sodium::pub_key> &&keys);
 
   /**
    * @param uint64_t: message key
@@ -307,7 +307,7 @@ class NonEquivocatingBroadcast {
 
   inline void poll_bcast_signatures();
 
-  inline bool verify_slot(MemorySlot &slot, dory::crypto::pub_key &key);
+  inline bool verify_slot(MemorySlot &slot, dory::crypto::sodium::pub_key &key);
 
   inline void post_write(int pid, uint64_t wrid, uintptr_t lbuf, uint32_t lsize,
                          uint32_t lkey, size_t roffset);

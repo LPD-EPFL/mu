@@ -25,5 +25,8 @@ MESSAGE( STATUS "CMAKE_INTERPROCEDURAL_OPTIMIZATION: " ${CMAKE_INTERPROCEDURAL_O
 
 add_library(
     dorycrypto
-    sign.cpp
+    sign/sodium.cpp
+    sign/dalek.cpp
 )
+
+target_link_libraries( dorycrypto )

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <dory/crypto/sign.hpp>
+#include <dory/crypto/sign/sodium.hpp>
 #include <dory/shared/logger.hpp>
 #include <dory/shared/units.hpp>
 
@@ -13,7 +13,7 @@ static constexpr size_t BUFFER_SIZE = 256_MiB;
 static constexpr size_t MEMORY_SLOT_SIZE = 128_B;
 static constexpr size_t MSG_HEADER_SIZE = 8_B;
 static constexpr size_t MSG_PAYLOAD_SIZE =
-    MEMORY_SLOT_SIZE - MSG_HEADER_SIZE - dory::crypto::SIGN_BYTES;
+    MEMORY_SLOT_SIZE - MSG_HEADER_SIZE - dory::crypto::sodium::SIGN_BYTES;
 static constexpr size_t SLOT_SIGN_DATA_SIZE =
     MSG_HEADER_SIZE + MSG_PAYLOAD_SIZE;
 static constexpr size_t SLOT_SIGNATURE_OFFSET = SLOT_SIGN_DATA_SIZE;

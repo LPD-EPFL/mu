@@ -69,7 +69,7 @@ class MemorySlot {
 
     auto start = signature();
 
-    for (size_t i = 0; i < dory::crypto::SIGN_BYTES; i++) {
+    for (size_t i = 0; i < dory::crypto::sodium::SIGN_BYTES; i++) {
       if (start[i] != default_val) {
         return true;
       }
@@ -101,7 +101,7 @@ class MemorySlot {
         reinterpret_cast<void *>(entry.addr() +
                                  dory::neb::SLOT_SIGNATURE_OFFSET),
         const_cast<uint8_t const *>(buf) + dory::neb::SLOT_SIGNATURE_OFFSET,
-        dory::crypto::SIGN_BYTES);
+        dory::crypto::sodium::SIGN_BYTES);
   }
 
   bool has_same_data_content_as(const MemorySlot &entry) const {

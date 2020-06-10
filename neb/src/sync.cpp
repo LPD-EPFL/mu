@@ -140,12 +140,12 @@ void NonEquivocatingBroadcast::set_connections(ConnectionExchanger &b_ce,
 }
 
 void NonEquivocatingBroadcast::set_remote_keys(
-    std::map<int, dory::crypto::pub_key> &keys) {
+    std::map<int, dory::crypto::sodium::pub_key> &keys) {
   remotes.set_keys(keys);
 }
 
 void NonEquivocatingBroadcast::set_remote_keys(
-    std::map<int, dory::crypto::pub_key> &&keys) {
+    std::map<int, dory::crypto::sodium::pub_key> &&keys) {
   remotes.set_keys(keys);
 }
 
@@ -259,14 +259,14 @@ void NonEquivocatingBroadcast::broadcast(uint64_t k, Broadcastable &msg) {
 
     {
       dory::BenchTimer timer("signing", true);
-      dory::crypto::sign(sig, sign_data, SLOT_SIGN_DATA_SIZE);
+      dory::crypto::sodium::sign(sig, sign_data, SLOT_SIGN_DATA_SIZE);
     }
 
     {
       auto remote_ids = remotes.ids();
       for (auto pid : remote_ids.get()) {
         post_write(pid, pack_write_id(pid, 0), reinterpret_cast<uintptr_t>(sig),
-                   dory::crypto::SIGN_BYTES, bcast_buf.lkey,
+                   dory::crypto::sodium::SIGN_BYTES, bcast_buf.lkey,
                    bcast_buf.get_byte_offset(sig_next) + SLOT_SIGNATURE_OFFSET);
       }
     }
@@ -636,15 +636,15 @@ inline void NonEquivocatingBroadcast::remove_remote(int pid) {
   }
 }
 
-inline bool NonEquivocatingBroadcast::verify_slot(MemorySlot &slot,
-                                                  dory::crypto::pub_key &key) {
+inline bool NonEquivocatingBroadcast::verify_slot(
+    MemorySlot &slot, dory::crypto::sodium::pub_key &key) {
   auto sig = reinterpret_cast<unsigned char *>(
       const_cast<uint8_t *>(slot.signature()));
   auto msg = reinterpret_cast<unsigned char *>(slot.addr());
   auto k = key.get();
 
   dory::BenchTimer timer("verifying sig", true);
-  return dory::crypto::verify(sig, msg, SLOT_SIGN_DATA_SIZE, k);
+  return dory::crypto::sodium::verify(sig, msg, SLOT_SIGN_DATA_SIZE, k);
 }
 
 inline void NonEquivocatingBroadcast::post_write(int pid, uint64_t wrid,

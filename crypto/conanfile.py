@@ -24,7 +24,7 @@ class DoryCryptoConan(ConanFile):
     }
     default_options = {"shared": False, "log_level": "INFO", "lto": True}
     generators = "cmake"
-    exports_sources = "src/*"
+    exports_sources = "src/*", "lib/*.so", "!lib/**/target/*.so"
     python_requires = "dory-compiler-options/0.0.1@dory/stable"
 
     def _configure_cmake(self):
@@ -52,8 +52,9 @@ class DoryCryptoConan(ConanFile):
         cmake.build()
 
     def package(self):
-        self.copy("*.hpp", dst="include/dory/crypto", src="src")
+        self.copy("*.hpp", dst="include/dory/crypto/sign", src="src/sign")
         self.copy("*.a", dst="lib", keep_path=False)
+        self.copy("*.so", dst="lib", keep_path=False, src="lib")
 
     def package_info(self):
         self.cpp_info.libs = ["dorycrypto"]

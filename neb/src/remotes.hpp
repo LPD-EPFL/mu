@@ -8,7 +8,7 @@
 
 #include <dory/conn/exchanger.hpp>
 #include <dory/conn/rc.hpp>
-#include <dory/crypto/sign.hpp>
+#include <dory/crypto/sign/sodium.hpp>
 #include <dory/shared/logger.hpp>
 
 namespace dory {
@@ -39,7 +39,7 @@ class RemoteProcesses {
     replay_conn.merge(replay_ce.connections());
   }
 
-  void set_keys(std::map<int, dory::crypto::pub_key> &keys) {
+  void set_keys(std::map<int, dory::crypto::sodium::pub_key> &keys) {
     remote_keys.merge(keys);
   }
 
@@ -70,7 +70,7 @@ class RemoteProcesses {
 
   size_t replay_quorum_size() { return size() - 1; }
 
-  dory::crypto::pub_key &key(int pid) { return remote_keys[pid]; }
+  dory::crypto::sodium::pub_key &key(int pid) { return remote_keys[pid]; }
 
   optional_ref<ReliableConnection> broadcast_conneciton(int pid) {
     std::shared_lock lock(mux);
@@ -117,7 +117,7 @@ class RemoteProcesses {
   // replay reliable connections
   std::map<int, ReliableConnection> replay_conn;
 
-  std::map<int, dory::crypto::pub_key> remote_keys;
+  std::map<int, dory::crypto::sodium::pub_key> remote_keys;
 
   std::shared_mutex mux;
 };
