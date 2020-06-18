@@ -13,8 +13,22 @@ do
             KILL_BEFORE_BEGIN=true
             shift
         ;;
+        -v|--validate)
+            VALIDATE=true
+            shift
+        ;;
         -w|--wait)
             WAIT_TIME=$2
+            shift
+            shift
+        ;;
+        -n|--num-nodes)
+            NUM_NODES=$2
+            shift
+            shift
+        ;;
+        -c|--compile)
+            COMPILE=true
             shift
             shift
         ;;
@@ -43,12 +57,14 @@ fi
 
 start=$(date +%s)
 
-compile_neb
+if [[ $COMPILE  ]]; then
+    compile_neb
+fi
 
 start_memcached
 
 # 4 nodes with 20k messages each
-create_membership "$MEMBERSHIP_FILE" 4 20000 20000 20000 20000
+create_membership "$MEMBERSHIP_FILE" $NUM_NODES 500000 500000 500000 500000
 
 copy_membership "$MEMBERSHIP_FILE"
 
@@ -62,7 +78,7 @@ sleep "$WAIT_TIME"
 stop_nodes "$NUM_NODES"
 
 echo "Downloading data samples"
-download_output "$NUM_NODES"
+RESULTS_DIR=$(download_output "$NUM_NODES")
 
 teardown "$NUM_NODES"
 
@@ -71,3 +87,8 @@ stop_memcached
 end=$(date +%s)
 
 echo "Took" $((end-start)) "seconds to run"
+
+if [[ $VALIDATE ]]; then 
+    echo "Finally, validating output."
+    ./validate.py "$RESULTS_DIR"
+fi 

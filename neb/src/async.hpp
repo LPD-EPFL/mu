@@ -14,18 +14,18 @@ namespace neb {
 using deliver_callback =
     std::function<void(uint64_t k, volatile const void *m, int proc_id)>;
 
-namespace sync {
+namespace async {
 class NonEquivocatingBroadcast;
 }
 }  // namespace neb
 
 using namespace neb;
 
-class SyncNonEquivocatingBroadcast {
+class AsyncNonEquivocatingBroadcast {
  public:
-  SyncNonEquivocatingBroadcast(int self_id, std::vector<int> proc_ids,
-                               neb::deliver_callback deliver_cb);
-  ~SyncNonEquivocatingBroadcast();
+  AsyncNonEquivocatingBroadcast(int self_id, std::vector<int> proc_ids,
+                                neb::deliver_callback deliver_cb);
+  ~AsyncNonEquivocatingBroadcast();
 
   /**
    * @param uint64_t: message key
@@ -34,7 +34,7 @@ class SyncNonEquivocatingBroadcast {
   void broadcast(uint64_t k, Broadcastable &msg);
 
  private:
-  std::unique_ptr<sync::NonEquivocatingBroadcast> impl;
+  std::unique_ptr<neb::async::NonEquivocatingBroadcast> impl;
   std::unique_ptr<ControlBlock> cb;
   dory::logger logger;
 };

@@ -2,36 +2,25 @@
 
 #include <functional>
 #include <map>
-#include <optional>
-#include <shared_mutex>
 #include <vector>
 
 #include <dory/conn/exchanger.hpp>
 #include <dory/conn/rc.hpp>
-#include <dory/crypto/sign/sodium.hpp>
+#include <dory/crypto/sign/dalek.hpp>
 #include <dory/shared/logger.hpp>
+
+#include "types.hpp"
 
 namespace dory {
 namespace neb {
 
-template <typename T>
-using optional_ref = std::optional<std::reference_wrapper<T>>;
-
-template <typename T>
-class ShareLockedRef {
- public:
-  ShareLockedRef(const T &v, std::shared_mutex &mux) : v(v), lock(mux) {}
-
-  const T &get() { return v; }
-
- private:
-  const T &v;
-  std::shared_lock<std::shared_mutex> lock;
-};
-
 class RemoteProcesses {
  public:
-  RemoteProcesses(std::vector<int> remote_ids) : remote_ids{remote_ids} {}
+  RemoteProcesses(std::vector<int> process_ids, int self_id) {
+    for (auto pid : process_ids) {
+      if (pid != self_id) remote_ids.push_back(pid);
+    }
+  }
 
   void set_connections(ConnectionExchanger &bcast_ce,
                        ConnectionExchanger &replay_ce) {
@@ -39,11 +28,11 @@ class RemoteProcesses {
     replay_conn.merge(replay_ce.connections());
   }
 
-  void set_keys(std::map<int, dory::crypto::sodium::pub_key> &keys) {
+  void set_keys(std::map<int, dory::crypto::dalek::pub_key> &keys) {
     remote_keys.merge(keys);
   }
 
-  void remote_remote(int pid) {
+  void remove_remote(int pid) {
     std::unique_lock lock(mux);
 
     auto rit = bcast_conn.find(pid);
@@ -70,9 +59,9 @@ class RemoteProcesses {
 
   size_t replay_quorum_size() { return size() - 1; }
 
-  dory::crypto::sodium::pub_key &key(int pid) { return remote_keys[pid]; }
+  dory::crypto::dalek::pub_key &key(int pid) { return remote_keys[pid]; }
 
-  optional_ref<ReliableConnection> broadcast_conneciton(int pid) {
+  optional_ref<ReliableConnection> broadcast_connection(int pid) {
     std::shared_lock lock(mux);
 
     auto it = bcast_conn.find(pid);
@@ -117,7 +106,7 @@ class RemoteProcesses {
   // replay reliable connections
   std::map<int, ReliableConnection> replay_conn;
 
-  std::map<int, dory::crypto::sodium::pub_key> remote_keys;
+  std::map<int, dory::crypto::dalek::pub_key> remote_keys;
 
   std::shared_mutex mux;
 };

@@ -14,12 +14,17 @@ namespace dory {
 namespace crypto {
 namespace dalek {
 
-extern "C" {
-extern size_t PUBLIC_KEY_LENGTH;
-extern size_t SECRET_KEY_LENGTH;
-extern size_t KEYPAIR_LENGTH;
-extern size_t SIGNATURE_LENGTH;
-}
+// extern "C" {
+// extern size_t PUBLIC_KEY_LENGTH;
+// extern size_t SECRET_KEY_LENGTH;
+// extern size_t KEYPAIR_LENGTH;
+// extern size_t SIGNATURE_LENGTH;
+// }
+
+static constexpr size_t PUBLIC_KEY_LENGTH = 32;
+static constexpr size_t SECRET_KEY_LENGTH = 32;
+static constexpr size_t KEYPAIR_LENNGTH = 64;
+static constexpr size_t SIGNATURE_LENGTH = 64;
 
 using pub_key = deleted_unique_ptr<publickey>;
 

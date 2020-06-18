@@ -55,21 +55,22 @@ class DoryNebConan(ConanFile):
         self.requires("dory-shared/0.0.1")
         self.requires("dory-external/0.0.1")
         self.requires("dory-crypto/0.0.1")
+        self.requires("tbb/2020.1")
 
     def build(self):
         cmake = self._configure_cmake()
         cmake.build()
 
     def package(self):
-        self.copy("sync.hpp", dst="include/dory/neb", src="src")
-        self.copy("consts.hpp", dst="include/dory/neb", src="src")
-        self.copy("broadcastable.hpp", dst="include/dory/neb", src="src")
+        self.copy("*.hpp", dst="include/dory/neb/", src="src/")
         self.copy("*.a", dst="lib", src="lib", keep_path=False)
         self.copy("*.so", dst="lib", src="lib", keep_path=False)
 
     def imports(self):
         self.copy("*.a", src="lib", dst="deps", keep_path=False)
         self.copy("*.so", src="lib", dst="deps", keep_path=False)
+        # this is needed for tbb as it's symlinks the *.so files to *.so.2
+        self.copy("*.so.2", src="lib", dst="deps", keep_path=False)
 
     def package_info(self):
         self.cpp_info.libs = ["doryneb"]

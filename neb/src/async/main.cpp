@@ -7,7 +7,7 @@
 #include <thread>
 
 #include <dory/conn/exchanger.hpp>
-#include <dory/crypto/sign.hpp>
+#include <dory/crypto/sign/dalek.hpp>
 #include <dory/ctrl/ae_handler.hpp>
 #include <dory/ctrl/block.hpp>
 #include <dory/ctrl/device.hpp>
@@ -17,8 +17,9 @@
 #include <dory/shared/unused-suppressor.hpp>
 #include <dory/store.hpp>
 
-#include "consts.hpp"
-#include "sync.hpp"
+#include "../shared/consts.hpp"
+
+#include "broadcast.hpp"
 
 using namespace std::chrono;
 
@@ -36,7 +37,7 @@ std::function<void(int)> handle = [](int sig) {
   SPDLOG_LOGGER_WARN(logger, "Got signal {} before neb start. Exiting!", sig);
   exit(sig);
 };
-void signal_handler(int sig) { handle(sig); }
+inline void signal_handler(int sig) { handle(sig); }
 
 /**
  * Writes the provided data samples to the file specified by `file_name`.
@@ -45,9 +46,9 @@ void signal_handler(int sig) { handle(sig); }
  * @param deliveries: vector holding tuples (<origin, k, msg, time-point>)
  * @param broadcasts: vector holding tuples (<k, msg, time-point>)
  **/
-void write(const std::vector<deliver_sample> &deliveries,
-           const std::vector<broadcast_sample> &broadcasts,
-           const char *file_name) {
+inline void write(const std::vector<deliver_sample> &deliveries,
+                  const std::vector<broadcast_sample> &broadcasts,
+                  const char *file_name) {
   std::ofstream fs;
 
   fs.open(file_name);
@@ -97,13 +98,15 @@ void write(const std::vector<deliver_sample> &deliveries,
  * @returns a tuple holding:
  *            1. total number of processes
  *            2. vector holding remote ids
- *            3. map holding the number of messages to send for every process
+ *            3. vector holding process ids
+ *            4. map holding the number of messages to send for every process
  **/
-std::tuple<int, std::vector<int>, std::map<int, int>> read_membership(
-    int self_id) {
+inline std::tuple<int, std::vector<int>, std::vector<int>, std::map<int, int>>
+read_membership(int self_id) {
   std::string line;
   std::ifstream fs("./membership");
   std::vector<int> remote_ids;
+  std::vector<int> process_ids;
   std::map<int, int> num_msg;
 
   int num_proc = 2;
@@ -124,7 +127,7 @@ std::tuple<int, std::vector<int>, std::map<int, int>> read_membership(
 
       if (i <= num_proc) {
         num_msg.insert({pid, nmsg});
-
+        process_ids.push_back(pid);
         if (i != self_id) {
           remote_ids.push_back(pid);
         }
@@ -133,7 +136,7 @@ std::tuple<int, std::vector<int>, std::map<int, int>> read_membership(
     i++;
   }
 
-  return {num_proc, remote_ids, num_msg};
+  return {num_proc, remote_ids, process_ids, num_msg};
 }
 
 /**
@@ -242,7 +245,6 @@ class NebConsumer {
  ******************************************************************************/
 int main(int argc, char *argv[]) {
   signal(SIGINT, signal_handler);
-  // TODO(Kristian): provide membership file!
   logger->set_level(spdlog::level::trace);
 
   if (argc < 2) {
@@ -251,7 +253,8 @@ int main(int argc, char *argv[]) {
   }
 
   int self_id = atoi(argv[1]);
-  auto &&[num_proc, remote_ids, num_msgs] = read_membership(self_id);
+  auto &&[num_proc, remote_ids, process_ids, num_msgs] =
+      read_membership(self_id);
 
   assert(num_proc > 1);
 
@@ -259,8 +262,8 @@ int main(int argc, char *argv[]) {
 
   constexpr auto PKEY_PREFIX = "pkey-p";
 
-  dory::crypto::init();
-  dory::crypto::publish_pub_key(PKEY_PREFIX + std::to_string(self_id));
+  dory::crypto::dalek::init();
+  dory::crypto::dalek::publish_pub_key(PKEY_PREFIX + std::to_string(self_id));
 
   /* --------------------------CONTROL PATH---------------------------------- */
   dory::Devices d;
@@ -284,8 +287,8 @@ int main(int argc, char *argv[]) {
   dory::ConnectionExchanger bcast_ce(self_id, remote_ids, cb);
   dory::ConnectionExchanger replay_ce(self_id, remote_ids, cb);
 
-  dory::NonEquivocatingBroadcast::run_default_control_path(
-      cb, store, bcast_ce, replay_ce, self_id, remote_ids, logger);
+  dory::neb::async::NonEquivocatingBroadcast::run_default_async_control_path(
+      cb, store, bcast_ce, replay_ce, self_id, process_ids, logger);
 
   NebConsumer nc(num_msgs, self_id);
 
@@ -293,10 +296,12 @@ int main(int argc, char *argv[]) {
     nc.deliver_callback(k, m, proc_id);
   };
 
-  dory::NonEquivocatingBroadcast neb(self_id, remote_ids, cb, deliver_fn);
+  dory::neb::async::NonEquivocatingBroadcast neb(self_id, process_ids, cb,
+                                                 deliver_fn);
 
   neb.set_connections(bcast_ce, replay_ce);
-  neb.set_remote_keys(dory::crypto::get_public_keys(PKEY_PREFIX, remote_ids));
+  neb.set_remote_keys(
+      dory::crypto::dalek::get_public_keys(PKEY_PREFIX, remote_ids));
 
   // so we can capture the local scope and use it in the signal handler
   handle = [&](int sig) {
@@ -308,8 +313,6 @@ int main(int argc, char *argv[]) {
 
     exit(sig);
   };
-
-  neb.start();
 
   store.set("dory__neb__" + std::to_string(self_id) + "__connected", "1");
 
@@ -326,6 +329,9 @@ int main(int argc, char *argv[]) {
     SPDLOG_LOGGER_INFO(logger, "Remote process {} is ready", pid);
   }
 
+  neb.resize_ttd(num_msgs);
+  neb.start();
+
   nc.bench();
 
   NebSampleMessage m;
@@ -339,8 +345,20 @@ int main(int argc, char *argv[]) {
 
   nc.wait_to_finish();
 
-  SPDLOG_LOGGER_INFO(logger, "Sleeping for 10 seconds to let others finish");
-  std::this_thread::sleep_for(seconds(10));
+  store.set("dory__neb__" + std::to_string(self_id) + "__done", "1");
+
+  SPDLOG_LOGGER_INFO(logger,
+                     "Waiting for others to finish. C-c for force stop.");
+
+  for (int pid : remote_ids) {
+    auto key = "dory__neb__" + std::to_string(pid) + "__done";
+    std::string val;
+    while (!store.get(key, val)) {
+      std::this_thread::sleep_for(std::chrono::seconds(3));
+      SPDLOG_LOGGER_INFO(logger, "waiting for {}", pid);
+    }
+    SPDLOG_LOGGER_INFO(logger, "{} is done!", pid);
+  }
 
   // exit async event thread
   exit_signal.set_value();

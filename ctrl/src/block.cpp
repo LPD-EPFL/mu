@@ -65,6 +65,47 @@ void ControlBlock::allocateBuffer(std::string name, size_t length,
 }
 
 void ControlBlock::registerMR(std::string name, std::string pd_name,
+                              std::string buffer_name, size_t offset,
+                              size_t buf_len, MemoryRights rights) {
+  if (mr_map.find(name) != mr_map.end()) {
+    throw std::runtime_error("Already registered protection domain named " +
+                             name);
+  }
+  auto pd = pd_map.find(pd_name);
+  if (pd == pd_map.end()) {
+    throw std::runtime_error("No PD exists with name " + pd_name);
+  }
+
+  auto buf = buf_map.find(buffer_name);
+  if (buf_map.find(buffer_name) == buf_map.end()) {
+    throw std::runtime_error("No buffer exists with name " + buffer_name);
+  }
+
+  auto mr = ibv_reg_mr(pds[pd->second].get(),
+                       &(raw_bufs[buf->second.first].get()[offset]), buf_len,
+                       static_cast<int>(rights));
+
+  if (mr == nullptr) {
+    throw std::runtime_error("Could not register the memory region " + name);
+  }
+
+  deleted_unique_ptr<struct ibv_mr> uniq_mr(mr, [](struct ibv_mr *mr) {
+    auto ret = ibv_dereg_mr(mr);
+    if (ret != 0) {
+      throw std::runtime_error("Could not query device: " +
+                               std::string(std::strerror(errno)));
+    }
+  });
+
+  mrs.push_back(std::move(uniq_mr));
+  mr_map.insert(std::pair<std::string, size_t>(name, mrs.size() - 1));
+  SPDLOG_LOGGER_INFO(logger,
+                     "MR '{}' under PD '{}' registered with buf '{}' (offset: "
+                     "{}, length: {}) and rights {}",
+                     name, pd_name, buffer_name, offset, buf_len, rights);
+}
+
+void ControlBlock::registerMR(std::string name, std::string pd_name,
                               std::string buffer_name, MemoryRights rights) {
   if (mr_map.find(name) != mr_map.end()) {
     throw std::runtime_error("Already registered protection domain named " +

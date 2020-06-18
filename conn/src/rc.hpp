@@ -118,6 +118,9 @@ class ReliableConnection {
   bool postSendSingleCached(RdmaReq req, uint64_t req_id, void *buf,
                             uint32_t len, uintptr_t remote_addr);
 
+  bool postSendSingleCached(RdmaReq req, uint64_t req_id, void *buf,
+                            uint32_t len, uint32_t lkey, uintptr_t remote_addr);
+
   bool postSendSingle(RdmaReq req, uint64_t req_id, void *buf, uint32_t len,
                       uint32_t lkey, uintptr_t remote_addr);
 

@@ -1,14 +1,14 @@
 #include <dory/shared/logger.hpp>
 #include <dory/store.hpp>
 
-#include "sync.hpp"
-#include "sync/broadcast.hpp"
+#include "async.hpp"
+#include "async/broadcast.hpp"
 
 namespace dory {
 
 using namespace neb;
 
-SyncNonEquivocatingBroadcast::SyncNonEquivocatingBroadcast(
+AsyncNonEquivocatingBroadcast::AsyncNonEquivocatingBroadcast(
     int self_id, std::vector<int> proc_ids, deliver_callback deliver_cb) {
   logger = std_out_logger("NEB");
 
@@ -39,10 +39,10 @@ SyncNonEquivocatingBroadcast::SyncNonEquivocatingBroadcast(
   dory::ConnectionExchanger bcast_ce(self_id, remote_ids, *cb);
   dory::ConnectionExchanger replay_ce(self_id, remote_ids, *cb);
 
-  neb::sync::NonEquivocatingBroadcast::run_default_sync_control_path(
-      *cb, store, bcast_ce, replay_ce, self_id, remote_ids, logger);
+  neb::async::NonEquivocatingBroadcast::run_default_async_control_path(
+      *cb, store, bcast_ce, replay_ce, self_id, proc_ids, logger);
 
-  impl = std::make_unique<neb::sync::NonEquivocatingBroadcast>(
+  impl = std::make_unique<neb::async::NonEquivocatingBroadcast>(
       self_id, proc_ids, *cb, deliver_cb);
 
   impl->set_connections(bcast_ce, replay_ce);
@@ -51,9 +51,9 @@ SyncNonEquivocatingBroadcast::SyncNonEquivocatingBroadcast(
   impl->start();
 }
 
-SyncNonEquivocatingBroadcast::~SyncNonEquivocatingBroadcast() {}
+AsyncNonEquivocatingBroadcast::~AsyncNonEquivocatingBroadcast() {}
 
-void SyncNonEquivocatingBroadcast::broadcast(uint64_t k, Broadcastable &msg) {
+void AsyncNonEquivocatingBroadcast::broadcast(uint64_t k, Broadcastable &msg) {
   return impl->broadcast(k, msg);
 }
 }  // namespace dory

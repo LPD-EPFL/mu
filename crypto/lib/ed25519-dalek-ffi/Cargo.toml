@@ -15,4 +15,4 @@ features = ["nightly", "simd_backend"]
 
 [lib]
 name = "ed25519_dalek_ffi"
-crate-type = ["dylib"] # could be `staticlib` as well
+crate-type = ["dylib", "staticlib"]

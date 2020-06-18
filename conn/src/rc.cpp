@@ -242,9 +242,11 @@ bool ReliableConnection::post_send(ibv_send_wr &wr) {
 
 bool ReliableConnection::postSendSingleCached(RdmaReq req, uint64_t req_id,
                                               void *buf, uint32_t len,
+                                              uint32_t lkey,
                                               uintptr_t remote_addr) {
   sg_cached[0].addr = reinterpret_cast<uintptr_t>(buf);
   sg_cached[0].length = len;
+  sg_cached[0].lkey = lkey;
 
   wr_cached.wr_id = req_id;
   wr_cached.opcode = static_cast<enum ibv_wr_opcode>(req);
@@ -278,6 +280,12 @@ bool ReliableConnection::postSendSingleCached(RdmaReq req, uint64_t req_id,
   return true;
 }
 
+bool ReliableConnection::postSendSingleCached(RdmaReq req, uint64_t req_id,
+                                              void *buf, uint32_t len,
+                                              uintptr_t remote_addr) {
+  return postSendSingleCached(req, req_id, buf, len, mr.lkey, remote_addr);
+}
+
 bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf,
                                         uint32_t len, uintptr_t remote_addr) {
   return postSendSingle(req, req_id, buf, len, mr.lkey, remote_addr);
@@ -286,7 +294,6 @@ bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf,
 bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf,
                                         uint32_t len, uint32_t lkey,
                                         uintptr_t remote_addr) {
-  // TODO(Kristian): if not used concurrently, we could reuse the same wr
   struct ibv_send_wr wr;
   struct ibv_sge sg;
 

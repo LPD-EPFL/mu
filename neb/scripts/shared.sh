@@ -3,6 +3,7 @@
 # shellcheck disable=SC2087
 
 REGISTRY_IP=128.178.154.41
+REGISTRY_PORT=9797
 USER="bruenn"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # shellcheck disable=SC2034
@@ -10,20 +11,20 @@ DATA_DIR="$DIR/data"
 REMOTE_DIR="/home/bruenn/dory/neb"
 THROUGHPUT_REMOTE_OUT_FILE="/tmp/neb-bench-ts"
 LATENCY_REMOTE_OUT_FILE="/tmp/neb-bench-lat"
+LOG_FILE="/tmp/neb-log"
 NODES=("lpdquatro1" "lpdquatro2" "lpdquatro3" "lpdquatro4")
-
 host() {
     echo "$1.epfl.ch"
 }
 
 compile_neb() {
-    echo "Recompiling neb in case of source change at ${NODES[0]}"
+    echo "Recompiling neb at ${NODES[0]}"
 
 ssh "$USER@$(host "${NODES[0]}")" /bin/bash << "EOF"
     export PATH=$PATH:$HOME/.local/bin
-    export CONAN_USER_HOME="/localhome/bruenn"
+    #export CONAN_USER_HOME="/localhome/bruenn"
     cd "$HOME/dory/neb" || return 1
-    ./build-executable.sh
+    ./build-executable.sh --LOG_LEVEL "WARN" --TARGET "ASYNC"
 EOF
 }
 
@@ -34,7 +35,7 @@ ssh "$USER@$REGISTRY_IP" /bin/bash << EOF
     tmux kill-session -t memcached 2> /dev/null
     killall memcached 2> /dev/null
     tmux new-session -d -s memcached
-    tmux send-keys -t memcached "memcached -vv" C-m
+    tmux send-keys -t memcached "memcached -vv -p $REGISTRY_PORT" C-m
 EOF
 
 echo "Started memcached on $REGISTRY_IP"
@@ -55,7 +56,7 @@ ssh "$USER@$(host "${NODES[$j]}")" /bin/bash << EOF
     tmux kill-session -t nebench 2> /dev/null
     cd $REMOTE_DIR
     tmux new-session -d -s nebench
-    tmux send-keys -t nebench "export DORY_REGISTRY_IP=$REGISTRY_IP" C-m
+    tmux send-keys -t nebench "export DORY_REGISTRY_IP=$REGISTRY_IP:$REGISTRY_PORT" C-m
 EOF
 
     done
@@ -94,7 +95,7 @@ run_nodes() {
         PID=$((j+1))
     
 ssh "$USER@$(host "${NODES[$j]}")" /bin/bash << EOF
-    tmux send-keys -t nebench "$BIN $PID" C-m
+    tmux send-keys -t nebench "numactl --membind=0 $BIN $PID 2>&1 | tee /tmp/neb-log" C-m
 EOF
 
     done  
@@ -110,9 +111,13 @@ download_output() {
     for ((j=0; j < NUM_NODES; j++)); do
         THROUGHPUT_RESULTS_FILE_PATH="$RESULTS_DIR/${NODES[$j]}.out"
         LAT_RESULTS_FILE_PATH="$RESULTS_DIR/${NODES[$j]}.lat"
+        LOG_FILE_PATH="$RESULTS_DIR/${NODES[$j]}.log"
         scp $USER@"$(host "${NODES[$j]}")":$THROUGHPUT_REMOTE_OUT_FILE "$THROUGHPUT_RESULTS_FILE_PATH"
         scp $USER@"$(host "${NODES[$j]}")":$LATENCY_REMOTE_OUT_FILE "$LAT_RESULTS_FILE_PATH"
+        scp $USER@"$(host "${NODES[$j]}")":$LOG_FILE "$LOG_FILE_PATH"
     done 
+    
+    echo "$RESULTS_DIR"
 }
 
 stop_nodes() {

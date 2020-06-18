@@ -14,5 +14,5 @@ add_executable( main main.cpp )
 find_library( DALEK_FFI ed25519_dalek_ffi HINTS ${CMAKE_LIBRARY_PATH} )
 
 message( STATUS "DALEK_FFI: " ${DALEK_FFI} ) 
-
-target_link_libraries( main ${CONAN_LIBS} pthread ${DALEK_FFI} )
+message( STATUS "CONAN_LIBS: " ${CONAN_LIBS} )
+target_link_libraries( main ${CONAN_LIBS} dl ${DALEK_FFI} )

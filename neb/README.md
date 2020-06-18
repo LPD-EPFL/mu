@@ -11,7 +11,7 @@
 From within root:
 
 ```sh
-./build-executable.sh
+./build-executable.sh --TARGET [SYNC|ASYNC] --LOG_LEVEL [...|INFO|WARN|...]
 ```
 
 ### Membership file

@@ -4,6 +4,7 @@
 
 namespace dory {
 namespace neb {
+
 /**
  * Required interface to implement for messages to get broadcasted by this
  * module

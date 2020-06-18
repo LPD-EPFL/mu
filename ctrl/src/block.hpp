@@ -46,6 +46,10 @@ class ControlBlock {
   void allocateBuffer(std::string name, size_t length, int alignment);
 
   void registerMR(std::string name, std::string pd_name,
+                  std::string buffer_name, size_t offset, size_t buf_len,
+                  MemoryRights rights);
+
+  void registerMR(std::string name, std::string pd_name,
                   std::string buffer_name, MemoryRights rights = LOCAL_READ);
   // void withdrawMRRight(std::string name) const;
   MemoryRegion mr(std::string name) const;
