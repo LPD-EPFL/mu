@@ -5,5 +5,7 @@ jobs:
       - image: kristianmitk/dory:latest
     steps:
       - checkout
-      - run: ./build.py -c gcc clean && ./build.py -c gcc all
-      - run: ./build.py -c clang clean && ./build.py -c clang all
+      - run: ./build.py clean && ./build.py -c gcc all
+      - run: ./build.py clean && ./build.py -c clang all
+      - run: ./build.py clean && ./build.py -c gcc -b debug all
+      - run: ./build.py clean && ./build.py -c clang -b debug all
