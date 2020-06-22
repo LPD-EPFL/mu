@@ -7,20 +7,20 @@ endif
 DEPDIR := .deps
 
 define invoke
-	$(eval TARGET := $(patsubst %-mangled,%,$(1)))				\
-	export CONAN_DEFAULT_PROFILE_PATH=$(CONAN_PROFILE);			\
-	if [ "$(filter $(TARGET),$(EXPORTS))" = $(TARGET) ]; then	\
-		cd conan/exports/$(TARGET);								\
-		conan export . dory/stable &&							\
-		touch ../../../$(DEPDIR)/$(1).conandep;					\
-	else														\
-		cd $(TARGET);											\
-		if [ -f "build.sh" ]; then								\
-			./build.sh && touch ../$(DEPDIR)/$(1).conandep;		\
-		else													\
-			conan create . --build=outdated &&					\
-			touch ../$(DEPDIR)/$(1).conandep;					\
-		fi;														\
+	$(eval TARGET := $(patsubst %-mangled,%,$(1)))					\
+	export CONAN_DEFAULT_PROFILE_PATH=$(CONAN_PROFILE);				\
+	if [ "$(filter $(TARGET),$(EXPORTS))" = $(TARGET) ]; then		\
+		cd conan/exports/$(TARGET);									\
+		conan export . dory/stable &&								\
+		touch ../../../$(DEPDIR)/$(1).conandep;						\
+	else															\
+		cd $(TARGET);												\
+		if [ -f "build.sh" ]; then									\
+			./build.sh && touch ../$(DEPDIR)/$(1).conandep;			\
+		else														\
+			conan create . --build=outdated --test-folder=None	&&	\
+			touch ../$(DEPDIR)/$(1).conandep;						\
+		fi;															\
 	fi
 endef
 

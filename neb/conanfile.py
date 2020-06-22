@@ -62,7 +62,10 @@ class DoryNebConan(ConanFile):
         cmake.build()
 
     def package(self):
-        self.copy("*.hpp", dst="include/dory/neb/", src="src/")
+        self.copy("async.hpp", dst="include/dory/neb/", src="src/")
+        self.copy("sync.hpp", dst="include/dory/neb/", src="src/")
+        self.copy("broadcastable.hpp", dst="include/dory/neb/", src="src/")
+        self.copy("consts.hpp", dst="include/dory/neb/", src="src/shared/")
         self.copy("*.a", dst="lib", src="lib", keep_path=False)
         self.copy("*.so", dst="lib", src="lib", keep_path=False)
 

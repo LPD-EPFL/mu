@@ -9,3 +9,4 @@ jobs:
       - run: ./build.py clean && ./build.py -c clang all
       - run: ./build.py clean && ./build.py -c gcc -b debug all
       - run: ./build.py clean && ./build.py -c clang -b debug all
+      - run: CONAN_DEFAULT_PROFILE_PATH="$(pwd)/conan/profiles/gcc-release.profile" conan test ./neb/test dory-neb/0.0.1 --build=missing

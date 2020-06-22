@@ -1,14 +1,18 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <iostream>
 #include <map>
 #include <mutex>
 #include <optional>
 #include <set>
+#include <shared_mutex>
 
 #include <dory/shared/branching.hpp>
 #include <dory/shared/unused-suppressor.hpp>
+
+#include "types.hpp"
 
 class SlotTracker {
  public:
