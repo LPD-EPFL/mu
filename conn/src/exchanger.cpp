@@ -74,7 +74,7 @@ void ConnectionExchanger::connect(int proc_id, MemoryStore& store,
   if (!store.get(name.str(), ret_val)) {
     SPDLOG_LOGGER_DEBUG(logger, "Could not retrieve key {}", name.str());
 
-    throw std::runtime_error("Cannot connect to remote qp" + name.str());
+    throw std::runtime_error("Cannot connect to remote qp " + name.str());
   }
 
   auto remoteRC = dory::RemoteConnection::fromStr(ret_val);

@@ -4,8 +4,9 @@
 #include <cstddef>
 
 #include "../broadcastable.hpp"
-#include "../shared/consts.hpp"
-#include "../shared/mem-slot.hpp"
+
+#include "consts.hpp"
+#include "mem-slot.hpp"
 
 /// NOTE: Buffer entries are indexed beginning from 1! Trying to access an entry
 /// at index 0 will throw a `std::out_of_range`. Internally, indexing starts at
@@ -42,9 +43,13 @@ class BroadcastBuffer {
 
   size_t write(uint64_t index, uint64_t k, dory::neb::Broadcastable &msg);
 
+  std::mutex &get_mux(uint64_t index);
+
  private:
   volatile uint8_t *const buf;
   uint64_t num_entries;
+  std::unordered_map<uint64_t, std::unique_ptr<std::mutex>> muxes;
+  std::mutex map_mux;
 };
 
 /**
@@ -71,6 +76,8 @@ class ReplayBuffer {
    **/
   uint64_t get_byte_offset(int proc_id, uint64_t index) const;
 
+  std::mutex &get_mux(int origin, uint64_t index);
+
   /**
    * @param proc_id: the process id
    * @param index: index of the entry
@@ -81,4 +88,8 @@ class ReplayBuffer {
   volatile const uint8_t *const buf;
   uint64_t num_entries_per_proc;
   std::map<int, size_t> process_index;
+  std::unordered_map<int,
+                     std::unordered_map<uint64_t, std::unique_ptr<std::mutex>>>
+      muxes;
+  std::mutex map_mux;
 };

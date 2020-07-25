@@ -189,8 +189,8 @@ void ReliableConnection::connect(RemoteConnection &rc) {
   conn_attr.qp_state = IBV_QPS_RTS;
   conn_attr.sq_psn = DefaultPSN;
 
-  conn_attr.timeout = 14;
-  conn_attr.retry_cnt = 7;
+  conn_attr.timeout = 2;
+  conn_attr.retry_cnt = 2;
   conn_attr.rnr_retry = 7;
   conn_attr.max_rd_atomic = 16;
   conn_attr.max_dest_rd_atomic = 16;

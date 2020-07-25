@@ -1,6 +1,11 @@
+#include <utility>
 #include <vector>
 
-#include "../shared/mem-slot.hpp"
+#include "mem-slot.hpp"
+
+inline uint64_t get_key(uint64_t index, int count) {
+  return uint64_t(count) << 32 | index;
+}
 
 /**
  * Synchronized fixed size memory pool meant to be used for temporal storage
@@ -19,6 +24,10 @@ class MemSlotPool {
               uint32_t lkey)
       : local_mr_key(lkey), buf(reinterpret_cast<uint8_t *>(addr)) {
     auto num_slots = size / dory::neb::MEMORY_SLOT_SIZE;
+
+    // std::cout << "Mempool has: " << num_slots << " entries available"
+    //           << std::endl;
+
     // populate the free queue
     for (size_t i = 0; i < num_slots; i++) {
       free_slots.push(
@@ -40,23 +49,28 @@ class MemSlotPool {
    * @param replicator: id of the process who is replicating the replayed value
    * @param index: index of the entry
    **/
-  MemorySlot slot(int origin, int replayer, int replicator, uint64_t index) {
+  MemorySlot slot(int origin, int replayer, int replicator, uint64_t index,
+                  int count) {
     auto &p = raws[replayer][origin][replicator];
 
     std::unique_lock slock(p.first);
-    auto it = p.second.find(index);
+    auto key = get_key(index, count);
+
+    auto it = p.second.find(key);
 
     if (it == p.second.end()) {
       std::unique_lock qlock(queue_mux);
-      auto *node = free_slots.front();
 
-      if (node == nullptr) {
+      if (free_slots.size() == 0) {
         throw std::runtime_error("Memory Pool exhausted");
       }
 
+      auto *node = free_slots.front();
+
       free_slots.pop();
 
-      p.second.insert(std::pair<uint64_t, uint8_t *>(index, node));
+      p.second.insert({key, node});
+
       return MemorySlot(node);
     }
 
@@ -70,13 +84,16 @@ class MemSlotPool {
    * @param replayer_id: id of the process who replayed the value
    * @param index: index of the entry
    **/
-  void free(int replayer, int origin, int replicator, uint64_t index) {
+  void free(int replayer, int origin, int replicator, uint64_t index,
+            int count) {
     auto &p = raws[replayer][origin][replicator];
     uint8_t *slot = nullptr;
 
     {
       std::unique_lock lock(p.first);
-      auto it = p.second.find(index);
+      auto key = get_key(index, count);
+
+      auto it = p.second.find(key);
 
       if (it == p.second.end()) {
         return;
@@ -111,7 +128,7 @@ class MemSlotPool {
           int, std::unordered_map<
                    // replicator id
                    int, std::pair<std::shared_mutex,
-                                  // slot index
+                                  // key(index+count)
                                   std::unordered_map<uint64_t, uint8_t *>>>>>
       raws;
 };

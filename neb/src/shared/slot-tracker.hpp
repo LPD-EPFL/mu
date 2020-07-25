@@ -16,7 +16,7 @@
 
 class SlotTracker {
  public:
-  SlotTracker() : sig_valid{false}, processed_sig{false} {}
+  SlotTracker() : sig_valid{false}, processed_sig{false}, has_sig{false} {}
 
   void add_to_empty_reads(int pid) {
     std::unique_lock lock(mux);
@@ -64,9 +64,9 @@ class SlotTracker {
     return empty_reads.size() >= size;
   }
 
-  // TODO(Kristian): atomic bit-field might be faster?
   std::atomic<bool> sig_valid;
   std::atomic<bool> processed_sig;
+  std::atomic<bool> has_sig;
 
  private:
   std::set<int> match_reads;
@@ -96,6 +96,99 @@ class PendingSlots {
     }
 
     return std::optional<std::reference_wrapper<SlotTracker>>(it->second);
+  }
+
+  bool add_match(uint64_t key, int pid) {
+    std::shared_lock lock(mux);
+
+    auto it = tracker_map.find(key);
+
+    if (likely(it != tracker_map.end())) {
+      it->second.add_to_match_reads(pid);
+
+      return true;
+    }
+
+    return false;
+  }
+
+  bool add_empty(uint64_t key, int pid) {
+    std::shared_lock lock(mux);
+
+    auto it = tracker_map.find(key);
+
+    if (likely(it != tracker_map.end())) {
+      it->second.add_to_empty_reads(pid);
+
+      return true;
+    }
+
+    return false;
+  }
+
+  std::pair<bool, bool> processed_sig(uint64_t key) {
+    std::shared_lock lock(mux);
+
+    auto it = tracker_map.find(key);
+
+    if (likely(it != tracker_map.end())) {
+      return {it->second.processed_sig, true};
+    }
+
+    return {false, false};
+  }
+
+  std::pair<bool, bool> sig_valid(uint64_t key) {
+    std::shared_lock lock(mux);
+
+    auto it = tracker_map.find(key);
+
+    if (likely(it != tracker_map.end())) {
+      return {it->second.sig_valid, true};
+    }
+
+    return {false, false};
+  }
+
+  std::pair<bool, bool> has_sig(uint64_t key) {
+    std::shared_lock lock(mux);
+
+    auto it = tracker_map.find(key);
+
+    if (likely(it != tracker_map.end())) {
+      return {it->second.has_sig, true};
+    }
+
+    return {false, false};
+  }
+
+  bool set_has_sig(uint64_t key) {
+    std::shared_lock lock(mux);
+
+    auto it = tracker_map.find(key);
+
+    if (likely(it != tracker_map.end())) {
+      it->second.has_sig = true;
+
+      return true;
+    }
+
+    return false;
+  }
+
+  bool set_sig_validity(uint64_t key, bool to) {
+    std::shared_lock lock(mux);
+
+    auto it = tracker_map.find(key);
+
+    if (likely(it != tracker_map.end())) {
+      it->second.sig_valid = to;
+      it->second.processed_sig = true;
+
+      return true;
+    }
+
+    return false;
   }
 
   bool remove_if_complete(uint64_t key, size_t quorum_size) {

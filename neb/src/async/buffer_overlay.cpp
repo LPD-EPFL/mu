@@ -47,3 +47,10 @@ size_t BroadcastBuffer::write(int proc_id, uint64_t index, uint64_t k,
 
   return msg.marshall(reinterpret_cast<volatile void *>(&raw[0]));
 }
+
+std::mutex &BroadcastBuffer::get_mux(int proc_id, uint64_t index) {
+  std::unique_lock lock(map_mux);
+  return *(muxes[proc_id]
+               .try_emplace(index, std::make_unique<std::mutex>())
+               .first->second);
+}

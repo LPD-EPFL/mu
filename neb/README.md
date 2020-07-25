@@ -58,8 +58,12 @@ After building the executable as described in the previous section, run from wit
 the root of this module:
 
 ```sh
-./build/bin/main <process-id>
+numactl --membind=0 ./build/bin/main <process-id>
 ```
+
+Note: make sure to only allocate memory on the same node where also the RNIC
+resides. Otherwise RDMA left-to-right write semantics are not guaranteed.
+Since the memory poller threads assume those, without that, bad things can happen!
 
 ## Package Usage
 

@@ -4,6 +4,7 @@
 #include <functional>
 #include <future>
 #include <iostream>
+#include <random>
 #include <thread>
 
 #include <dory/conn/exchanger.hpp>
@@ -17,9 +18,8 @@
 #include <dory/shared/unused-suppressor.hpp>
 #include <dory/store.hpp>
 
-#include "../shared/consts.hpp"
-
 #include "broadcast.hpp"
+#include "consts.hpp"
 
 using namespace std::chrono;
 
@@ -215,7 +215,8 @@ class NebConsumer {
   }
 
   void wait_to_finish() const {
-    SPDLOG_LOGGER_INFO(logger, "Done boradcasting. Wating for all messages.");
+    SPDLOG_LOGGER_CRITICAL(logger,
+                           "Done boradcasting. Wating for all messages.");
 
     // block until we delivered all expected messages
     while (f.wait_for(seconds(0)) != std::future_status::ready) {
@@ -244,6 +245,9 @@ class NebConsumer {
  *                                  MAIN
  ******************************************************************************/
 int main(int argc, char *argv[]) {
+  std::random_device dev;
+  std::mt19937 rng(dev());
+
   signal(SIGINT, signal_handler);
   logger->set_level(spdlog::level::trace);
 
@@ -276,11 +280,6 @@ int main(int argc, char *argv[]) {
   rp.bindTo(0);
 
   dory::ControlBlock cb(rp);
-
-  std::promise<void> exit_signal;
-  auto async_event_thread =
-      std::thread(&dory::ctrl::async_event_handler, logger,
-                  exit_signal.get_future(), od.context());
 
   auto &store = dory::MemoryStore::getInstance();
 
@@ -329,19 +328,26 @@ int main(int argc, char *argv[]) {
     SPDLOG_LOGGER_INFO(logger, "Remote process {} is ready", pid);
   }
 
-  neb.resize_ttd(num_msgs);
-  neb.start();
-
-  nc.bench();
-
   NebSampleMessage m;
   const int to_bcast = num_msgs.find(self_id)->second;
 
-  for (int i = 1; i <= to_bcast; i++) {
-    m.val = 1000000 * self_id + i;
-    nc.log_broadcast(i, m.val);
-    neb.broadcast(i, m);
-  }
+  neb.resize_ttd(num_msgs);
+  nc.bench();
+
+  neb.start();
+
+  auto broadcast_thread = std::thread([&]() {
+    for (int i = 1; i <= to_bcast; i++) {
+      m.val = 1000000 * self_id + i;
+      nc.log_broadcast(i, m.val);
+      neb.broadcast(i, m);
+      // std::this_thread::sleep_for(std::chrono::microseconds(100));
+    }
+  });
+
+  dory::pinThreadToCore(broadcast_thread, 18);
+
+  broadcast_thread.join();
 
   nc.wait_to_finish();
 
@@ -360,11 +366,8 @@ int main(int argc, char *argv[]) {
     SPDLOG_LOGGER_INFO(logger, "{} is done!", pid);
   }
 
-  // exit async event thread
-  exit_signal.set_value();
-  async_event_thread.join();
-
-  SPDLOG_LOGGER_INFO(logger, "Async Event Thread finished");
+  SPDLOG_LOGGER_CRITICAL(
+      logger, "All finished, C-c to terminate run and write output!");
 
   return 0;
 }

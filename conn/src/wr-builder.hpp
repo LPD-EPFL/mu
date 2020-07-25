@@ -107,7 +107,6 @@ class SendWrBuilder {
   ibv_send_wr* next_;
 };
 
-// TODO(Kristian): test this
 class SendWrListBuilder {
  public:
   SendWrListBuilder& prepend(dory::deleted_unique_ptr<struct ibv_send_wr> wr) {

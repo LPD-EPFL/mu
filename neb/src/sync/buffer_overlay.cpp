@@ -40,6 +40,12 @@ size_t BroadcastBuffer::write(uint64_t index, uint64_t k,
   return msg.marshall(reinterpret_cast<volatile void *>(&raw[0]));
 }
 
+std::mutex &BroadcastBuffer::get_mux(uint64_t index) {
+  std::unique_lock lock(map_mux);
+  return *(
+      muxes.try_emplace(index, std::make_unique<std::mutex>()).first->second);
+}
+
 ReplayBuffer::ReplayBuffer(uintptr_t addr, size_t buf_size,
                            std::vector<int> procs)
     : buf(reinterpret_cast<volatile const uint8_t *const>(addr)),
@@ -48,15 +54,15 @@ ReplayBuffer::ReplayBuffer(uintptr_t addr, size_t buf_size,
     process_index.insert(std::pair<int, size_t>(procs[i], i));
   }
 
-  const auto num_entries = buf_size / MEMORY_SLOT_SIZE;
-  const auto p = reinterpret_cast<uint8_t *>(addr);
+  // const auto num_entries = buf_size / MEMORY_SLOT_SIZE;
+  // const auto p = reinterpret_cast<uint8_t *>(addr);
 
-  for (uint64_t i = 0; i < num_entries; i++) {
-    const auto p2 = reinterpret_cast<uint64_t *>(
-        &p[i * MEMORY_SLOT_SIZE + MSG_PAYLOAD_SIZE]);
-    // so we can distinguish an empty read from an unsuccessful read
-    p2[0] = std::numeric_limits<uint64_t>::max();
-  }
+  // for (uint64_t i = 0; i < num_entries; i++) {
+  //   const auto p2 = reinterpret_cast<uint64_t *>(
+  //       &p[i * MEMORY_SLOT_SIZE + MSG_PAYLOAD_SIZE]);
+  //   // so we can distinguish an empty read from an unsuccessful read
+  //   p2[0] = std::numeric_limits<uint64_t>::max();
+  // }
 }
 
 uint64_t ReplayBuffer::get_byte_offset(int proc_id, uint64_t index) const {
@@ -78,4 +84,11 @@ uint64_t ReplayBuffer::get_byte_offset(int proc_id, uint64_t index) const {
 
 MemorySlot ReplayBuffer::slot(int proc_id, uint64_t index) const {
   return MemorySlot(&buf[get_byte_offset(proc_id, index)]);
+}
+
+std::mutex &ReplayBuffer::get_mux(int proc_id, uint64_t index) {
+  std::unique_lock lock(map_mux);
+  return *(muxes[proc_id]
+               .try_emplace(index, std::make_unique<std::mutex>())
+               .first->second);
 }

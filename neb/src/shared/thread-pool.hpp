@@ -32,6 +32,7 @@ class SpinningThreadPool {
   tbb::concurrent_queue<std::function<void()>> tasks;
   std::promise<void> exit_signal;
   std::vector<std::thread> workers;
+  std::string name;
 };
 
 /**
@@ -56,20 +57,20 @@ class SuspendedThreadPool {
   volatile bool stop;
 };
 
-inline SpinningThreadPool::SpinningThreadPool(size_t threads,
-                                              std::string name) {
+inline SpinningThreadPool::SpinningThreadPool(size_t threads, std::string name)
+    : name(name) {
   auto sf = std::shared_future(exit_signal.get_future());
 
   for (size_t i = 0; i < threads; ++i) {
     workers.emplace_back([&, sf] {
       for (;;) {
         std::function<void()> task;
-
+        // this harms performance, find better way of clean stop
+        // if (unlikely(sf.wait_for(std::chrono::seconds(0)) ==
+        //              std::future_status::ready)) {
+        //   return;
+        // }
         if (tasks.try_pop(task)) task();
-        if (unlikely(sf.wait_for(std::chrono::seconds(0)) ==
-                     std::future_status::ready) &&
-            tasks.unsafe_size() == 0)
-          return;
       }
     });
     dory::set_thread_name(workers[i], (name + std::to_string(i)).c_str());
@@ -80,9 +81,10 @@ inline SpinningThreadPool::SpinningThreadPool(size_t threads, std::string name,
                                               std::vector<int> proc_aff)
     : SpinningThreadPool(threads, name) {
   assert(proc_aff.size() == threads);
-
+  // std::cout << name << " with size: " << threads << std::endl;
   for (size_t i = 0; i < threads; ++i) {
-    dory::pinThreadToCore(workers[i], proc_aff[i]);
+    dory::pinThreadToCore(workers[i], proc_aff.at(i));
+    // std::cout << "proc_aff[i] = " << proc_aff[i] << std::endl;
   }
 }
 
@@ -101,6 +103,8 @@ auto SpinningThreadPool::enqueue(F&& f, Args&&... args)
 }
 
 inline SpinningThreadPool::~SpinningThreadPool() {
+  std::cout << "Thread pool " << name << " is about to be deconstructed"
+            << std::endl;
   exit_signal.set_value();
   for (std::thread& worker : workers) worker.join();
 }
@@ -119,7 +123,7 @@ inline SuspendedThreadPool::SuspendedThreadPool(size_t threads,
         {
           std::unique_lock<std::mutex> lock(queue_mutex);
           condition.wait(lock, [&] { return stop || !tasks.empty(); });
-          if (stop && tasks.empty()) return;
+          if (stop) return;
           next_tasks.swap(tasks);
         }
 
@@ -160,7 +164,7 @@ inline SuspendedThreadPool::SuspendedThreadPool(size_t threads,
   assert(proc_aff.size() == threads);
 
   for (size_t i = 0; i < threads; ++i) {
-    dory::pinThreadToCore(workers[i], proc_aff[i]);
+    dory::pinThreadToCore(workers[i], proc_aff.at(i));
   }
 }
 

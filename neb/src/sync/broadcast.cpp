@@ -9,23 +9,14 @@
 #include <dory/shared/unused-suppressor.hpp>
 #include <dory/store.hpp>
 
-#include "../shared/consts.hpp"
 #include "../shared/log-strings.hpp"
-#include "broadcast.hpp"
 
-#define BENCH(expr, str)                                                   \
-  {                                                                        \
-    struct timespec ts1, ts2;                                              \
-    clock_gettime(CLOCK_MONOTONIC, &ts1);                                  \
-    expr;                                                                  \
-    clock_gettime(CLOCK_MONOTONIC, &ts2);                                  \
-    SPDLOG_LOGGER_CRITICAL(logger, "benching {} took: {}ns", str,          \
-                           (ts2.tv_sec * 1000000000UL + ts2.tv_nsec) -     \
-                               (ts1.tv_sec * 1000000000UL + ts1.tv_nsec)); \
-  }
+#include "broadcast.hpp"
+#include "consts.hpp"
 
 inline uint64_t unpack_msg_id(uint64_t wr_id) { return (wr_id << 32) >> 32; }
 
+// note: when adjusting also adjust the ibv_wc retry handler
 inline std::tuple<bool, int, int, uint64_t> unpack_read_id(uint64_t wr_id) {
   return {wr_id >> 63, (wr_id << 12) >> 54, (wr_id << 22) >> 54,
           unpack_msg_id(wr_id)};
@@ -37,6 +28,7 @@ inline uint64_t pack_read_id(bool had_sig, int replayer, int origin,
          uint64_t(origin) << 32 | msg_id;
 }
 
+// note: when adjusting also adjust the ibv_wc retry handler
 inline std::tuple<bool, int, uint64_t> unpack_write_id(uint64_t wr_id) {
   return {wr_id >> 63, (wr_id << 22) >> 54, unpack_msg_id(wr_id)};
 }
@@ -49,8 +41,8 @@ namespace neb {
 namespace sync {
 
 NonEquivocatingBroadcast::~NonEquivocatingBroadcast() {
-  stop_operation();
   write(ttd);
+  stop_operation();
 }
 
 NonEquivocatingBroadcast::NonEquivocatingBroadcast(int self_id,
@@ -65,19 +57,23 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(int self_id,
       own_next(1),
       pending_reads(0),
       pending_writes(0),
-      sign_pool(SIGN_POOL_SIZE, "sign_pool", {16, 18 /*, 20*/}),
-      verify_pool(VERIFY_POOL_SIZE, "verify_pool",
-                  {6, 8, 10, 12, /*14 , 16, 17, 18, 19, 26*/}),
+      verify_pool(VERIFY_POOL_SIZE, "verify_pool", {8, 10, 12}),
+      sign_pool(SIGN_POOL_SIZE, "sign_pool", {16}),
       post_reader(1, "read_pool", {14}),
       replayed(RemotePendingSlots(proc_ids)),
-      pending_remote_slots(0) {
+      pending_remote_slots(0),
+      sf(std::shared_future(exit_signal.get_future())) {
   logger->set_level(LOG_LEVEL);
   SPDLOG_LOGGER_INFO(logger, "Creating instance");
 
   write_wcs.resize(dory::ControlBlock::CQDepth);
   read_wcs.resize(dory::ControlBlock::CQDepth);
 
-  ttd.resize(100000);
+  ttd.resize(proc_ids.size() * (max_msg_count + 1));
+
+  for (size_t i = 0; i < proc_ids.size(); i++) {
+    process_pos[proc_ids[i]] = i;
+  }
 
   auto remote_ids = remotes.ids();
 
@@ -95,14 +91,11 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(int self_id,
 
   auto r_procs_size = (*remote_ids).size();
 
-  // the maximum of concurrent pending slots restricts the size of the read
-  // buffer
-  cb.allocateBuffer(REPLAY_R_NAME,
-                    MEMORY_SLOT_SIZE * r_procs_size *
-                        (MAX_CONCURRENTLY_PENDING_SLOTS +
-                         // to cover byzantine broadcasters
-                         MAX_CONCURRENTLY_PENDING_PER_PROCESS),
-                    64);
+  cb.allocateBuffer(
+      REPLAY_R_NAME,
+      MEMORY_SLOT_SIZE * (ControlBlock::CQDepth * 2 +
+                          MAX_CONCURRENTLY_PENDING_SLOTS * remotes.size()),
+      64);
   // we need to register the read buffer in order to obtain a lkey which we use
   // for RDMA reads where the RNIC does local writes.
   cb.registerMR(REPLAY_R_NAME, PD_NAME, REPLAY_R_NAME,
@@ -114,19 +107,19 @@ NonEquivocatingBroadcast::NonEquivocatingBroadcast(int self_id,
 
   // Insert a buffer which will be used as scatter when post sending writes
   auto b_mr = cb.mr(BCAST_W_NAME);
-  bcast_bufs.insert(std::pair<int, BroadcastBuffer>(
-      self_id, BroadcastBuffer(b_mr.addr, b_mr.size, b_mr.lkey)));
+  bcast_bufs.try_emplace(self_id, b_mr.addr, b_mr.size, b_mr.lkey);
 }
 
 void NonEquivocatingBroadcast::resize_ttd(std::map<int, int> &num_msgs) {
-  int max = 0;
+  size_t max = 0;
   for (auto &[pid, n] : num_msgs) {
-    if (n > max) {
-      max = n;
+    if (size_t(n) > max) {
+      max = size_t(n);
     }
   }
 
-  auto size = (remotes.size() + 1) * (static_cast<size_t>(max) + 1);
+  max_msg_count = max;
+  auto size = (remotes.size() + 1) * (static_cast<size_t>(max_msg_count) + 1);
   ttd.resize(size);
 }
 
@@ -148,8 +141,7 @@ void NonEquivocatingBroadcast::set_connections(ConnectionExchanger &b_ce,
     auto bcast_conn = remotes.broadcast_connections();
     for (auto &[pid, rc] : *bcast_conn) {
       auto &mr = rc.get_mr();
-      bcast_bufs.insert(std::pair<int, BroadcastBuffer>(
-          pid, BroadcastBuffer(mr.addr, mr.size, mr.lkey)));
+      bcast_bufs.try_emplace(pid, mr.addr, mr.size, mr.lkey);
     }
   }
   connected = true;
@@ -200,61 +192,51 @@ void NonEquivocatingBroadcast::start() {
         "Not connected to remote QPs, cannot start serving");
   }
 
-  auto sf = std::shared_future(exit_signal.get_future());
-
-  bcast_content_poller = std::thread([=] { start_bcast_content_poller(sf); });
+  bcast_content_poller = std::thread([=] { start_bcast_content_poller(); });
   pinThreadToCore(bcast_content_poller, 0);
   set_thread_name(bcast_content_poller, "bcast_poller");
 
-  // TODO(Kristian): do we need this in a separate thread?
-  bcast_signature_poller =
-      std::thread([=] { start_bcast_signature_poller(sf); });
-  pinThreadToCore(bcast_signature_poller, 20);
+  bcast_signature_poller = std::thread([=] { start_bcast_signature_poller(); });
+  pinThreadToCore(bcast_signature_poller, 2);
   set_thread_name(bcast_signature_poller, "sig_poller");
 
-  r_cq_poller_thread = std::thread([=] { start_r_cq_poller(sf); });
-  pinThreadToCore(r_cq_poller_thread, 2);
+  r_cq_poller_thread = std::thread([=] { start_r_cq_poller(); });
+  pinThreadToCore(r_cq_poller_thread, 4);
   set_thread_name(r_cq_poller_thread, "r_cq_poller");
 
-  // TODO(Kristian): do we need this in a separate thread?
-  w_cq_poller_thread = std::thread([=] { start_w_cq_poller(sf); });
-  pinThreadToCore(w_cq_poller_thread, 22);
+  w_cq_poller_thread = std::thread([=] { start_w_cq_poller(); });
+  pinThreadToCore(w_cq_poller_thread, 6);
   set_thread_name(w_cq_poller_thread, "w_cq_poller");
 
   started = true;
   SPDLOG_LOGGER_INFO(logger, "Started");
 }
 
-void NonEquivocatingBroadcast::start_bcast_content_poller(
-    std::shared_future<void> f) {
+void NonEquivocatingBroadcast::start_bcast_content_poller() {
   if (bcast_content_poller_running) return;
 
   SPDLOG_LOGGER_INFO(logger, "Replayer thread running");
 
   bcast_content_poller_running = true;
-  size_t next_proc = 0;
 
-  while (unlikely(f.wait_for(std::chrono::seconds(0)) ==
-                  std::future_status::timeout)) {
-    next_proc = poll_bcast_bufs(next_proc);
+  while (true) {
+    poll_bcast_bufs();
   }
 }
 
-void NonEquivocatingBroadcast::start_bcast_signature_poller(
-    std::shared_future<void> f) {
+void NonEquivocatingBroadcast::start_bcast_signature_poller() {
   if (bcast_signature_poller_running) return;
 
   SPDLOG_LOGGER_INFO(logger, "Replayer thread running");
 
   bcast_signature_poller_running = true;
 
-  while (likely(f.wait_for(std::chrono::seconds(0)) ==
-                std::future_status::timeout)) {
+  while (true) {
     poll_bcast_signatures();
   }
 }
 
-void NonEquivocatingBroadcast::start_r_cq_poller(std::shared_future<void> f) {
+void NonEquivocatingBroadcast::start_r_cq_poller() {
   if (r_cq_poller_running) return;
 
   SPDLOG_LOGGER_INFO(logger, "Read CQ poller thread running");
@@ -263,13 +245,12 @@ void NonEquivocatingBroadcast::start_r_cq_poller(std::shared_future<void> f) {
 
   auto &rcq = cb.cq(REPLAY_CQ_NAME);
 
-  while (likely(f.wait_for(std::chrono::seconds(0)) ==
-                std::future_status::timeout)) {
+  while (true) {
     consume_read_wcs(rcq);
   }
 }
 
-void NonEquivocatingBroadcast::start_w_cq_poller(std::shared_future<void> f) {
+void NonEquivocatingBroadcast::start_w_cq_poller() {
   if (w_cq_poller_running) return;
 
   SPDLOG_LOGGER_INFO(logger, "WRITE CQ poller thread running");
@@ -278,8 +259,7 @@ void NonEquivocatingBroadcast::start_w_cq_poller(std::shared_future<void> f) {
 
   auto &wcq = cb.cq(BCAST_CQ_NAME);
 
-  while (likely(f.wait_for(std::chrono::seconds(0)) ==
-                std::future_status::timeout)) {
+  while (true) {
     consume_write_wcs(wcq);
   }
 }
@@ -292,16 +272,23 @@ void NonEquivocatingBroadcast::broadcast(uint64_t k, Broadcastable &msg) {
     throw std::runtime_error("Allowed message size exceeded");
   }
 
-  auto bcast_buf = bcast_bufs.find(self_id)->second;
+  auto &bcast_buf = bcast_bufs.find(self_id)->second;
 
-  bcast_buf.write(own_next, k, msg);
+  {
+    std::unique_lock lock(bcast_buf.get_mux(own_next));
+    bcast_buf.write(own_next, k, msg);
+  }
 
   auto slot = bcast_buf.slot(own_next);
+
+  slot.set_content_canary();
+
   // own_next is a member variable, so we rather capture a local one
   auto sig_next = own_next;
-  // let a worker thread sign the slot and afterwards send the signature
-  // to the remote processes
+
   sign_pool.enqueue([=]() {
+    auto &bcast_buf = bcast_bufs.find(self_id)->second;
+    std::unique_lock lock(bcast_buf.get_mux(sig_next));
     auto sig = reinterpret_cast<unsigned char *>(
         const_cast<uint8_t *>(slot.signature()));
     auto sign_data = reinterpret_cast<unsigned char *>(slot.addr());
@@ -310,21 +297,17 @@ void NonEquivocatingBroadcast::broadcast(uint64_t k, Broadcastable &msg) {
 
     const_cast<MemorySlot *>(&slot)->set_signature_canary();
 
-    // if (self_id == 1 && sig_next > 100) return;
-
     post_write_all(true, sig_next, reinterpret_cast<uintptr_t>(sig),
                    static_cast<uint32_t>(SIGNATURE_POST_WRITE_LEN),
                    bcast_buf.lkey,
                    bcast_buf.get_byte_offset(sig_next) + SLOT_SIGNATURE_OFFSET);
   });
 
-  post_write_all(false, own_next, slot.addr(), SLOT_SIGN_DATA_SIZE,
+  post_write_all(false, own_next, slot.addr(), CONTENT_POST_WRITE_LEN,
                  bcast_buf.lkey, bcast_buf.get_byte_offset(own_next));
 
-  // increase the message counter
   own_next++;
 
-  // deliver to ourself
   deliver(slot, self_id);
 }
 
@@ -338,46 +321,46 @@ inline void NonEquivocatingBroadcast::poll_bcast_signatures() {
 
     auto bcast_slot = bcast_bufs.find(origin)->second.slot(next);
 
-    if (likely(bcast_slot.has_signature())) {
+    if (bcast_slot.has_signature()) {
       auto replay_slot = replay_buf->slot(origin, next);
 
       // We only copy the signature if there is none present in the replay
       // buffer, as otherwise bad things can happen!
-      if (!replay_slot.has_signature())
+      if (!replay_slot.has_signature()) {
+        std::unique_lock lock(replay_buf->get_mux(origin, next));
         bcast_slot.copy_signature_to(replay_slot);
+      }
 
-      // The corresponding slot is already delivered. This may have happend
-      // if all remotes had matching (and not empty) replayed slots.
+      // The corresponding slot is already delivered, so we can omit verifying
+      // the signature
       if (!replayed.get(origin).exist(next)) {
         next_sig[origin]++;
         continue;
       }
 
       // verify the signature by a worker thread who additionally tries to
-      // deliver in case we were only waiting for validating the signature
+      // deliver
       verify_pool.enqueue([=]() {
         auto r_slot = replay_buf->slot(origin, next);
+
+        std::unique_lock lock(replay_buf->get_mux(origin, next));
         auto is_valid = verify_slot(r_slot, remotes.key(origin));
         SPDLOG_LOGGER_DEBUG(logger, "Verified sig pid,idx={},{}. Is valid {}",
                             origin, next, is_valid);
 
-        if (auto tracker = replayed.get(origin).get(next)) {
-          if (likely(is_valid)) {
-            // the order here is important as other threads check first
-            // for a processes sig and then for the outcome. If we swap
-            // the following two line it may appear for a short period that
-            // the siganture was invalid
-            tracker->get().sig_valid = is_valid;
-            tracker->get().processed_sig = true;
-            try_deliver(r_slot, origin, next);
-          } else {
-            SPDLOG_LOGGER_CRITICAL(logger, "SIG INVALID FOR ({},{})", origin,
-                                   next);
-            tracker->get().processed_sig = true;
-            // ensure we don't consider the origin anymore
-            pending_slots_at[origin] = std::numeric_limits<int>::max();
-            pending_remote_slots--;
-          }
+        replayed.get(origin).set_sig_validity(next, is_valid);
+
+        if (is_valid) {
+          try_deliver(r_slot, origin, next);
+        } else {
+          SPDLOG_LOGGER_CRITICAL(
+              logger,
+              "SIG INVALID FOR ({},{}) - replayed slot content: ({},{})",
+              origin, next, *reinterpret_cast<uint64_t *>(r_slot.addr()),
+              r_slot.id());
+
+          pending_slots_at[origin] = std::numeric_limits<int>::max();
+          pending_remote_slots--;
         }
       });
 
@@ -386,30 +369,19 @@ inline void NonEquivocatingBroadcast::poll_bcast_signatures() {
   }
 }
 
-inline size_t NonEquivocatingBroadcast::poll_bcast_bufs(size_t next_proc) {
-  // TODO(Kristian): spin-lock?
-  if (pending_remote_slots >= MAX_CONCURRENTLY_PENDING_SLOTS) {
-    SPDLOG_LOGGER_TRACE(logger,
-                        "Maximum of concurrently pending slots reached. "
-                        "Waiting on broadcast poll cond.");
+inline void NonEquivocatingBroadcast::poll_bcast_bufs() {
+  size_t i = 0;
+  for (int origin = remotes.id(i); origin != -1; origin = remotes.id(++i)) {
+    while (pending_remote_slots >= MAX_CONCURRENTLY_PENDING_SLOTS)
+      ;
 
-    std::unique_lock<std::mutex> lock(bcast_poll_mux);
-    bcast_poll_cond.wait(lock, [&]() {
-      return pending_remote_slots < MAX_CONCURRENTLY_PENDING_SLOTS;
-    });
-  }
+    if (pending_slots_at[origin] >= MAX_CONCURRENTLY_PENDING_PER_PROCESS)
+      continue;
 
-  auto remote_ids = remotes.ids();
-
-  for (size_t i = next_proc; i < remote_ids.get().size(); i++) {
-    auto origin = remote_ids.get()[i];
-    auto &next_idx = next_msg_idx[origin];
-
+    auto next_idx = next_msg_idx[origin].load();
     auto bcast_slot = bcast_bufs.find(origin)->second.slot(next_idx);
 
-    if (bcast_slot.id() != next_idx ||
-        pending_slots_at[origin] >= MAX_CONCURRENTLY_PENDING_PER_PROCESS)
-      continue;
+    if (bcast_slot.id() != next_idx) continue;
 
     SPDLOG_LOGGER_DEBUG(
         logger, "Bcast from {} at index {} = ({},{}) is signed {}", origin,
@@ -418,42 +390,35 @@ inline size_t NonEquivocatingBroadcast::poll_bcast_bufs(size_t next_proc) {
         bcast_slot.has_signature());
 
     // start latency benchmark
-    ttd[static_cast<size_t>(origin) * next_idx].first =
-        std::chrono::steady_clock::now();
+    ttd[static_cast<size_t>(process_pos[origin]) * max_msg_count + next_idx - 1]
+        .first = std::chrono::steady_clock::now();
 
     auto replay_slot_w = replay_buf->slot(origin, next_idx);
 
-    bcast_slot.copy_to(replay_slot_w);
+    {
+      std::unique_lock lock(replay_buf->get_mux(origin, next_idx));
+      bcast_slot.copy_to(replay_slot_w);
+    }
 
     // NOTE: we create here a tracker for the current processing message. This
     // needs to be here, so that the other threads can deduce the delivery
     // of the message when the tracker is not present anymore.
     replayed.get(origin).insert(next_idx);
+
     pending_remote_slots++;
     pending_slots_at[origin]++;
+    next_msg_idx[origin]++;
     // if there is only one remote process which is the message sender,
     // then we can directly deliver without replay reading
     if (unlikely(remotes.replay_quorum_size() == 0)) {
       if (replayed.get(origin).remove(next_idx)) {
         deliver(replay_slot_w, origin);
       }
-
-      next_msg_idx[origin]++;
       continue;
     }
 
     post_reads_for(origin, next_idx);
-
-    next_msg_idx[origin]++;
-
-    // we return here so we relase the remote share lock and wait on the
-    // condition variable at the beginning of this function
-    if (pending_remote_slots >= MAX_CONCURRENTLY_PENDING_SLOTS) {
-      return (i + 1) % remote_ids.get().size();
-    }
   }
-
-  return 0;
 }
 
 inline void NonEquivocatingBroadcast::consume_write_wcs(
@@ -467,13 +432,10 @@ inline void NonEquivocatingBroadcast::consume_write_wcs(
 
   if (write_wcs.size() > 0) {
     SPDLOG_LOGGER_DEBUG(logger, "WRITE CQ polled, size: {}", write_wcs.size());
-    {
-      std::unique_lock<std::mutex> lock(write_mux);
-      pending_writes -= static_cast<unsigned>(write_wcs.size());
-      write_cond.notify_one();
-    }
+    pending_writes -= static_cast<unsigned>(write_wcs.size());
 
-    for (auto &wc : write_wcs) {
+    for (size_t i = 0; i < write_wcs.size(); i++) {
+      auto &wc = write_wcs[i];
       auto const &[is_sig, receiver, msg_idx] = unpack_write_id(wc.wr_id);
       dory::IGNORE(msg_idx);
       dory::IGNORE(is_sig);
@@ -484,15 +446,25 @@ inline void NonEquivocatingBroadcast::consume_write_wcs(
           break;
         case IBV_WC_RETRY_EXC_ERR:
           pending_writes_at[receiver]--;
-          SPDLOG_LOGGER_INFO(logger,
+          // reduce the pending_writes_at before removing the remove which also
+          // adjusts the overall pending_writes
+          for (size_t j = i + 1; j < write_wcs.size(); j++) {
+            auto tp = unpack_write_id(write_wcs[j].wr_id);
+
+            if (std::get<1>(tp) == receiver) {
+              pending_writes_at[receiver]--;
+            }
+          }
+
+          SPDLOG_LOGGER_WARN(logger,
                              "WC WRITE: Process {} not responding, removing",
                              receiver);
-          remove_remote(receiver);
+          remove_remote(receiver, false);
 
           break;
         default:
           pending_writes_at[receiver]--;
-          SPDLOG_LOGGER_INFO(logger, "WC for WRITE at {} has status {}",
+          SPDLOG_LOGGER_WARN(logger, "WC for WRITE at {} has status {}",
                              receiver, wc.status);
       }
     }
@@ -510,25 +482,33 @@ inline void NonEquivocatingBroadcast::consume_read_wcs(
 
   if (read_wcs.size() > 0) {
     SPDLOG_LOGGER_DEBUG(logger, "READ CQ polled, size: {}", read_wcs.size());
-    {
-      std::unique_lock<std::mutex> lock(read_mux);
-      pending_reads -= read_wcs.size();
-      read_cond.notify_one();
-    }
+    pending_reads -= read_wcs.size();
 
-    for (auto const &wc : read_wcs) {
+    for (size_t i = 0; i < read_wcs.size(); i++) {
+      auto &wc = read_wcs[i];
       auto const &[had_sig, r_id, o_id, idx] = unpack_read_id(wc.wr_id);
       switch (wc.status) {
         case IBV_WC_SUCCESS:
           pending_reads_at[r_id]--;
           handle_replay_read(had_sig, r_id, o_id, idx);
+
           break;
         case IBV_WC_RETRY_EXC_ERR:
           pending_reads_at[r_id]--;
           replay_r_buf->free(r_id, o_id, idx);
-          SPDLOG_LOGGER_INFO(
+          // reduce the pending_reads_at before removing the remove which also
+          // adjusts the overall pending_reads
+          for (size_t j = i + 1; j < read_wcs.size(); j++) {
+            auto tp = unpack_read_id(read_wcs[j].wr_id);
+
+            if (std::get<1>(tp) == r_id) {
+              pending_reads_at[r_id]--;
+            }
+          }
+
+          SPDLOG_LOGGER_WARN(
               logger, "WC read; Process {} not responding, removing!", r_id);
-          remove_remote(r_id);
+          remove_remote(r_id, true);
           break;
         default: {
           pending_reads_at[r_id]--;
@@ -551,31 +531,15 @@ inline void NonEquivocatingBroadcast::handle_replay_read(bool had_sig, int r_id,
 
   auto &p = replayed.get(o_id);
 
-  auto r = p.get(idx);
-
-  if (unlikely(!r)) {
+  if (!p.exist(idx)) {
     replay_r_buf->free(r_id, o_id, idx);
     return;
   }
 
-  auto &tracker = r->get();
-
   auto rr_slot = replay_r_buf->slot(o_id, r_id, idx);
   auto own_slot = replay_buf->slot(o_id, idx);
-
-  // got no response, this may happen when the remote is not ready yet
-  // and didn't initialize its memory buffer
-  if (unlikely(rr_slot.id() == 0)) {
-    SPDLOG_LOGGER_WARN(
-        logger, "Slot ({},{} at {}) was not successfully read, val: {}", o_id,
-        idx, r_id, *reinterpret_cast<uint64_t *>(rr_slot.addr()));
-
-    post_read(r_id, pack_read_id(own_slot.has_signature(), r_id, o_id, idx),
-              rr_slot.addr(), MEMORY_SLOT_SIZE, replay_r_buf->lkey(),
-              replay_buf->get_byte_offset(o_id, idx));
-    // this case means the remote has nothing replayed yet for thie
-    // (origin,index) pair
-  } else if (rr_slot.id() == std::numeric_limits<uint64_t>::max()) {
+  // TODO(Kristian): use content canaries as with async and check if byte empty
+  if (!rr_slot.has_content()) {
     // we check here if the read was triggered at a time when the signature
     // was locally replayed or not. This is important as it ensures that remote
     // processes will see it and we can use this information when considering
@@ -587,33 +551,41 @@ inline void NonEquivocatingBroadcast::handle_replay_read(bool had_sig, int r_id,
     // deliver that message. If we afterwards receive a valid signature we would
     // also deliver, which violates safety.
     if (had_sig) {
+      SPDLOG_LOGGER_TRACE(logger,
+                          "nothing replayed - {} for ({},{}). Local signature "
+                          "existed. Adding to empty reads",
+                          r_id, o_id, idx);
+
+      // it it does not succeed, then it was concurrently delivered
+      if (!p.add_empty(idx, r_id)) {
+        replay_r_buf->free(r_id, o_id, idx);
+        return;
+      }
+
+      // same here
+      auto const &[processed_sig, ok] = p.processed_sig(idx);
+      if (!ok) {
+        replay_r_buf->free(r_id, o_id, idx);
+        return;
+      }
+
       // if the local signature is not processed yet, we might get lucky
       // when re-posting the read and potentially upgrading to a match-read
       // in the meanwhile, which could yield a delivery without needing a valid
       // signature at all - in case all remotes have replayed the same content.
-      if (!tracker.processed_sig) {
+      if (!processed_sig) {
         SPDLOG_LOGGER_TRACE(
             logger,
             "nothing replayed - {} for ({},{}). Local signature "
-            "existed, but still not validated. Re-posting!",
+            "existed, but not validated yet. Re-posting!",
             r_id, o_id, idx);
-        // TODO(Kristian): enabling the following line messes up things - why
-        // does the mem pool get exhausted?
-        post_read(r_id, pack_read_id(had_sig, r_id, o_id, idx), rr_slot.addr(),
-                  MEMORY_SLOT_SIZE, replay_r_buf->lkey(),
-                  replay_buf->get_byte_offset(o_id, idx));
+        // replay_r_buf->free(r_id, o_id, idx);
+        post_read(had_sig, r_id, o_id, idx);
       } else {
-        SPDLOG_LOGGER_TRACE(
-            logger,
-            "nothing replayed - {} for ({},{}). Local signature "
-            "existed and is validated. Adding to empty reads",
-            r_id, o_id, idx);
-        tracker.add_to_empty_reads(r_id);
-        if (tracker.has_quorum_of(remotes.replay_quorum_size()))
-          try_deliver(own_slot, o_id, idx);
         replay_r_buf->free(r_id, o_id, idx);
+        try_deliver(own_slot, o_id, idx);
       }
-      // TODO(Kristian): limit the number of re-reads
+      // TODO: limit the number of re-reads
       // we re-post the read as long as we don't have a local signature replayed
       // and exposed
     } else {
@@ -621,31 +593,45 @@ inline void NonEquivocatingBroadcast::handle_replay_read(bool had_sig, int r_id,
                           "nothing replayed - {} for ({},{}). Re-reading as "
                           "local signature is missing!",
                           r_id, o_id, idx);
-      post_read(r_id, pack_read_id(own_slot.has_signature(), r_id, o_id, idx),
-                rr_slot.addr(), MEMORY_SLOT_SIZE, replay_r_buf->lkey(),
-                replay_buf->get_byte_offset(o_id, idx));
+      // replay_r_buf->free(r_id, o_id, idx);
+      post_read(own_slot.has_signature(), r_id, o_id, idx);
     }
     // got a response and the replay slot was written, so we check for
     // matching contents, otherwise we need to check signatures
   } else if (rr_slot.has_same_data_content_as(own_slot)) {
     SPDLOG_LOGGER_TRACE(logger, "match read - {} for ({},{}) ", r_id, o_id,
                         idx);
-    tracker.add_to_match_reads(r_id);
-    if (tracker.has_quorum_of(remotes.replay_quorum_size()))
-      try_deliver(own_slot, o_id, idx);
+    p.add_match(idx, r_id);
     replay_r_buf->free(r_id, o_id, idx);
+    try_deliver(own_slot, o_id, idx);
   } else {
-    SPDLOG_LOGGER_CRITICAL(logger, "CONFLICTING SLOTS r,o,i=({},{},{})", r_id,
-                           o_id, idx);
+    SPDLOG_LOGGER_CRITICAL(logger,
+                           "CONFLICTING SLOTS r,o,i=({},{},{}). Contents are: "
+                           "r: ({},{}) vs l:({},{})",
+                           r_id, o_id, idx, rr_slot.id(),
+                           *reinterpret_cast<uint64_t *>(rr_slot.addr()),
+                           own_slot.id(),
+                           *reinterpret_cast<uint64_t *>(own_slot.addr()));
     // Only now we'll verify the signatures, as the operation is more costly
     // than comparing the slot contents. Anyhow, we want to verify the
     // signature in order to know if the origin broadcaster tried to
     // equivocate or we can count the current processing replayer towards
     // the quorum.
-    if (tracker.processed_sig) {
+    auto const &[processed_sig, ok] = p.processed_sig(idx);
+
+    // already concurrently delivered - free
+    if (!ok) {
+      replay_r_buf->free(r_id, o_id, idx);
+      return;
+    }
+
+    if (processed_sig) {
       SPDLOG_LOGGER_TRACE(logger, "Local signature for ({},{},{}) is processed",
                           o_id, r_id, idx);
-      if (!tracker.sig_valid) {
+
+      auto const &[sig_valid, ok2] = p.sig_valid(idx);
+
+      if (!sig_valid || !ok2) {
         SPDLOG_LOGGER_TRACE(logger, "Local signature for ({},{},{}) invalid",
                             o_id, r_id, idx);
         replay_r_buf->free(r_id, o_id, idx);
@@ -680,10 +666,9 @@ inline void NonEquivocatingBroadcast::handle_replay_read(bool had_sig, int r_id,
           // will not add the other to the quorum and thus never deliver
           // the conflicting message.
           // tracker.add_to_conflicts(r_id);
-          post_read(r_id,
-                    pack_read_id(own_slot.has_signature(), r_id, o_id, idx),
-                    rr_slot.addr(), MEMORY_SLOT_SIZE, replay_r_buf->lkey(),
-                    replay_buf->get_byte_offset(o_id, idx));
+          // replay_r_buf->free(r_id, o_id, idx);
+          post_read(own_slot.has_signature(), r_id, o_id, idx);
+
         } else {
           SPDLOG_LOGGER_TRACE(
               logger,
@@ -697,10 +682,9 @@ inline void NonEquivocatingBroadcast::handle_replay_read(bool had_sig, int r_id,
           // re-try also once and then see that we have a valid signature
           // so he won't ever deliver his version of the message at the
           // current index.
-          tracker.add_to_empty_reads(r_id);
-          if (tracker.has_quorum_of(remotes.replay_quorum_size()))
-            try_deliver(own_slot, o_id, idx);
+          p.add_empty(idx, r_id);
           replay_r_buf->free(r_id, o_id, idx);
+          try_deliver(own_slot, o_id, idx);
         }
       } else {
         verify_pool.enqueue(
@@ -717,9 +701,8 @@ inline void NonEquivocatingBroadcast::handle_replay_read(bool had_sig, int r_id,
         // We need at least one signature in order to be able to know if the
         // broadcaster or replayer is byzantine. Therefore, we re-post a
         // remote read.
-        post_read(r_id, pack_read_id(own_slot.has_signature(), r_id, o_id, idx),
-                  rr_slot.addr(), MEMORY_SLOT_SIZE, replay_r_buf->lkey(),
-                  replay_buf->get_byte_offset(o_id, idx));
+        // replay_r_buf->free(r_id, o_id, idx);
+        post_read(own_slot.has_signature(), r_id, o_id, idx);
         // NOTE: when re-posting a read infinitelly often we open up an
         // attack vector for a byzantine broadcaster (or replayer) who never
         // includes a signature. This will slow us down as we need to
@@ -735,39 +718,49 @@ inline void NonEquivocatingBroadcast::handle_replay_read(bool had_sig, int r_id,
   }
 }
 
-inline void NonEquivocatingBroadcast::remove_remote(int pid) {
+inline void NonEquivocatingBroadcast::remove_remote(int pid, bool read) {
   remotes.remove_remote(pid);
 
-  // TODO(Kristian): determine when do we need this
-  // Not always are WCs consumed upon an error
-  //
-  // When still in send queue (err 5) then yes and for already send ones only
-  // one that also transitions the QP in err state?
-  //
-  // auto &p_reads = pending_reads_at[pid];
-  // if (p_reads > 0) {
-  //   {
-  //     std::unique_lock<std::mutex> lock(read_mux);
-  //     if (pending_reads_at[pid] > pending_reads) {
-  //       throw std::runtime_error("Would overflow pending_reads by reducing");
-  //     }
-  //     pending_reads -= pending_reads_at[pid];
-  //     read_cond.notify_one();
-  //   }
-  // }
+  replay_r_buf->free_all_from(pid);
 
-  // auto &p_writes = pending_writes_at[pid];
-  // if (p_writes > 0) {
-  //   {
-  //     std::unique_lock<std::mutex> lock(write_mux);
-  //     if (pending_writes_at[pid] > pending_writes) {
-  //       throw std::runtime_error("Would overflow pending_writes by
-  //       reducing");
-  //     }
-  //     pending_writes -= static_cast<unsigned>(pending_writes_at[pid]);
-  //     write_cond.notify_one();
-  //   }
-  // }
+  SPDLOG_LOGGER_INFO(logger, "pending reads at {}: {}", pid,
+                     pending_reads_at[pid]);
+  SPDLOG_LOGGER_INFO(logger, "pending writes at {}: {}", pid,
+                     pending_writes_at[pid]);
+  SPDLOG_LOGGER_INFO(logger, "pending writes: {}", pending_writes);
+  SPDLOG_LOGGER_INFO(logger, "pending reads: {}", pending_reads);
+
+  if (read) {
+    auto &p_reads = pending_reads_at[pid];
+    if (p_reads > 0) {
+      {
+        std::unique_lock<std::mutex> lock(read_mux);
+        if (pending_reads_at[pid] > pending_reads) {
+          SPDLOG_LOGGER_CRITICAL(logger,
+                                 "Would overflow pending_reads({}) by "
+                                 "reducing with pending_reads_at({})",
+                                 pending_reads, pending_reads_at[pid]);
+        }
+        pending_reads -= pending_reads_at[pid];
+        read_cond.notify_one();
+      }
+    }
+  } else {
+    auto &p_writes = pending_writes_at[pid];
+    if (p_writes > 0) {
+      {
+        std::unique_lock<std::mutex> lock(write_mux);
+        if (pending_writes_at[pid] > pending_writes) {
+          SPDLOG_LOGGER_CRITICAL(logger,
+                                 "Would overflow pending_writes({}) by "
+                                 "reducing with pending_writes_at({})",
+                                 pending_writes, pending_writes_at[pid]);
+        }
+        pending_writes -= static_cast<unsigned>(pending_writes_at[pid]);
+        write_cond.notify_one();
+      }
+    }
+  }
 
   for (auto &[origin, tracker_map] : replayed) {
     if (origin == pid) continue;
@@ -795,47 +788,15 @@ inline bool NonEquivocatingBroadcast::verify_slot(
   return dory::crypto::dalek::verify(sig, msg, SLOT_SIGN_DATA_SIZE, key);
 }
 
-// inline void NonEquivocatingBroadcast::post_write(int pid, uint64_t wrid,
-//                                                  uintptr_t lbuf, uint32_t
-//                                                  lsize, uint32_t lkey, size_t
-//                                                  roffset) {
-//   post_writer.enqueue([=]() {
-//     if (pending_writes + 1 > dory::ControlBlock::CQDepth) {
-//       SPDLOG_LOGGER_TRACE(logger, "waiting for write cond");
-
-//       std::unique_lock<std::mutex> lock(write_mux);
-//       write_cond.wait(lock, [&] {
-//         return pending_writes + 1 <= dory::ControlBlock::CQDepth;
-//       });
-
-//       SPDLOG_LOGGER_TRACE(logger, "write cond satisfied, now {}",
-//                           pending_writes);
-//     }
-
-//     auto rc = remotes.broadcast_connection(pid);
-//     if (likely(rc)) {
-//       auto ret = rc->get().postSendSingle(
-//           ReliableConnection::RdmaWrite, wrid, reinterpret_cast<void
-//           *>(lbuf), lsize, lkey, rc->get().remoteBuf() + roffset);
-
-//       handle_write_post_ret(ret, pid, wrid);
-//     }
-//   });
-// }
-
 inline void NonEquivocatingBroadcast::post_write_all(bool is_sig, uint64_t idx,
                                                      uintptr_t addr,
                                                      uint32_t len, uint32_t key,
                                                      size_t roffset) {
-  if (unlikely(pending_writes + remotes.size() > dory::ControlBlock::CQDepth)) {
-    SPDLOG_LOGGER_TRACE(logger, "waiting for write cond");
-
-    std::unique_lock<std::mutex> lock(write_mux);
-    write_cond.wait(lock, [&] {
-      return pending_writes + remotes.size() <= dory::ControlBlock::CQDepth;
-    });
-
-    SPDLOG_LOGGER_TRACE(logger, "write cond satisfied, now {}", pending_writes);
+  while (pending_writes + remotes.size() > dory::ControlBlock::CQDepth) {
+    // exit when we finish - needed for sign worker
+    if (sf.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+      return;
+    }
   }
 
   auto rcs = remotes.broadcast_connections();
@@ -845,10 +806,6 @@ inline void NonEquivocatingBroadcast::post_write_all(bool is_sig, uint64_t idx,
     // the map container, not it's elements. A bit hacky, but should work for
     // now. Eventually, refactor remotes.replay_connections().
     auto *r = const_cast<ReliableConnection *>(&rc);
-
-    // if (self_id == 1 && idx > 100 && remote == 4) {
-    //   reinterpret_cast<uint64_t *>(addr)[0] = 1337;
-    // }
 
     auto ret = r->postSendSingle(ReliableConnection::RdmaWrite, wrid,
                                  reinterpret_cast<void *>(addr), len, key,
@@ -862,16 +819,8 @@ inline void NonEquivocatingBroadcast::post_read(int pid, uint64_t wrid,
                                                 uintptr_t lbuf, uint32_t lsize,
                                                 uint32_t lkey, size_t roffset) {
   post_reader.enqueue([=]() {
-    if (pending_reads + 1 > dory::ControlBlock::CQDepth) {
-      SPDLOG_LOGGER_TRACE(logger, "waiting for read cond");
-
-      std::unique_lock<std::mutex> lock(read_mux);
-      read_cond.wait(lock, [&] {
-        return pending_reads + 1 <= dory::ControlBlock::CQDepth;
-      });
-
-      SPDLOG_LOGGER_TRACE(logger, "read cond satisfied, now {}", pending_reads);
-    }
+    while (pending_reads + 1 > dory::ControlBlock::CQDepth)
+      ;
 
     if (auto rc = remotes.replay_connection(pid)) {
       auto ret = rc->get().postSendSingle(
@@ -883,19 +832,31 @@ inline void NonEquivocatingBroadcast::post_read(int pid, uint64_t wrid,
   });
 }
 
+inline void NonEquivocatingBroadcast::post_read(bool had_sig, int r_id,
+                                                int o_id, uint64_t idx) {
+  post_reader.enqueue([=] {
+    while (pending_reads + 1 > dory::ControlBlock::CQDepth)
+      ;
+
+    MemorySlot slot = replay_r_buf->slot(o_id, r_id, idx);
+    auto wrid = pack_read_id(had_sig, r_id, o_id, idx);
+
+    if (auto rc = remotes.replay_connection(r_id)) {
+      auto ret = rc->get().postSendSingle(
+          ReliableConnection::RdmaRead, wrid,
+          reinterpret_cast<void *>(slot.addr()), MEMORY_SLOT_SIZE,
+          replay_r_buf->lkey(),
+          rc->get().remoteBuf() + replay_buf->get_byte_offset(o_id, idx));
+
+      handle_read_post_ret(ret, r_id, wrid);
+    }
+  });
+}
+
 inline void NonEquivocatingBroadcast::post_reads_for(int origin,
                                                      uint64_t slot_index) {
-  if (unlikely(pending_reads + remotes.size() - 1 >
-               dory::ControlBlock::CQDepth)) {
-    SPDLOG_LOGGER_TRACE(logger, "waiting for read cond");
-
-    std::unique_lock<std::mutex> lock(read_mux);
-    read_cond.wait(lock, [&] {
-      return pending_reads + remotes.size() - 1 <= dory::ControlBlock::CQDepth;
-    });
-
-    SPDLOG_LOGGER_TRACE(logger, "read cond satisfied, now {}", pending_reads);
-  }
+  while (pending_reads + remotes.size() - 1 > dory::ControlBlock::CQDepth)
+    ;
 
   auto lkey = replay_r_buf->lkey();
   auto roffset = replay_buf->get_byte_offset(origin, slot_index);
@@ -933,9 +894,6 @@ inline void NonEquivocatingBroadcast::handle_write_post_ret(int ret, int remote,
   } else {
     pending_writes++;
     pending_writes_at[remote]++;
-    // SPDLOG_LOGGER_DEBUG(logger, "Pending writes: {}, at {}: {}",
-    // pending_writes,
-    //                     remote, pending_writes_at[remote]);
   }
 }
 
@@ -950,9 +908,6 @@ inline void NonEquivocatingBroadcast::handle_read_post_ret(int ret, int remote,
   } else {
     pending_reads++;
     pending_reads_at[remote]++;
-    // SPDLOG_LOGGER_DEBUG(logger, "Pending reads: {}, at {}: {}",
-    // pending_reads,
-    //                     remote, pending_reads_at[remote]);
   }
 }
 
@@ -960,20 +915,18 @@ inline void NonEquivocatingBroadcast::deliver(MemorySlot &slot, int origin) {
   if (origin != self_id) {
     pending_slots_at[origin]--;
 
-    {
-      std::unique_lock<std::mutex> lock(bcast_poll_mux);
-      pending_remote_slots--;
-      bcast_poll_cond.notify_one();
-    }
+    pending_remote_slots--;
 
     SPDLOG_LOGGER_DEBUG(logger, "Pending slots: {}", pending_remote_slots);
   }
+
   // synchronize access to the layer above
   std::unique_lock<std::mutex> lock(deliver_mux);
 
   if (origin != self_id)
-    ttd[static_cast<size_t>(origin) * slot.id()].second =
-        std::chrono::steady_clock::now();
+    ttd[static_cast<size_t>(process_pos[origin]) * max_msg_count + slot.id() -
+        1]
+        .second = std::chrono::steady_clock::now();
 
   deliver_cb(slot.id(), slot.content(), origin);
 }
@@ -988,30 +941,34 @@ inline void NonEquivocatingBroadcast::try_deliver(MemorySlot &slot, int origin,
 
 inline void NonEquivocatingBroadcast::verify_and_act_on_remote_sig(
     int o_id, int r_id, uint64_t idx) {
-  if (auto tracker = replayed.get(o_id).get(idx)) {
-    auto rr_slot = replay_r_buf->slot(o_id, r_id, idx);
-    bool replay_sig_valid = verify_slot(rr_slot, remotes.key(o_id));
+  if (!replayed.get(o_id).exist(idx)) {
+    return;
+  }
 
-    replay_r_buf->free(r_id, o_id, idx);
+  auto rr_slot = replay_r_buf->slot(o_id, r_id, idx);
+  bool replay_sig_valid = verify_slot(rr_slot, remotes.key(o_id));
 
-    if (!replay_sig_valid) {
-      SPDLOG_LOGGER_TRACE(logger, "Remote signature for ({},{},{}) not valid",
-                          o_id, r_id, idx);
-      tracker->get().add_to_empty_reads(r_id);
-      auto slot = bcast_bufs.find(o_id)->second.slot(idx);
-      try_deliver(slot, o_id, idx);
-    } else {
-      SPDLOG_LOGGER_TRACE(
-          logger,
-          "Remote signature from {} for ({},{}) is valid, Process "
-          "{} tried to equivocate!",
-          r_id, o_id, idx, o_id);
-      // with this we ensure we won't replay any values by this remote anymore
-      // also we decrease the concurrency value as this slot won't ever be
-      // delivered
-      pending_slots_at[o_id] = std::numeric_limits<int>::max();
-      pending_remote_slots--;
-    }
+  replay_r_buf->free(r_id, o_id, idx);
+
+  if (!replay_sig_valid) {
+    SPDLOG_LOGGER_TRACE(logger, "Remote signature for ({},{},{}) not valid",
+                        o_id, r_id, idx);
+    replayed.get(o_id).add_empty(idx, r_id);
+
+    auto slot = replay_buf->slot(o_id, idx);
+
+    try_deliver(slot, o_id, idx);
+  } else {
+    SPDLOG_LOGGER_TRACE(
+        logger,
+        "Remote signature from {} for ({},{}) is valid, Process "
+        "{} tried to equivocate!",
+        r_id, o_id, idx, o_id);
+    // with this we ensure we won't replay any values by this remote anymore
+    // also we decrease the concurrency value as this slot won't ever be
+    // delivered
+    pending_slots_at[o_id] = std::numeric_limits<int>::max();
+    pending_remote_slots--;
   }
 }
 

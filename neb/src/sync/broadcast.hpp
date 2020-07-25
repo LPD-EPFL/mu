@@ -6,7 +6,6 @@
 #include <memory>
 #include <mutex>
 #include <set>
-#include <shared_mutex>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -20,13 +19,13 @@
 
 #include "../broadcastable.hpp"
 #include "../shared/helpers.hpp"
-#include "../shared/mem-slot.hpp"
-#include "../shared/remotes.hpp"
 #include "../shared/slot-tracker.hpp"
 #include "../shared/thread-pool.hpp"
 
 #include "buffer_overlay.hpp"
 #include "mem-pool.hpp"
+#include "mem-slot.hpp"
+#include "remotes.hpp"
 
 namespace dory {
 namespace neb {
@@ -181,6 +180,8 @@ class NonEquivocatingBroadcast {
 
   RemoteProcesses remotes;
 
+  std::map<int, size_t> process_pos;
+
   // callback to call for delivery of a message
   deliver_callback deliver_cb;
 
@@ -236,14 +237,11 @@ class NonEquivocatingBroadcast {
   std::atomic<uint32_t> pending_writes;
   std::map<int, std::atomic<size_t>> pending_writes_at;
 
-  // thread pool with signature creation workers
-  SpinningThreadPool sign_pool;
-
   // thread pool with signature verification workers
   SpinningThreadPool verify_pool;
 
-  // thread pool for posting write WRs
-  // SpinningThreadPool post_writer;
+  // thread pool with signature creation workers
+  SpinningThreadPool sign_pool;
 
   // thead pool for posting read WRs
   SpinningThreadPool post_reader;
@@ -274,16 +272,16 @@ class NonEquivocatingBroadcast {
    * Starts the replayer thread which tries to deliver messages by remote
    * processes
    **/
-  void start_bcast_content_poller(std::shared_future<void> f);
+  void start_bcast_content_poller();
 
-  void start_bcast_signature_poller(std::shared_future<void> f);
+  void start_bcast_signature_poller();
 
   /**
    * Starts a thread which consumes WC from the CQs.
    **/
-  void start_r_cq_poller(std::shared_future<void> f);
+  void start_r_cq_poller();
 
-  void start_w_cq_poller(std::shared_future<void> f);
+  void start_w_cq_poller();
 
   /**
    * Consumes and handles the work completion of the replay buffer read CQ.
@@ -303,24 +301,15 @@ class NonEquivocatingBroadcast {
    * written values to the replay buffer. Also it triggers rdma reads of remote
    * replay buffers which get handled by the consumer of the replay buffer
    * completion queue in a separate thread.
-   *
-   * Note: this function may return while looping if the
-   *`MAX_CONCURRENTLY_PENDING_SLOTS` is reached, therefore we provide the
-   * next_proc to not favour processes that appear at the beginning of the
-   * vector.
-   *
-   * @param next_proc: index in the remote_ids vector where to continue polling
-   *                   (initially 0)
-   * @returns index where to continue polling
    **/
 
-  inline size_t poll_bcast_bufs(size_t next_proc);
+  inline void poll_bcast_bufs();
 
   /**
    * Removes the remote process from the cluster. This routine is called upon
    * read/write WC with status 12
    **/
-  inline void remove_remote(int pid);
+  inline void remove_remote(int pid, bool read);
 
   inline void handle_replay_read(bool had_sig, int r_id, int o_id,
                                  uint64_t idx);
@@ -337,6 +326,8 @@ class NonEquivocatingBroadcast {
 
   inline void post_read(int pid, uint64_t wrid, uintptr_t lbuf, uint32_t lsize,
                         uint32_t lkey, size_t roffset);
+
+  inline void post_read(bool had_sig, int r_id, int o_id, uint64_t idx);
 
   inline void post_reads_for(int origin, uint64_t slot_index);
 
@@ -361,12 +352,14 @@ class NonEquivocatingBroadcast {
   std::atomic<bool> w_cq_poller_running = false;
 
   std::promise<void> exit_signal;
-
+  std::shared_future<void> sf;
   // holds the timepoints  when replaying and delivering a remote slot
   // ttd = time 'til delivery
   std::vector<std::pair<std::chrono::steady_clock::time_point,
                         std::chrono::steady_clock::time_point>>
       ttd;
+
+  size_t max_msg_count = 100000;
 };
 }  // namespace sync
 }  // namespace neb

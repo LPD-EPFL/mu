@@ -19,9 +19,8 @@
 #include <dory/shared/unused-suppressor.hpp>
 #include <dory/store.hpp>
 
-#include "../shared/consts.hpp"
-
 #include "broadcast.hpp"
+#include "consts.hpp"
 
 using namespace std::chrono;
 
@@ -332,24 +331,26 @@ int main(int argc, char *argv[]) {
     SPDLOG_LOGGER_INFO(logger, "Remote process {} is ready", pid);
   }
 
-  neb.resize_ttd(num_msgs);
-  neb.start();
-
-  nc.bench();
-
   NebSampleMessage m;
   const int to_bcast = num_msgs.find(self_id)->second;
+  // SPDLOG_LOGGER_CRITICAL(logger, "Benchmark starts in 1 sec");
+  // std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  neb.resize_ttd(num_msgs);
+  nc.bench();
+
+  neb.start();
 
   auto broadcast_thread = std::thread([&]() {
     for (int i = 1; i <= to_bcast; i++) {
       m.val = 1000000 * self_id + i;
       nc.log_broadcast(i, m.val);
       neb.broadcast(i, m);
-      // std::this_thread::sleep_for(std::chrono::microseconds(40));
+      // std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
   });
 
-  dory::pinThreadToCore(broadcast_thread, 4);
+  dory::pinThreadToCore(broadcast_thread, 18);
 
   broadcast_thread.join();
 
@@ -370,13 +371,8 @@ int main(int argc, char *argv[]) {
     SPDLOG_LOGGER_INFO(logger, "{} is done!", pid);
   }
 
-  // SPDLOG_LOGGER_INFO(logger, "Sleeping for 100 seconds to let others
-  // finish"); std::this_thread::sleep_for(seconds(100));
-
-  // exit async event thread
-  // exit_signal.set_value();
-  // async_event_thread.join();
-  // SPDLOG_LOGGER_INFO(logger, "Async Event Thread finished");
+  SPDLOG_LOGGER_CRITICAL(
+      logger, "All finished, C-c to terminate run and write outputs!");
 
   return 0;
 }

@@ -5,8 +5,8 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <random>
 #include <set>
-#include <shared_mutex>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -20,13 +20,13 @@
 
 #include "../broadcastable.hpp"
 #include "../shared/helpers.hpp"
-#include "../shared/mem-slot.hpp"
-#include "../shared/remotes.hpp"
 #include "../shared/slot-tracker.hpp"
 #include "../shared/thread-pool.hpp"
 
 #include "buffer_overlay.hpp"
 #include "mem-pool.hpp"
+#include "mem-slot.hpp"
+#include "remotes.hpp"
 #include "swmr.hpp"
 
 namespace dory {
@@ -237,20 +237,24 @@ class NonEquivocatingBroadcast {
   std::map<int, std::atomic<uint64_t>> next_msg_idx;
 
   // tracks the current state of the next signature to replayed
-  std::map<int, uint64_t> next_sig;
+  std::map<int, std::atomic<uint64_t>> next_sig;
 
   // tracks the pending number of rdma reads at any time
   std::atomic<size_t> pending_reads;
-  std::map<int, std::atomic<size_t>> pending_reads_at;
+  std::map<int, std::pair<std::mutex, std::set<uint64_t>>> pending_write_ids_at;
+
+  // std::map<int, std::atomic<size_t>> pending_reads_at;
+
+  std::map<int, std::pair<std::mutex, std::set<uint64_t>>> pending_read_ids_at;
   // tracks the pending number of rdma writes at any time
   std::atomic<uint32_t> pending_writes;
-  std::map<int, std::atomic<size_t>> pending_writes_at;
-
-  // thread pool with signature creation workers
-  SpinningThreadPool sign_pool;
+  // std::map<int, std::atomic<size_t>> pending_writes_at;
 
   // thread pool with signature verification workers
   SpinningThreadPool verify_pool;
+
+  // thread pool with signature creation workers
+  SpinningThreadPool sign_pool;
 
   // thread pool for posting write WRs
   SpinningThreadPool post_writer;
@@ -275,17 +279,24 @@ class NonEquivocatingBroadcast {
 
   // currently pending remote slots that are note delivered yet
   std::atomic<int> pending_remote_slots;
+
+  // protection against a byzantine broadcaster who never includes a
+  // signature - checked against `MAX_CONCURRENTLY_PENDING_PER_PROCESS`
+  std::map<int, std::atomic<int>> pending_slots_at;
+
   /**
    * Starts the replayer thread which tries to deliver messages by remote
    * processes
    **/
-  void start_bcast_content_poller(std::shared_future<void> f);
+  void start_bcast_content_poller();
+
+  void start_bcast_signature_poller();
 
   /**
    * Starts a thread which consumes WC from the CQs.
    **/
-  void start_r_cq_poller(std::shared_future<void> f);
-  void start_w_cq_poller(std::shared_future<void> f);
+  void start_r_cq_poller();
+  void start_w_cq_poller();
 
   /**
    * Consumes and handles the work completion of the replay buffer read CQ.
@@ -293,7 +304,8 @@ class NonEquivocatingBroadcast {
    *processes this routine also delivers messages by calling the deliver
    *callback.
    **/
-  inline void consume_read_wcs(dory::deleted_unique_ptr<ibv_cq> &cq);
+  inline void consume_read_wcs(dory::deleted_unique_ptr<ibv_cq> &cq,
+                               std::mt19937 &rng);
 
   /**
    * Consumes the work completions of the write CQ
@@ -302,29 +314,36 @@ class NonEquivocatingBroadcast {
 
   inline void handle_write_ack(int target, uint64_t idx);
 
+  inline void handle_sig_write_ack(int target, uint64_t idx);
+
   inline void read_replay_registers_for(int target, uint64_t idx);
+
+  inline void read_replayed_slots_at_sources_for(int origin, uint64_t idx);
+
+  inline void read_replay_slot(int origin, int replayer, uint64_t idx);
+
+  inline void read_replay_register(int origin, int replayer, uint64_t idx,
+                                   int count);
 
   /**
    * Loops over the remote_ids vector and polls the broacast buffers and replays
    * written values to the replay buffer. Also it triggers rdma reads of remote
    * replay buffers which get handled by the consumer of the replay buffer
    * completion queue in a separate thread.
-   *
-   * Note: this function may return while looping if the
-   *`MAX_CONCURRENTLY_PENDING_SLOTS` is reached, therefore we provide the
-   * next_proc to not favour processes that appear at the beginning of the
-   * vector.
-   *
-   * @param next_proc: index in the remote_ids vector where to continue polling
-   *                   (initially 0)
-   * @returns index where to continue polling
    **/
-  inline size_t poll_bcast_bufs(size_t next_proc);
+  inline void poll_bcast_bufs();
 
-  inline void handle_replicator_read(int wid, int rid, int oid, uint64_t idx);
+  inline void handle_replicator_read(bool had_sig, int count, int wid, int rid,
+                                     int oid, uint64_t idx);
 
-  inline void handle_register_read(int wid, int rid, int oid, uint64_t idx,
+  inline void handle_register_read(bool had_sig, int count, int wid, int rid,
+                                   int oid, uint64_t idx,
                                    optional_ref<MemorySlot> rslot);
+
+  inline void handle_source_read(bool had_sig, int wid, int oid, uint64_t idx);
+
+  inline void verify_and_act_on_remote_sig(int o_id, int w_id, int r_id,
+                                           uint64_t idx, int count);
 
   inline void poll_bcast_signatures();
 
@@ -351,18 +370,24 @@ class NonEquivocatingBroadcast {
   std::atomic<bool> w_cq_poller_running = false;
 
   std::promise<void> exit_signal;
+  std::shared_future<void> sf;
 
   // origin -> index -> acks
-  std::map<int, std::map<uint64_t, size_t>> write_acks;
+  std::map<int, std::unordered_map<uint64_t, size_t>> write_acks;
+
+  std::map<int, std::unordered_map<uint64_t, size_t>> sig_write_acks;
 
   // replayer -> origin -> index -> register
-  std::map<int, std::map<int, std::map<uint64_t, SWMRRegister>>> registers;
+  std::map<int, std::map<int, std::unordered_map<uint64_t, SWMRRegister>>>
+      registers;
 
   // holds the timepoints  when replaying and delivering a remote slot
   // ttd = time to deliver
   std::vector<std::pair<std::chrono::steady_clock::time_point,
                         std::chrono::steady_clock::time_point>>
       ttd;
+
+  size_t max_msg_count = 100000;
 };
 }  // namespace async
 }  // namespace neb
