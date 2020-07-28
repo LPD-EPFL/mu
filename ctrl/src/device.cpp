@@ -8,7 +8,7 @@
 
 // OpenDevice definitions
 namespace dory {
-OpenDevice::OpenDevice() {}
+OpenDevice::OpenDevice() { memset(&device_attr, 0, sizeof(device_attr)); }
 
 OpenDevice::OpenDevice(struct ibv_device *device) : dev{device} {
   ctx = ibv_open_device(device);
@@ -121,7 +121,8 @@ std::vector<OpenDevice> &Devices::list(bool force) {
 }  // namespace dory
 
 namespace dory {
-ResolvedPort::ResolvedPort(OpenDevice &od) : open_dev{od}, port_index{-1} {
+ResolvedPort::ResolvedPort(OpenDevice &od)
+    : open_dev{od}, port_index{-1}, port_id{0}, port_lid{0} {
   (void)port_index;
 }
 

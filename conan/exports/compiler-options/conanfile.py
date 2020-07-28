@@ -51,8 +51,26 @@ options = {
                 # to never throw an exception.
                 "-Wnoexcept",
             ],
+
+            "LINKER":
+                # No linker means that we use the default linker. Otherwise, choose one of
+                # the linkers below
+                "",
+                # "-fuse-ld=bfd",
+                # "-fuse-ld=gold",
+                # "-fuse-ld=lld",
         },
-        "CLANG": {"C": [], "CXX": []},
+        "CLANG": {
+            "C": [],
+            "CXX": [],
+            "LINKER":
+                # No linker means that we use the default linker. Otherwise, choose one of
+                # the linkers below
+                # "",
+                # "-fuse-ld=bfd",
+                # "-fuse-ld=gold",
+                "-fuse-ld=lld",
+        },
     },
     "LANG": {
         "CXX": [
@@ -185,7 +203,13 @@ def set_options(cmake):
     cmake.definitions["CMAKE_C_FLAGS_{}".format(build_type)] = " ".join(
         options["BUILD_TYPE"][build_type]
     )
+    cmake.definitions["CMAKE_EXE_LINKER_FLAGS"] = options["TARGET"][compiler]["LINKER"]
 
+def generator():
+    # The default is None
+    # return None
+    # return "Unix Makefile"
+    return "Ninja" 
 
 class CompilerOptions(ConanFile):
     name = "dory-compiler-options"

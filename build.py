@@ -9,7 +9,9 @@ if sys.version_info[0] < 3:
 import subprocess
 import os
 
-make_list = subprocess.check_output(["make", "list"])
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+make_list = subprocess.check_output(["make", "list"], cwd=current_dir)
 make_list = make_list.decode("utf-8").split()
 make_list = [x.strip() for x in filter(lambda x: not x.endswith("mangled"), make_list)]
 
@@ -28,6 +30,11 @@ removed = (
     + removeFromList(make_list, "clean")
     + removeFromList(make_list, "distclean")
 )
+
+# Hide some internal targets
+removeFromList(make_list, "compiler-options")
+removeFromList(make_list, "make_args")
+
 make_list.sort()
 make_list = removed + make_list
 
@@ -77,7 +84,6 @@ if isinstance(results.TARGET, str):
 else:
     targets = list(results.TARGET)
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
 
 if compiler == "gcc":
     CONAN_PROFILE = os.path.join(
@@ -99,6 +105,7 @@ ret = subprocess.call(
     "make CONAN_PROFILE={} CC={} CXX={} {}".format(
         CONAN_PROFILE, CC, CXX, " ".join(targets)
     ),
+    cwd=current_dir,
     shell=True,
 )
 

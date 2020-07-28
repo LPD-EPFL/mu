@@ -27,7 +27,8 @@ class DoryNebTestConan(ConanFile):
         self.requires("dory-shared/0.0.1")
 
     def build(self):
-        cmake = CMake(self)
+        generator = self.python_requires["dory-compiler-options"].module.generator()
+        cmake = CMake(self, generator = generator)
 
         self.python_requires["dory-compiler-options"].module.set_options(cmake)
         cmake.definitions["DORY_LTO"] = str(self.options.lto).upper()

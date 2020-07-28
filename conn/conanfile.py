@@ -27,7 +27,8 @@ class DoryConnectionConan(ConanFile):
     python_requires = "dory-compiler-options/0.0.1@dory/stable"
 
     def _configure_cmake(self):
-        cmake = CMake(self)
+        generator = self.python_requires["dory-compiler-options"].module.generator()
+        cmake = CMake(self, generator = generator)
 
         self.python_requires["dory-compiler-options"].module.set_options(cmake)
 

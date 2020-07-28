@@ -8,9 +8,11 @@ class DoryExternals(ConanFile):
     description = "External header files"
     generators = "cmake"
     exports_sources = "src/*"
+    python_requires = "dory-compiler-options/0.0.1@dory/stable"
 
     def build(self):
-        cmake = CMake(self)
+        generator = self.python_requires["dory-compiler-options"].module.generator()
+        cmake = CMake(self, generator = generator)
         cmake.configure(source_folder="src")
 
     def package(self):
