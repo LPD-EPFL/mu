@@ -67,12 +67,10 @@ make_args: force $(DEPDIR)
 
 ############################ Start of editable area ############################
 .PHONY: shared extern memstore crypto ctrl conn
-# .PHONY: crash-consensus neb
-.PHONY: demo neb
+.PHONY: demo crash-consensus neb
 
 # Define the targets you want to compile as conan libraries/conan binaries.
-#TARGETS := compiler-options extern shared memstore crypto ctrl conn crash-consensus neb
-TARGETS := extern shared memstore crypto ctrl conn demo neb
+TARGETS := extern shared memstore crypto ctrl conn demo crash-consensus neb
 
 
 # Specify only the local dependencies for the given conan libraries/binaries
@@ -83,7 +81,7 @@ conn : shared ctrl memstore
 crypto : shared memstore
 
 demo: extern shared memstore ctrl conn
-#crash-consensus: compiler-options extern shared memstore ctrl conn
+crash-consensus: extern shared memstore ctrl conn
 neb: extern shared memstore ctrl conn crypto
 
 ############################# End of editable area #############################

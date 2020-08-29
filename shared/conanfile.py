@@ -16,8 +16,8 @@ class DorySharedConan(ConanFile):
         "build_type": None,
         "arch": None,
     }
-    options = {"shared": [True, False], "lto": [True, False]}
-    default_options = {"shared": False, "lto": True}
+    options = {"shared": [True, False], "fPIC": [True, False], "lto": [True, False]}
+    default_options = {"shared": False, "fPIC": True, "lto": True}
     generators = "cmake"
     exports_sources = "src/*"
     python_requires = "dory-compiler-options/0.0.1@dory/stable"
@@ -41,6 +41,7 @@ class DorySharedConan(ConanFile):
     def package(self):
         self.copy("*.hpp", dst="include/dory/shared", src="src")
         self.copy("*.a", dst="lib", keep_path=False)
+        self.copy("*.so", dst="lib", keep_path=False)
 
     def package_info(self):
         self.cpp_info.libs = ["doryshared"]

@@ -7,6 +7,10 @@ class DoryExternals(ConanFile):
     license = "MIT"
     description = "External header files"
     generators = "cmake"
+    options = {
+        "shared": [True, False]
+    }
+    default_options = {"shared": False}
     exports_sources = "src/*"
     python_requires = "dory-compiler-options/0.0.1@dory/stable"
 
@@ -19,4 +23,4 @@ class DoryExternals(ConanFile):
         self.copy("*.hpp", dst="include/dory/extern", src="src")
 
     def package_info(self):
-        self.cpp_info.system_libs = ["memcached", "ibverbs"]
+        self.cpp_info.system_libs = ["ibverbs", "memcached"]

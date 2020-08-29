@@ -60,7 +60,7 @@ class ControlBlock {
   int port() const;
   int lid() const;
 
-  bool pollCqIsOK(deleted_unique_ptr<struct ibv_cq> &cq,
+  static bool pollCqIsOK(deleted_unique_ptr<struct ibv_cq> &cq,
                   std::vector<struct ibv_wc> &entries);
 
  private:
@@ -78,7 +78,7 @@ class ControlBlock {
   std::vector<deleted_unique_ptr<struct ibv_cq>> cqs;
   std::map<std::string, size_t> cq_map;
 
-  dory::logger logger;
+  LOGGER_DECL(logger);
 };
 
 inline ControlBlock::MemoryRights operator|(ControlBlock::MemoryRights a,

@@ -49,6 +49,7 @@ class DoryDemoConan(ConanFile):
 
         self.python_requires["dory-compiler-options"].module.set_options(cmake)
         cmake.definitions["DORY_LTO"] = str(self.options.lto).upper()
+        cmake.definitions['SPDLOG_ACTIVE_LEVEL'] = "SPDLOG_LEVEL_{}".format(self.options.log_level)
 
         cmake.configure(source_folder="src")
         cmake.build()

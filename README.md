@@ -10,7 +10,7 @@
 ## Requirements
 
 - [conan](https://conan.io/) package manager
-    ```sh 
+    ```sh
     pip3 install --user conan
     ```
 

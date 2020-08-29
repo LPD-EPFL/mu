@@ -18,10 +18,17 @@ class DoryConnectionConan(ConanFile):
     }
     options = {
         "shared": [True, False],
+        "fPIC": [True, False],
         "log_level": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR", "CRITICAL", "OFF"],
         "lto": [True, False],
     }
-    default_options = {"shared": False, "log_level": "INFO", "lto": True}
+    default_options = {
+        "shared": False,
+        "fPIC": True,
+        "lto": True,
+        "log_level": "INFO",
+        "dory-ctrl:log_level": "OFF"
+    }
     generators = "cmake"
     exports_sources = "src/*"
     python_requires = "dory-compiler-options/0.0.1@dory/stable"
@@ -43,6 +50,7 @@ class DoryConnectionConan(ConanFile):
         pass
 
     def requirements(self):
+
         self.requires("dory-shared/0.0.1")
         self.requires("dory-ctrl/0.0.1")
         self.requires("dory-memstore/0.0.1")
@@ -54,6 +62,7 @@ class DoryConnectionConan(ConanFile):
     def package(self):
         self.copy("*.hpp", dst="include/dory/conn", src="src")
         self.copy("*.a", dst="lib", keep_path=False)
+        self.copy("*.so", dst="lib", keep_path=False)
 
     def package_info(self):
         self.cpp_info.libs = ["doryconn"]

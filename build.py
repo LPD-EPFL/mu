@@ -25,6 +25,7 @@ def removeFromList(lst, value):
 
 
 # Bring all, clean, distclean in front and sort the rest
+removeFromList(make_list, "force")
 removed = (
     removeFromList(make_list, "all")
     + removeFromList(make_list, "clean")
@@ -110,3 +111,4 @@ ret = subprocess.call(
 )
 
 exit(ret)
+

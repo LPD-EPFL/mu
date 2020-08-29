@@ -107,6 +107,10 @@ class ReliableConnection {
   void connect(RemoteConnection &rci);
   void reconnect();
 
+  bool needsReset();
+  bool changeRights(ControlBlock::MemoryRights rights);
+  bool changeRightsIfNeeded(ControlBlock::MemoryRights rights);
+
   bool postSendSingle(RdmaReq req, uint64_t req_id, void *buf, uint32_t len,
                       uintptr_t remote_addr);
 
@@ -117,9 +121,6 @@ class ReliableConnection {
   // `MaxInlining`) one can reuse this method right after it returns.
   bool postSendSingleCached(RdmaReq req, uint64_t req_id, void *buf,
                             uint32_t len, uintptr_t remote_addr);
-
-  bool postSendSingleCached(RdmaReq req, uint64_t req_id, void *buf,
-                            uint32_t len, uint32_t lkey, uintptr_t remote_addr);
 
   bool postSendSingle(RdmaReq req, uint64_t req_id, void *buf, uint32_t len,
                       uint32_t lkey, uintptr_t remote_addr);
@@ -138,6 +139,17 @@ class ReliableConnection {
  private:
   bool post_send(ibv_send_wr &wr);
 
+  static void wr_deleter(struct ibv_send_wr *wr) { free(wr); }
+
+  int roundUp(int numToRound, int multiple) {
+    if (multiple == 0) return numToRound;
+
+    int remainder = numToRound % multiple;
+    if (remainder == 0) return numToRound;
+
+    return numToRound + multiple - remainder;
+  }
+
   ControlBlock &cb;
   struct ibv_pd *pd;
   struct ibv_qp_init_attr create_attr;
@@ -146,9 +158,8 @@ class ReliableConnection {
   ControlBlock::MemoryRegion mr;
   RemoteConnection rconn;
   ControlBlock::MemoryRights init_rights;
+  deleted_unique_ptr<struct ibv_send_wr> wr_cached;
 
-  struct ibv_sge sg_cached[1];
-  struct ibv_send_wr wr_cached;
-  dory::logger logger;
+  LOGGER_DECL(logger);
 };
 }  // namespace dory

@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 #include <utility>
+#include <string>
 
 namespace dory {
 /**
@@ -22,6 +23,9 @@ class MemoryStore {
 
     return instance;
   }
+
+  MemoryStore(std::string const &prefix);
+
   /**
    * Stores the provided string `value` under `key`.
    * @param key
@@ -51,5 +55,6 @@ class MemoryStore {
    * TODO(Krsitian): DOC
    */
   deleted_unique_ptr<memcached_st> memc;
+  std::string prefix;
 };
 }  // namespace dory

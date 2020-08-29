@@ -2,7 +2,7 @@
 
 namespace dory {
 
-template <typename T>
-void IGNORE(T &&) {}
+template <typename... T>
+void IGNORE(T&&...) {}
 
 }  // namespace dory
