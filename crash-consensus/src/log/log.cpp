@@ -42,7 +42,7 @@ static bool is_zero(uint8_t *buf, size_t size) {
 
   // For this to work, we need an aligned buffer of at least 2 *
   // sizeof(uint64_t) bytes
-  return *(uint64_t *)aligned_buf == 0 ||
+  return *reinterpret_cast<uint64_t *>(aligned_buf) == 0 ||
          memcmp(aligned_buf, aligned_buf + sizeof(uint64_t),
                 aligned_len - sizeof(uint64_t)) == 0;
 }
@@ -61,7 +61,7 @@ Log::Log(void *underlying_buf, size_t buf_len)
   auto offset = LogConfig::round_up_powerof2(buf_addr) - buf_addr;
   // std::cout << "Rounding up: " << round_up_powerof2(buf_addr) << " " <<
   // buf_addr << std::endl;
-  if (buf + offset > buf + len) {
+  if (offset > len) {
     throw std::runtime_error(
         "Alignment constraint leaves no space in the buffer");
   }

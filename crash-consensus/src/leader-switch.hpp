@@ -125,7 +125,7 @@ class LeaderHeartbeat {
       // std::cout << "Polled " << entries.size() << " entries" << std::endl;
 
       for(auto const& entry: entries) {
-        auto [k, pid, seq] = quorum::unpackAll<uint64_t, uint64_t>(entry.wr_id);
+        auto [k, pid, seq] = quorum::unpackAll<int, uint64_t>(entry.wr_id);
         IGNORE(k);
         IGNORE(seq);
 
@@ -133,7 +133,7 @@ class LeaderHeartbeat {
         auto proc_post_id = post_ids[pid];
 
         volatile uint64_t *val = reinterpret_cast<uint64_t*>(slots[pid]);
-        if (pid == unsigned(my_id)) {
+        if (pid == my_id) {
           val = reinterpret_cast<uint64_t*>(loopback->remoteBuf() + offset);
         }
 
@@ -144,10 +144,10 @@ class LeaderHeartbeat {
           // std::cout << "Same value" << std::endl;
 
           // if (status[pid].same_value == )
-          status[pid].consecutive_updates = std::max(status[pid].consecutive_updates - 1, 0);
+          status[pid].consecutive_updates = std::max(status[pid].consecutive_updates, 1) - 1;
         } else {
           if (post_id < proc_post_id + 3 ) {
-            status[pid].consecutive_updates = std::min(status[pid].consecutive_updates + 3, history_length);
+            status[pid].consecutive_updates = std::min(status[pid].consecutive_updates, history_length-3) + 3;
           }
         }
 
@@ -368,7 +368,7 @@ class LeaderPermissionAsker {
 
     while (true) {
       int eliminated_one = -1;
-      for (size_t i = 0; i < ids.size(); i++) {
+      for (int i = 0; i < static_cast<int>(ids.size()); i++) {
         auto pid = ids[i];
         uint64_t volatile *temp = reinterpret_cast<uint64_t *>(slots[pid]);
         uint64_t val = *temp;
@@ -415,7 +415,7 @@ class LeaderPermissionAsker {
 
     while (true) {
       int eliminated_one = -1;
-      for (size_t i = 0; i < ids.size(); i++) {
+      for (int i = 0; i < static_cast<int>(ids.size()); i++) {
         auto pid = ids[i];
         uint64_t volatile *temp = reinterpret_cast<uint64_t *>(slots[pid]);
         uint64_t val = *temp;
@@ -521,9 +521,9 @@ class LeaderSwitcher {
     int force_reset = 0;
     auto constexpr shift = 8 * sizeof(uintptr_t) - 1;
 
-    for (size_t i = 0; i < sz; i++) {
+    for (int i = 0; i < static_cast<int>(sz); i++) {
       reading[i] = *reinterpret_cast<uint64_t *>(read_slots[i]);
-      force_reset = reading[i] >> shift;
+      force_reset = static_cast<int>(reading[i] >> shift);
       reading[i] &= (1UL << shift) - 1;
 
       if (reading[i] > current_reading[i]) {
@@ -883,7 +883,7 @@ class LeaderElection {
       auto file_watcher_thd = std::thread([&command, &fd]() {
         while (true) {
           char tmp;
-          int ret = read(fd, &tmp, 1);
+          int ret = static_cast<int>(read(fd, &tmp, 1));
           if (ret == -1) {
             // if (errno != EAGAIN) {
             throw std::runtime_error("Could not read from the fifo: " +

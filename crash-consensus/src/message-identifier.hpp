@@ -55,7 +55,7 @@ enum Kind : uint64_t {
 }
 
 static constexpr unsigned numberOfBits(uint64_t x) {
-  return x < 2 ? x : 1 + numberOfBits(x >> 1);
+  return x < 2UL ? static_cast<int>(x) : 1 + numberOfBits(x >> 1);
 }
 
 static constexpr uint64_t numberOfOnes(int x) { return (1ULL << x) - 1; }

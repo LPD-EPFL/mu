@@ -14,7 +14,7 @@ PollingContext::PollingContext(
 
 bool PollingContext::operator()(deleted_unique_ptr<struct ibv_cq> &,
                                 std::vector<struct ibv_wc> &entries) {
-  int num_requested = entries.size();
+  int num_requested = static_cast<int>(entries.size());
   int index = 0;
 
   // Go over all the queues and try to fulfill the request

@@ -12,12 +12,12 @@ namespace dory {
 template <class ID>
 SerialQuorumWaiter<ID>::SerialQuorumWaiter(quorum::Kind kind,
                                            std::vector<int>& remote_ids,
-                                           int quorum_size, ID next_id,
+                                           size_t quorum_size, ID next_id,
                                            ID modulo)
     : kind{kind},
-      quorum_size{quorum_size},
+      quorum_size(static_cast<int>(quorum_size)),
       next_id{next_id},
-      left{quorum_size},
+      left(static_cast<int>(quorum_size)),
       modulo(modulo) {
   auto max_elem = Identifiers::maxID(remote_ids);
   scoreboard.resize(max_elem + 1);
@@ -52,7 +52,7 @@ bool SerialQuorumWaiter<ID>::consume(std::vector<struct ibv_wc>& entries,
     if (entry.status != IBV_WC_SUCCESS) {
       ret = false;
     } else {
-      auto [k, pid, seq] = quorum::unpackAll<uint64_t, ID>(entry.wr_id);
+      auto [k, pid, seq] = quorum::unpackAll<int, ID>(entry.wr_id);
 
       if (k != kind) {
 #ifndef NDEBUG
@@ -99,7 +99,7 @@ bool SerialQuorumWaiter<ID>::fastConsume(std::vector<struct ibv_wc>& entries,
     if (entry.status != IBV_WC_SUCCESS) {
       return false;
     } else {
-      auto [k, pid, seq] = quorum::unpackAll<uint64_t, ID>(entry.wr_id);
+      auto [k, pid, seq] = quorum::unpackAll<int, ID>(entry.wr_id);
 
       if (k != kind) {
 #ifndef NDEBUG
@@ -151,8 +151,8 @@ inline bool SerialQuorumWaiter<ID>::canContinueWithOutstanding(int outstanding, 
 template <class ID>
 int SerialQuorumWaiter<ID>::maximumResponses() const {
   // The number of processes that can go to the next round:
-  return std::count_if(scoreboard.begin(), scoreboard.end(),
-                       [this](ID i) { return i + modulo == next_id; });
+  return static_cast<int>(std::count_if(scoreboard.begin(), scoreboard.end(),
+                       [this](ID i) { return i + modulo == next_id; }));
 }
 }  // namespace dory
 

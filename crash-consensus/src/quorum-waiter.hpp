@@ -16,7 +16,7 @@ class SerialQuorumWaiter {
   SerialQuorumWaiter() = default;
 
   SerialQuorumWaiter(quorum::Kind kind, std::vector<int>& remote_ids,
-                     int quorum_size, ID next_id, ID modulo);
+                     size_t quorum_size, ID next_id, ID modulo);
 
   inline ID reqID() const { return next_id; }
   inline ID nextReqID() const { return next_id + modulo; }
@@ -63,7 +63,7 @@ class SerialQuorumWaiter {
   ID next_id;
   ID fast_id;
   int left;
-  int modulo;
+  ID modulo;
 };
 }  // namespace dory
 
@@ -72,7 +72,7 @@ class SequentialQuorumWaiter : public SerialQuorumWaiter<uint64_t> {
  public:
   SequentialQuorumWaiter() : SerialQuorumWaiter<uint64_t>() {}
   SequentialQuorumWaiter(quorum::Kind kind, std::vector<int>& remote_ids,
-                         int quorum_size, uint64_t next_id)
+                         size_t quorum_size, uint64_t next_id)
       : SerialQuorumWaiter<uint64_t>(kind, remote_ids, quorum_size, next_id,
                                      1) {}
 };
@@ -81,7 +81,7 @@ class ModuloQuorumWaiter : public SerialQuorumWaiter<int64_t> {
  public:
   ModuloQuorumWaiter() : SerialQuorumWaiter<int64_t>() {}
   ModuloQuorumWaiter(quorum::Kind kind, std::vector<int>& remote_ids,
-                     int quorum_size, int64_t next_id, int modulo)
+                     size_t quorum_size, int64_t next_id, int modulo)
       : SerialQuorumWaiter<int64_t>(kind, remote_ids, quorum_size, next_id,
                                     modulo) {}
 };

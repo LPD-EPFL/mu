@@ -135,7 +135,7 @@ class RdmaConsensus {
   std::vector<int> remote_ids;
 
   size_t allocated_size;
-  size_t alignment;
+  int alignment;
 
   std::thread consensus_thd;
   std::thread permissions_thd;

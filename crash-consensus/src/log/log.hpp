@@ -134,7 +134,7 @@ class Log {
     uint64_t len;
   };
 
-  struct __attribute__((__packed__)) LogHeader {
+  struct LogHeader {
     uint64_t min_proposal;
     uint64_t first_undecided_offset;
     uint64_t free_bytes;

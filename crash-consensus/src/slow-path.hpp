@@ -152,7 +152,7 @@ class CatchUpWithFollowers {
       }
     }
 
-    int already_up_to_date = successful_pids.size() - need_update_pids.size();
+    auto already_up_to_date = successful_pids.size() - need_update_pids.size();
     if (already_up_to_date >= quorum_size) {
       need_update_quorum = 0;
     } else {
@@ -243,8 +243,8 @@ class CatchUpWithFollowers {
   std::vector<void *> need_update_fuo_local_offset;
   std::vector<uintptr_t> need_update_fuo_remote_offset;
 
-  int need_update_quorum;
-  int quorum_size;
+  size_t need_update_quorum;
+  size_t quorum_size;
 
   uint64_t proposal_offset, proposal_size;
   uint64_t fuo_offset, fuo_size;
@@ -348,12 +348,12 @@ class LogSlotReader {
     successful_reads.clear();
     auto &rcs = c_ctx->ce.connections();
 
-    unsigned wait_for = quorum_size;
+    auto wait_for = quorum_size;
 
     int loops = 0;
     do {
       ptrdiff_t offset;
-      size_t size;
+      uint32_t size;
 
       if (!to_be_polled.postList().empty()) {
         for (auto &pid : to_be_polled.postList()) {
@@ -363,7 +363,7 @@ class LogSlotReader {
           auto offset_size =
               remote_iterators[pid].iterator().lookAt(remote_offset);
           offset = offset_size.first;
-          size = offset_size.second;
+          size = static_cast<uint32_t>(offset_size.second);
           remote_iterators[pid].iterator().storeDest(store_addr);
 
           auto ok = rc.postSendSingle(
@@ -379,8 +379,8 @@ class LogSlotReader {
         to_be_polled.posted();
       }
 
-      unsigned expected_nr = to_be_polled.pollList().size();
-      unsigned responses = 0;
+      auto expected_nr = to_be_polled.pollList().size();
+      size_t responses = 0;
 
       // // This loop in not necessary. We believe it improves performance
       // while (responses < std::min(wait_for, expected_nr)) {
@@ -450,7 +450,7 @@ class LogSlotReader {
   std::vector<WrappedRemoteIterator> remote_iterators;
   ToBePolled to_be_polled;
 
-  int quorum_size;
+  size_t quorum_size;
   size_t tolerated_failures;
   uint64_t entry_read_req_id;
 

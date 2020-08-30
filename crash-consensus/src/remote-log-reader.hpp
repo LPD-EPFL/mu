@@ -72,7 +72,7 @@ class ToBePolled {
     positive_responses.clear();
     negative_responses.clear();
     for (auto const& entry : entries) {
-      auto [k, pid, seq] = quorum::unpackAll<uint64_t, uint64_t>(entry.wr_id);
+      auto [k, pid, seq] = quorum::unpackAll<int, uint64_t>(entry.wr_id);
 
       // Additional check: Exists in `to_be_polled`? This way, upon failure,
       // where we remove the remoteID from both sets, we stop processing

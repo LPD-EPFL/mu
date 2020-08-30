@@ -13,7 +13,7 @@
 namespace dory {
 struct Leader {
   Leader(int requester, uint64_t requester_value, int force_reset = 0) noexcept
-      : used(1), force_reset(force_reset), requester(requester), requester_value(requester_value) {}
+      : used(1), force_reset(force_reset & 0x1), requester(requester & 0x3f), requester_value(requester_value & 0xffffffffffff) {}
 
   Leader() noexcept : used(0), force_reset(0), requester(0), requester_value(0) {}
 

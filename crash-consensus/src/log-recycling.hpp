@@ -42,7 +42,7 @@ class LogRecycling {
 
     while (true) {
       int eliminated_one = -1;
-      for (size_t i = 0; i < ids.size(); i++) {
+      for (int i = 0; i < static_cast<int>(ids.size()); i++) {
         auto pid = ids[i];
         uint64_t volatile *temp = reinterpret_cast<uint64_t *>(slots[pid]);
         uint64_t val = *temp;
