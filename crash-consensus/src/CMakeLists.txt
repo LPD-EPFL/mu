@@ -1,7 +1,17 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required( VERSION 3.9 )
 project(dorycrashconsensus)
 
-set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+include( CheckIPOSupported )
+check_ipo_supported(RESULT supported OUTPUT error)
+
+if( supported )
+    set( CMAKE_INTERPROCEDURAL_OPTIMIZATION ${DORY_LTO} )
+else()
+    message( STATUS "IPO / LTO not supported: <${error}>" )
+endif()
+
+set( CMAKE_CXX_STANDARD_REQUIRED ON )
+set( CONAN_SYSTEM_INCLUDES On )
 
 include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 conan_basic_setup()

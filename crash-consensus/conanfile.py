@@ -10,19 +10,13 @@ class DoryCrashConensusConan(ConanFile):
     options = {
         "shared": [True, False],
         "fPIC": [True, False],
-        "log_level": [
-            "TRACE",
-            "DEBUG",
-            "INFO",
-            "WARN",
-            "ERROR",
-            "CRITICAL",
-            "OFF"
-        ]
+        "lto": [True, False],
+        "log_level": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR", "CRITICAL", "OFF"],
     }
     default_options = {
         "shared": False,
         "fPIC": True,
+        "lto": True,
         "log_level": "INFO",
 
         "dory-ctrl:log_level": "INFO",
@@ -30,12 +24,7 @@ class DoryCrashConensusConan(ConanFile):
     }
     generators = "cmake"
     exports_sources = "src/*"
-
-    def _configure_cmake(self):
-        cmake = CMake(self)
-        cmake.definitions['SPDLOG_ACTIVE_LEVEL'] = "SPDLOG_LEVEL_{}".format(self.options.log_level)
-        cmake.configure(source_folder="src")
-        return cmake
+    python_requires = "dory-compiler-options/0.0.1@dory/stable"
 
     def requirements(self):
         self.requires("dory-connection/0.0.1")
@@ -45,7 +34,14 @@ class DoryCrashConensusConan(ConanFile):
         self.requires("dory-external/0.0.1")
 
     def build(self):
-        cmake = self._configure_cmake()
+        generator = self.python_requires["dory-compiler-options"].module.generator()
+        cmake = CMake(self, generator = generator)
+
+        self.python_requires["dory-compiler-options"].module.set_options(cmake)
+        cmake.definitions["DORY_LTO"] = str(self.options.lto).upper()
+        cmake.definitions['SPDLOG_ACTIVE_LEVEL'] = "SPDLOG_LEVEL_{}".format(self.options.log_level)
+
+        cmake.configure(source_folder="src")
         cmake.build()
 
     def package(self):

@@ -208,7 +208,7 @@ def set_options(cmake):
 def generator():
     # The default is None
     # return None
-    # return "Unix Makefile"
+    # return "Unix Makefiles"
     return "Ninja" 
 
 class CompilerOptions(ConanFile):

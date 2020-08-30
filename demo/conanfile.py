@@ -53,4 +53,3 @@ class DoryDemoConan(ConanFile):
 
         cmake.configure(source_folder="src")
         cmake.build()
-
