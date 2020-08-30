@@ -328,6 +328,11 @@ bool ReliableConnection::postSendSingleCached(RdmaReq req, uint64_t req_id,
 }
 
 bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf,
+                                        uint32_t len, uintptr_t remote_addr) {
+  return postSendSingle(req, req_id, buf, len, mr.lkey, remote_addr);
+}
+
+bool ReliableConnection::postSendSingle(RdmaReq req, uint64_t req_id, void *buf,
                                         uint32_t len, uint32_t lkey,
                                         uintptr_t remote_addr) {
   // TODO(Kristian): if not used concurrently, we could reuse the same wr
