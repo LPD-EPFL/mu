@@ -56,4 +56,6 @@ class DoryCrashConensusConan(ConanFile):
 
     def package_info(self):
         self.cpp_info.libs = ["dorycrashconsensus"]
-        self.cpp_info.cxxflags = ["-std=c++17", "-g", "-O3", "-Wall", "-Wextra", "-Wpedantic", "-Werror", "-Wno-unused-result"]
+        self.cpp_info.cxxflags = self.python_requires[
+            "dory-compiler-options"
+        ].module.get_cxx_options_for(self.settings.compiler, self.settings.build_type)
