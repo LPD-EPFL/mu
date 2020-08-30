@@ -100,9 +100,9 @@ void ControlBlock::registerMR(std::string name, std::string pd_name,
   mrs.push_back(std::move(uniq_mr));
   mr_map.insert(std::pair<std::string, size_t>(name, mrs.size() - 1));
   LOGGER_INFO(logger,
-                     "MR '{}' under PD '{}' registered with buf '{}' (offset: "
-                     "{}, length: {}) and rights {}",
-                     name, pd_name, buffer_name, offset, buf_len, rights);
+              "MR '{}' under PD '{}' registered with buf '{}' (offset: "
+              "{}, length: {}) and rights {}",
+              name, pd_name, buffer_name, offset, buf_len, rights);
 }
 
 void ControlBlock::registerMR(std::string name, std::string pd_name,
@@ -138,9 +138,9 @@ void ControlBlock::registerMR(std::string name, std::string pd_name,
 
   mrs.push_back(std::move(uniq_mr));
   mr_map.insert(std::pair<std::string, size_t>(name, mrs.size() - 1));
-  LOGGER_INFO(
-      logger, "MR '{}' under PD '{}' registered with buf '{}' and rights {}",
-      name, pd_name, buffer_name, rights);
+  LOGGER_INFO(logger,
+              "MR '{}' under PD '{}' registered with buf '{}' and rights {}",
+              name, pd_name, buffer_name, rights);
 }
 
 ControlBlock::MemoryRegion ControlBlock::mr(std::string name) const {

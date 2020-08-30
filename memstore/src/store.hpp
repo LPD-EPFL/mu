@@ -4,8 +4,8 @@
 #include <dory/shared/pointer-wrapper.hpp>
 #include <functional>
 #include <memory>
-#include <utility>
 #include <string>
+#include <utility>
 
 namespace dory {
 /**

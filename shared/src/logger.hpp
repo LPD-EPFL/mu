@@ -3,7 +3,7 @@
 #include "unused-suppressor.hpp"
 
 #ifndef SPDLOG_ACTIVE_LEVEL
-# error "Please define the SPDLOG_ACTIVE_LEVEL for the conan package"
+#error "Please define the SPDLOG_ACTIVE_LEVEL for the conan package"
 #endif
 
 #include <spdlog/common.h>
@@ -11,12 +11,13 @@
 #if SPDLOG_ACTIVE_LEVEL == SPDLOG_LEVEL_OFF
 namespace spdlog {
 class logger {
-public:
-  logger(char c): c{c} {}
-private:
+ public:
+  logger(char c) : c{c} {}
+
+ private:
   char c;
 };
-}
+}  // namespace spdlog
 #else
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
@@ -63,7 +64,8 @@ using logger = std::shared_ptr<spdlog::logger>;
 #endif
 
 #if SPDLOG_ACTIVE_LEVEL == SPDLOG_LEVEL_OFF
-#define LOGGER_INIT(name, prefix) name(std::make_shared<spdlog::logger>(prefix[0]))
+#define LOGGER_INIT(name, prefix) \
+  name(std::make_shared<spdlog::logger>(prefix[0]))
 #else
 namespace dory {
 /**

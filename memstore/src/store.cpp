@@ -6,7 +6,8 @@
 #include "store.hpp"
 
 namespace dory {
-MemoryStore::MemoryStore() : memc(memcached_create(nullptr), memcached_free), prefix{""} {
+MemoryStore::MemoryStore()
+    : memc(memcached_create(nullptr), memcached_free), prefix{""} {
   if (memc.get() == nullptr) {
     throw std::runtime_error("Failed to create memcached handle");
   }
@@ -27,7 +28,7 @@ MemoryStore::MemoryStore() : memc(memcached_create(nullptr), memcached_free), pr
 }
 
 MemoryStore::MemoryStore(std::string const &prefix_) : MemoryStore() {
-   prefix = prefix_;
+  prefix = prefix_;
 }
 
 void MemoryStore::set(std::string const &key, std::string const &value) {
@@ -37,8 +38,8 @@ void MemoryStore::set(std::string const &key, std::string const &value) {
 
   memcached_return rc;
   std::string prefixed_key = prefix + key;
-  rc = memcached_set(memc.get(), prefixed_key.c_str(), prefixed_key.length(), value.c_str(),
-                     value.length(), static_cast<time_t>(0),
+  rc = memcached_set(memc.get(), prefixed_key.c_str(), prefixed_key.length(),
+                     value.c_str(), value.length(), static_cast<time_t>(0),
                      static_cast<uint32_t>(0));
 
   if (rc != MEMCACHED_SUCCESS) {
@@ -57,8 +58,9 @@ bool MemoryStore::get(std::string const &key, std::string &value) {
   uint32_t flags;
 
   std::string prefixed_key = prefix + key;
-  char *ret_value = memcached_get(memc.get(), prefixed_key.c_str(), prefixed_key.length(),
-                                  &value_length, &flags, &rc);
+  char *ret_value =
+      memcached_get(memc.get(), prefixed_key.c_str(), prefixed_key.length(),
+                    &value_length, &flags, &rc);
   deleted_unique_ptr<char> ret_value_uniq(ret_value, free);
 
   if (rc == MEMCACHED_SUCCESS) {

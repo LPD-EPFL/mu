@@ -208,10 +208,10 @@ void ReliableConnection::connect(RemoteConnection &rc) {
 
   // This has to happen here, because when the object is copied, the pointer
   // breaks!
-  struct ibv_send_wr *wr_ = reinterpret_cast<ibv_send_wr *>(aligned_alloc(64, roundUp(sizeof(ibv_send_wr), 64) + sizeof(ibv_sge)));
-  struct ibv_sge *sg_ =
-      reinterpret_cast<ibv_sge *>(
-        reinterpret_cast<char *>(wr_) + roundUp(sizeof(ibv_send_wr), 64));
+  struct ibv_send_wr *wr_ = reinterpret_cast<ibv_send_wr *>(
+      aligned_alloc(64, roundUp(sizeof(ibv_send_wr), 64) + sizeof(ibv_sge)));
+  struct ibv_sge *sg_ = reinterpret_cast<ibv_sge *>(
+      reinterpret_cast<char *>(wr_) + roundUp(sizeof(ibv_send_wr), 64));
 
   memset(sg_, 0, sizeof(*sg_));
   memset(wr_, 0, sizeof(*wr_));

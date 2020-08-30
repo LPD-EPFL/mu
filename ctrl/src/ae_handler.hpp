@@ -21,8 +21,7 @@ namespace ctrl {
  **/
 void async_event_handler(dory::logger logger, std::future<void> exit_sig,
                          struct ibv_context* ctx) {
-  LOGGER_INFO(logger,
-                     "Changing the mode of events read to be non-blocking");
+  LOGGER_INFO(logger, "Changing the mode of events read to be non-blocking");
 
   /* change the blocking mode of the async event queue */
   auto flags = fcntl(ctx->async_fd, F_GETFL);
