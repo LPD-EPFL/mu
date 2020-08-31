@@ -6,7 +6,7 @@ diff -u a/src/Makefile b/src/Makefile
  endif
 
 +# Added by SaGGy00
-+FINAL_LIBS += -lconsensus
++FINAL_LIBS += -lcrashconsensus
 +
  REDIS_CC=$(QUIET_CC)$(CC) $(FINAL_CFLAGS)
  REDIS_LD=$(QUIET_LINK)$(CC) $(FINAL_LDFLAGS)

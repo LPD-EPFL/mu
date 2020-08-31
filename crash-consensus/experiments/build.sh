@@ -2,20 +2,19 @@
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 cd $DIR
 
-echo "Performing a clean compilation of crash-consensus"
-../../build.py distclean
-../../build.py crash-consensus
+#echo "Performing a clean compilation of crash-consensus"
+#../../build.py distclean
+#../../build.py crash-consensus
 
-echo "Packaging crash-consensus in a shared library"
-rm -rf ../shared-lib/build
-../shared-lib/build.sh
+#echo "Packaging crash-consensus in a shared library"
+#../libgen/export.sh gcc-release
 
 rm -rf exported
-cp -r ../shared-lib/build/lib exported
-cp -r ../shared-lib/build/include exported
+cp -r ../libgen/exported exported
+rm exported/*.a
 cp timers.h exported/include
 
-LIB_PATH=`realpath $(pwd)/../shared-lib/build/lib`
+LIB_PATH=`realpath $(pwd)/exported`
 export LIBRARY_PATH=$LIB_PATH:$LIBRARY_PATH
 
 echo "Building redis"
@@ -61,7 +60,7 @@ mv memcached ../bin
 cd ..
 patch -p1 -d memcached-1.5.19 < memcached-1.5.19.patch
 cd memcached-1.5.19
-sed -i "s/LIBS = -lhugetlbfs -levent/LIBS = -lhugetlbfs -levent\nLIBS += -lconsensus/" Makefile
+sed -i "s/LIBS = -lhugetlbfs -levent/LIBS = -lhugetlbfs -levent\nLIBS += -lcrashconsensus/" Makefile
 make -j
 mv memcached ../bin/memcached-replicated
 cd ../
