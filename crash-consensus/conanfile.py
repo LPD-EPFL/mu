@@ -56,6 +56,7 @@ class DoryCrashConensusConan(ConanFile):
 
     def package_info(self):
         self.cpp_info.libs = ["dorycrashconsensus"]
+        self.cpp_info.system_libs = ["pthread"]
         self.cpp_info.cxxflags = self.python_requires[
             "dory-compiler-options"
         ].module.get_cxx_options_for(self.settings.compiler, self.settings.build_type)
