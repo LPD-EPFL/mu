@@ -141,10 +141,10 @@ class ReliableConnection {
 
   static void wr_deleter(struct ibv_send_wr *wr) { free(wr); }
 
-  int roundUp(int numToRound, int multiple) {
+  size_t roundUp(size_t numToRound, size_t multiple) {
     if (multiple == 0) return numToRound;
 
-    int remainder = numToRound % multiple;
+    size_t remainder = numToRound % multiple;
     if (remainder == 0) return numToRound;
 
     return numToRound + multiple - remainder;

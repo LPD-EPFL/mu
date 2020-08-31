@@ -31,7 +31,7 @@ class LengthPredictor {
 
  private:
   uint64_t sum;
-  int next_idx;
+  size_t next_idx;
   static constexpr int W = 4;  // Must be power of 2
   static constexpr int mask = W - 1;
   std::array<uint64_t, W> history;

@@ -242,7 +242,7 @@ bool ReliableConnection::changeRights(ControlBlock::MemoryRights rights) {
   struct ibv_qp_attr attr;
   memset(&attr, 0, sizeof(attr));
 
-  attr.qp_access_flags = static_cast<int>(rights);
+  attr.qp_access_flags = static_cast<unsigned>(rights);
 
   auto ret = ibv_modify_qp(uniq_qp.get(), &attr, IBV_QP_ACCESS_FLAGS);
   return ret == 0;
@@ -250,7 +250,7 @@ bool ReliableConnection::changeRights(ControlBlock::MemoryRights rights) {
 
 bool ReliableConnection::changeRightsIfNeeded(
     ControlBlock::MemoryRights rights) {
-  auto converted_rights = static_cast<int>(rights);
+  auto converted_rights = static_cast<unsigned>(rights);
 
   struct ibv_qp_attr attr;
   struct ibv_qp_init_attr init_attr;
