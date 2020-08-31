@@ -144,15 +144,17 @@ inline bool SerialQuorumWaiter<ID>::canContinueWith(ID expected) const {
 }
 
 template <class ID>
-inline bool SerialQuorumWaiter<ID>::canContinueWithOutstanding(int outstanding, ID expected) const {
+inline bool SerialQuorumWaiter<ID>::canContinueWithOutstanding(
+    int outstanding, ID expected) const {
   return next_id + outstanding >= expected;
 }
 
 template <class ID>
 int SerialQuorumWaiter<ID>::maximumResponses() const {
   // The number of processes that can go to the next round:
-  return static_cast<int>(std::count_if(scoreboard.begin(), scoreboard.end(),
-                       [this](ID i) { return i + modulo == next_id; }));
+  return static_cast<int>(
+      std::count_if(scoreboard.begin(), scoreboard.end(),
+                    [this](ID i) { return i + modulo == next_id; }));
 }
 }  // namespace dory
 

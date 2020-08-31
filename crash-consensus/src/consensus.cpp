@@ -5,7 +5,9 @@
 // #include <functional>
 
 namespace dory {
-RdmaConsensus::RdmaConsensus(int my_id, std::vector<int>& remote_ids, int outstanding_req, ConsensusConfig::ThreadConfig threadConfig)
+RdmaConsensus::RdmaConsensus(int my_id, std::vector<int>& remote_ids,
+                             int outstanding_req,
+                             ConsensusConfig::ThreadConfig threadConfig)
     : my_id{my_id},
       remote_ids{remote_ids},
       am_I_leader{false},
@@ -26,7 +28,8 @@ RdmaConsensus::RdmaConsensus(int my_id, std::vector<int>& remote_ids, int outsta
   iter = re_ctx->log.blockingIterator();
   commit_iter = re_ctx->log.liveIterator();
 
-  follower = Follower(re_ctx.get(), leader_election->context(), &iter, &commit_iter, threadConfig);
+  follower = Follower(re_ctx.get(), leader_election->context(), &iter,
+                      &commit_iter, threadConfig);
   follower.waitForPoller();
 }
 
@@ -123,8 +126,8 @@ void RdmaConsensus::run() {
                                     "cq-leader-election", "cq-leader-election");
   ce_leader_election->announce_all(store, "qp-leader-election");
   ce_leader_election->announce_ready(store, "qp-leader-election", "announce");
-  ce_leader_election->addLoopback("primary", "shared-mr",
-                                    "cq-leader-election", "cq-leader-election");
+  ce_leader_election->addLoopback("primary", "shared-mr", "cq-leader-election",
+                                  "cq-leader-election");
 
   auto shared_memory_addr =
       reinterpret_cast<uint8_t*>(cb->mr("shared-mr").addr);
@@ -160,8 +163,9 @@ void RdmaConsensus::run() {
 
   ce_replication->wait_ready_all(store, "qp-replication", "connect");
   ce_leader_election->wait_ready_all(store, "qp-leader-election", "connect");
-  ce_leader_election->connectLoopback(ControlBlock::LOCAL_READ | ControlBlock::LOCAL_WRITE |
-          ControlBlock::REMOTE_READ | ControlBlock::REMOTE_WRITE);
+  ce_leader_election->connectLoopback(
+      ControlBlock::LOCAL_READ | ControlBlock::LOCAL_WRITE |
+      ControlBlock::REMOTE_READ | ControlBlock::REMOTE_WRITE);
 
   // Initialize the contexts
   auto& cq_leader_election = cb->cq("cq-leader-election");
@@ -177,8 +181,8 @@ void RdmaConsensus::run() {
       *re_conn_ctx.get(), *replication_log.get(), log_offset);
 
   // Initialize Leader election
-  leader_election =
-      std::make_unique<LeaderElection>(*le_conn_ctx.get(), *scratchpad.get(), threadConfig);
+  leader_election = std::make_unique<LeaderElection>(
+      *le_conn_ctx.get(), *scratchpad.get(), threadConfig);
   leader_election->attachReplicatorContext(re_ctx.get());
 
   // Initialize replication
@@ -195,7 +199,8 @@ void RdmaConsensus::run() {
 
   follower.attach(&lsr, scratchpad.get());
 
-  log_recycling = std::make_unique<LogRecycling>(re_ctx.get(), *scratchpad.get());
+  log_recycling =
+      std::make_unique<LogRecycling>(re_ctx.get(), *scratchpad.get());
 
   sqw = std::make_unique<SequentialQuorumWaiter>(
       quorum::EntryWr, re_ctx->cc.remote_ids, quorum_size, 1);
@@ -228,7 +233,8 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
     Slot slot(re_ctx->log, proposal_nr, local_fuo, buf, buf_len);
     auto [address, offset, size] = slot.location();
 
-    auto ok = majW->fastWrite(address, size, to_remote_memory, offset, leader, outstanding_req);
+    auto ok = majW->fastWrite(address, size, to_remote_memory, offset, leader,
+                              outstanding_req);
 
     if (likely(ok)) {
       auto fuo = LogConfig::round_up_powerof2(offset + size);
@@ -238,7 +244,7 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
         ParsedSlot pslot(iter.location());
 
         LOGGER_TRACE(logger, "Accepted proposal: {}, FUO: {}",
-                      pslot.acceptedProposal(), pslot.firstUndecidedOffset());
+                     pslot.acceptedProposal(), pslot.firstUndecidedOffset());
         // auto [buf, len] = pslot.payload();
 
         // Now that I got something, I will use the commit iterator
@@ -252,8 +258,8 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
       }
     } else {
       LOGGER_ERROR(logger,
-                    "Error in fast-path: occurred when writing the new "
-                    "value to a majority");
+                   "Error in fast-path: occurred when writing the new "
+                   "value to a majority");
       auto err = majW->fastWriteError();
       majW->recoverFromError(err);
       return ret_error(lock, ProposeError::FastPath, true);
@@ -282,8 +288,8 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
       Slot slot(re_ctx->log, proposal_nr, local_fuo, buf, buf_len);
       auto [address, offset, size] = slot.location();
 
-      auto ok =
-          majW->fastWrite(address, size, to_remote_memory, offset, leader, outstanding_req);
+      auto ok = majW->fastWrite(address, size, to_remote_memory, offset, leader,
+                                outstanding_req);
 
       if (likely(ok)) {
         auto fuo = LogConfig::round_up_powerof2(offset + size);
@@ -316,10 +322,10 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
     } else {  // Slow-path
       auto update_followers_fuo_err = catchup->catchFUO(leader);
       if (!update_followers_fuo_err->ok()) {
-        LOGGER_TRACE(
-            logger,
-            "Error in slow-path: occurred when getting the FUO of remote logs ({})",
-            MaybeError::type_str(update_followers_fuo_err->type()));
+        LOGGER_TRACE(logger,
+                     "Error in slow-path: occurred when getting the FUO of "
+                     "remote logs ({})",
+                     MaybeError::type_str(update_followers_fuo_err->type()));
         catchup->recoverFromError(update_followers_fuo_err);
 
         return ret_error(lock, ProposeError::SlowPathCatchFUO, true);
@@ -327,10 +333,10 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
 
       auto update_followers_err = catchup->updateFollowers(leader);
       if (!update_followers_err->ok()) {
-        LOGGER_TRACE(
-            logger,
-            "Error in slow-path: occurred when updating the remote logs of followers ({})",
-            MaybeError::type_str(update_followers_err->type()));
+        LOGGER_TRACE(logger,
+                     "Error in slow-path: occurred when updating the remote "
+                     "logs of followers ({})",
+                     MaybeError::type_str(update_followers_err->type()));
         catchup->recoverFromError(update_followers_err);
 
         return ret_error(lock, ProposeError::SlowPathUpdateFollowers, true);
@@ -489,13 +495,15 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
           Slot slot(re_ctx->log);
           slot.storeAcceptedProposal(proposal_nr);
           slot.storeFirstUndecidedOffset(0);
-          // std::cout << "Sending recycling request with fuo:" << local_fuo << std::endl;
+          // std::cout << "Sending recycling request with fuo:" << local_fuo <<
+          // std::endl;
           auto recycling_req = log_recycling->generateRequest(local_fuo);
-          slot.storePayload(reinterpret_cast<uint8_t *>(&recycling_req), sizeof(recycling_req));
+          slot.storePayload(reinterpret_cast<uint8_t*>(&recycling_req),
+                            sizeof(recycling_req));
 
           auto [address, offset, size] = slot.location();
           std::transform(to_remote_memory.begin(), to_remote_memory.end(),
-                        dest.begin(), bind2nd(std::plus<uintptr_t>(), offset));
+                         dest.begin(), bind2nd(std::plus<uintptr_t>(), offset));
           auto err = majW->write(address, size, dest, leader);
 
           if (!err->ok()) {
@@ -508,9 +516,10 @@ int RdmaConsensus::propose(uint8_t* buf, size_t buf_len) {
             iter = re_ctx->log.blockingIterator();
             commit_iter = re_ctx->log.liveIterator();
 
-            auto next_log_entry_offset = re_ctx->log.headerFirstUndecidedOffset();
-            lsr = std::make_unique<LogSlotReader>(re_ctx.get(), *scratchpad.get(),
-                                        next_log_entry_offset);
+            auto next_log_entry_offset =
+                re_ctx->log.headerFirstUndecidedOffset();
+            lsr = std::make_unique<LogSlotReader>(
+                re_ctx.get(), *scratchpad.get(), next_log_entry_offset);
 
             // Wait for all to clean-up their log
             log_recycling->waitForReplies();

@@ -56,13 +56,14 @@ class CatchUpWithFollowers {
 
     // Wait for response from everyone, but tolerate failures
     SequentialQuorumWaiter waiterFUORead(quorum::FUORd, c_ctx->remote_ids,
-                                      c_ctx->remote_ids.size(), 1);
+                                         c_ctx->remote_ids.size(), 1);
     majFUOR = FUOMajorityReader(c_ctx, waiterFUORead, c_ctx->remote_ids);
 
-    SequentialQuorumWaiter waiterFUODiffWrite(quorum::FUODiffWr,
-      c_ctx->remote_ids, quorum_size, 1);
+    SequentialQuorumWaiter waiterFUODiffWrite(
+        quorum::FUODiffWr, c_ctx->remote_ids, quorum_size, 1);
 
-    majFUOW = FUODiffMajorityWriter(c_ctx, waiterFUODiffWrite, c_ctx->remote_ids, 0);
+    majFUOW =
+        FUODiffMajorityWriter(c_ctx, waiterFUODiffWrite, c_ctx->remote_ids, 0);
 
     fuo_remote_mem_locations.resize(Identifiers::maxID(c_ctx->remote_ids) + 1);
     std::fill(fuo_remote_mem_locations.begin(), fuo_remote_mem_locations.end(),
@@ -74,8 +75,10 @@ class CatchUpWithFollowers {
 
     need_update_pids.reserve(Identifiers::maxID(c_ctx->remote_ids));
     need_update_fuo_diff.resize(Identifiers::maxID(c_ctx->remote_ids) + 1);
-    need_update_fuo_local_offset.resize(Identifiers::maxID(c_ctx->remote_ids) + 1);
-    need_update_fuo_remote_offset.resize(Identifiers::maxID(c_ctx->remote_ids) + 1);
+    need_update_fuo_local_offset.resize(Identifiers::maxID(c_ctx->remote_ids) +
+                                        1);
+    need_update_fuo_remote_offset.resize(Identifiers::maxID(c_ctx->remote_ids) +
+                                         1);
     need_update_quorum = 0;
   }
 
@@ -129,7 +132,7 @@ class CatchUpWithFollowers {
   std::unique_ptr<MaybeError> catchFUO(std::atomic<Leader> &leader) {
     // Read from a majority - 1 (because we will also include ourselves)
     auto err = majFUOR.read(fuo_local_memory_locations, fuo_size,
-                         fuo_remote_mem_locations, leader);
+                            fuo_remote_mem_locations, leader);
 
     if (!err->ok()) {
       return err;
@@ -143,7 +146,8 @@ class CatchUpWithFollowers {
     auto &successful_pids = majFUOR.successes();
 
     for (auto pid : successful_pids) {
-      auto remote_fuo = *reinterpret_cast<uint64_t *>(scratchpad.readFUOSlots()[pid]);
+      auto remote_fuo =
+          *reinterpret_cast<uint64_t *>(scratchpad.readFUOSlots()[pid]);
       if (my_fuo > remote_fuo) {
         need_update_pids.push_back(pid);
         need_update_fuo_diff[pid] = my_fuo - remote_fuo;
@@ -164,15 +168,18 @@ class CatchUpWithFollowers {
 
   // Update only the followers that are behind
   std::unique_ptr<MaybeError> updateFollowers(std::atomic<Leader> &leader) {
-
     if (need_update_pids.size() > 0) {
-      SequentialQuorumWaiter waiterFUODiffWrite(quorum::FUODiffWr,
-        need_update_pids, need_update_pids.size(), majFUOW.reqID());
+      SequentialQuorumWaiter waiterFUODiffWrite(
+          quorum::FUODiffWr, need_update_pids, need_update_pids.size(),
+          majFUOW.reqID());
 
-      majFUOW = FUODiffMajorityWriter(c_ctx, waiterFUODiffWrite, need_update_pids,
-        need_update_pids.size() - need_update_quorum);
+      majFUOW =
+          FUODiffMajorityWriter(c_ctx, waiterFUODiffWrite, need_update_pids,
+                                need_update_pids.size() - need_update_quorum);
 
-      auto err = majFUOW.write(need_update_fuo_local_offset, need_update_fuo_diff, need_update_fuo_remote_offset, leader);
+      auto err =
+          majFUOW.write(need_update_fuo_local_offset, need_update_fuo_diff,
+                        need_update_fuo_remote_offset, leader);
 
       if (!err->ok()) {
         return err;
@@ -227,11 +234,11 @@ class CatchUpWithFollowers {
   std::vector<uintptr_t> remote_mem_locations;
   std::vector<void *> local_memory_locations;
 
-
-  using FUOMajorityReader = FixedSizeMajorityOperation<SequentialQuorumWaiter,
-                                                    ReadFUOMajorityError>;
-  using FUODiffMajorityWriter = FixedSizeMajorityOperation<SequentialQuorumWaiter,
-                                                    WriteFUODiffMajorityError>;
+  using FUOMajorityReader =
+      FixedSizeMajorityOperation<SequentialQuorumWaiter, ReadFUOMajorityError>;
+  using FUODiffMajorityWriter =
+      FixedSizeMajorityOperation<SequentialQuorumWaiter,
+                                 WriteFUODiffMajorityError>;
 
   FUOMajorityReader majFUOR;
   FUODiffMajorityWriter majFUOW;

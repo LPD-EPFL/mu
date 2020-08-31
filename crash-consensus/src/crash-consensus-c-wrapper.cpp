@@ -40,11 +40,13 @@ void consensus_spawn_thread(consensus_t c) {
   });
 
   if (cons->threadConfig.pinThreads) {
-    dory::pinThreadToCore(cons->handover_thd, cons->threadConfig.handoverThreadCoreID);
+    dory::pinThreadToCore(cons->handover_thd,
+                          cons->threadConfig.handoverThreadCoreID);
   }
 
   if (dory::ConsensusConfig::nameThreads) {
-    dory::setThreadName(cons->handover_thd, dory::ConsensusConfig::handoverThreadName);
+    dory::setThreadName(cons->handover_thd,
+                        dory::ConsensusConfig::handoverThreadName);
   }
 }
 

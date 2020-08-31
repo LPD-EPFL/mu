@@ -20,9 +20,7 @@ class SerialQuorumWaiter {
 
   inline ID reqID() const { return next_id; }
   inline ID nextReqID() const { return next_id + modulo; }
-  inline void setFastReqID(ID id) {
-    fast_id = id;
-  }
+  inline void setFastReqID(ID id) { fast_id = id; }
 
   inline ID fetchAndIncFastID() {
     auto ret = fast_id;

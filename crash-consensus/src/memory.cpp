@@ -158,7 +158,9 @@ std::vector<ptrdiff_t>& ScratchpadMemory::readLogRecyclingSlotsOffsets() {
   return read_log_recycling_slots_offsets;
 }
 
-uint8_t* ScratchpadMemory::logRecyclingResponseSlot() { return log_recycling_response_slot; }
+uint8_t* ScratchpadMemory::logRecyclingResponseSlot() {
+  return log_recycling_response_slot;
+}
 
 uint8_t* ScratchpadMemory::writeSlot() { return write_slot; }
 
@@ -176,7 +178,9 @@ ptrdiff_t ScratchpadMemory::leaderResponseSlotOffset() {
   return leader_resp_slot_offset;
 }
 
-uint8_t* ScratchpadMemory::leaderHeartbeatSlot() { return leader_heartbeat_slot; }
+uint8_t* ScratchpadMemory::leaderHeartbeatSlot() {
+  return leader_heartbeat_slot;
+}
 
 ptrdiff_t ScratchpadMemory::leaderHeartbeatSlotOffset() {
   return leader_heartbeat_slot_offset;

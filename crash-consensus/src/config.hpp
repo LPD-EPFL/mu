@@ -26,8 +26,6 @@ static constexpr int heartbeatThreadBankB_ID = 16;
 static constexpr int followerThreadBankA_ID = 8;
 static constexpr int followerThreadBankB_ID = 18;
 
-
-
 struct ThreadConfig {
   ThreadConfig()
       : pinThreads{true},

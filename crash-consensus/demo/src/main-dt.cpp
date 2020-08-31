@@ -8,9 +8,9 @@
 
 #include <dory/crash-consensus.hpp>
 
+#include "barrier.hpp"
 #include "helpers.hpp"
 #include "timers.h"
-#include "barrier.hpp"
 
 void benchmark(int id, std::vector<int> remote_ids, int times, int payload_size,
                int outstanding_req, Barrier& barrier,
@@ -56,7 +56,8 @@ int main(int argc, char* argv[]) {
 
   Barrier barrier(2);
 
-  const int times = static_cast<int>(1.5 * 1024) * 1024 * 1024 / (payload_size + 64);
+  const int times =
+      static_cast<int>(1.5 * 1024) * 1024 * 1024 / (payload_size + 64);
 
   std::thread t1(
       [id, remote_ids, times, payload_size, outstanding_req, &barrier] {

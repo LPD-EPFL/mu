@@ -2,9 +2,9 @@
 #include <dory/crash-consensus.hpp>
 
 namespace dory {
-  void consensus___dummy___symbol___c();
-  void consensus___dummy___symbol___cpp();
-}
+void consensus___dummy___symbol___c();
+void consensus___dummy___symbol___cpp();
+}  // namespace dory
 
 namespace dory {
 void consensus___dummy___symbol___c() {

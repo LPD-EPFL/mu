@@ -1,9 +1,9 @@
 #pragma once
 
-#include <memory>
-#include <vector>
 #include <functional>
+#include <memory>
 #include <utility>
+#include <vector>
 
 namespace dory {
 class RdmaConsensus;
@@ -24,17 +24,16 @@ enum class ProposeError {
   SlowPathLogRecycled
 };
 
-enum class ThreadBank {
-  A,
-  B
-};
+enum class ThreadBank { A, B };
 
 class Consensus {
  public:
-  Consensus(int my_id, std::vector<int> &remote_ids, int outstanding_req = 0, ThreadBank threadBank = ThreadBank::A);
+  Consensus(int my_id, std::vector<int> &remote_ids, int outstanding_req = 0,
+            ThreadBank threadBank = ThreadBank::A);
   ~Consensus();
 
-  void commitHandler(std::function<void(bool leader, uint8_t *buf, size_t len)> committer);
+  void commitHandler(
+      std::function<void(bool leader, uint8_t *buf, size_t len)> committer);
 
   ProposeError propose(uint8_t *buf, size_t len);
   int potentialLeader();

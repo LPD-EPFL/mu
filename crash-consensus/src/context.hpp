@@ -6,16 +6,20 @@
 #include <vector>
 
 #include <atomic>
-#include "log.hpp"
 #include "contexted-poller.hpp"
+#include "log.hpp"
 #include "memory.hpp"
 
 namespace dory {
 struct Leader {
   Leader(int requester, uint64_t requester_value, int force_reset = 0) noexcept
-      : used(1), force_reset(force_reset & 0x1), requester(requester & 0x3f), requester_value(requester_value & 0xffffffffffff) {}
+      : used(1),
+        force_reset(force_reset & 0x1),
+        requester(requester & 0x3f),
+        requester_value(requester_value & 0xffffffffffff) {}
 
-  Leader() noexcept : used(0), force_reset(0), requester(0), requester_value(0) {}
+  Leader() noexcept
+      : used(0), force_reset(0), requester(0), requester_value(0) {}
 
   uint8_t used : 1;
   uint8_t force_reset : 1;
@@ -55,9 +59,7 @@ struct ReplicationContext {
 
 struct LeaderContext {
   LeaderContext(ConnectionContext &cc, ScratchpadMemory &scratchpad)
-      : cc{cc}, scratchpad{scratchpad}, poller{&cc} {
-
-  }
+      : cc{cc}, scratchpad{scratchpad}, poller{&cc} {}
   ConnectionContext &cc;
   ScratchpadMemory &scratchpad;
   ContextedPoller poller;

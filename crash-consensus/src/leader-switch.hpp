@@ -12,25 +12,25 @@
 
 #include "config.hpp"
 #include "fixed-size-majority.hpp"
-#include "pinning.hpp"
 #include "follower.hpp"
+#include "pinning.hpp"
 
 #include "timers.h"
 
 #include <fcntl.h>
 #include <unistd.h>
 
-#include <sys/types.h>
 #include <sys/stat.h>
-
+#include <sys/types.h>
 
 #include "contexted-poller.hpp"
 
 namespace dory {
 class LeaderHeartbeat {
  private:
-    // static constexpr std::chrono::nanoseconds heartbeatRefreshRate = std::chrono::nanoseconds(500);
-    static constexpr int history_length = 7;
+  // static constexpr std::chrono::nanoseconds heartbeatRefreshRate =
+  // std::chrono::nanoseconds(500);
+  static constexpr int history_length = 7;
 
  public:
   LeaderHeartbeat() {}
@@ -46,7 +46,8 @@ class LeaderHeartbeat {
     loopback = &(ctx->cc.ce.loopback());
 
     offset = ctx->scratchpad.leaderHeartbeatSlotOffset();
-    counter_from = reinterpret_cast<uint64_t*>(ctx->scratchpad.leaderHeartbeatSlot() + 64);
+    counter_from = reinterpret_cast<uint64_t *>(
+        ctx->scratchpad.leaderHeartbeatSlot() + 64);
     *counter_from = 0;
 
     slots = ctx->scratchpad.readLeaderHeartbeatSlots();
@@ -70,16 +71,16 @@ class LeaderHeartbeat {
     }
   }
 
-  void retract() {
-    want_leader.store(false);
-  }
+  void retract() { want_leader.store(false); }
 
   void scanHeartbeats() {
-
     if (outstanding_pids.find(my_id) == outstanding_pids.end()) {
       // Update my heartbeat
       *counter_from += 1;
-      auto post_ret = loopback->postSendSingle(ReliableConnection::RdmaWrite, quorum::pack(quorum::LeaderHeartbeat, my_id, 0), counter_from, sizeof(uint64_t), loopback->remoteBuf() + offset);
+      auto post_ret = loopback->postSendSingle(
+          ReliableConnection::RdmaWrite,
+          quorum::pack(quorum::LeaderHeartbeat, my_id, 0), counter_from,
+          sizeof(uint64_t), loopback->remoteBuf() + offset);
 
       if (!post_ret) {
         std::cout << "Post returned " << post_ret << std::endl;
@@ -90,8 +91,7 @@ class LeaderHeartbeat {
 
     bool did_work = false;
     auto &rcs_ = *rcs;
-    for (auto& [pid, rc]: rcs_) {
-
+    for (auto &[pid, rc] : rcs_) {
       if (outstanding_pids.find(pid) != outstanding_pids.end()) {
         continue;
       }
@@ -100,9 +100,13 @@ class LeaderHeartbeat {
       outstanding_pids.insert(pid);
       post_ids[pid] = post_id;
 
-      // std::cout << "Posting PID: " << pid << ", PostID: " << post_id << std::endl;
+      // std::cout << "Posting PID: " << pid << ", PostID: " << post_id <<
+      // std::endl;
 
-      auto post_ret = rc.postSendSingle(ReliableConnection::RdmaRead, quorum::pack(quorum::LeaderHeartbeat, pid, read_seq), slots[pid], sizeof(uint64_t), rc.remoteBuf() + offset);
+      auto post_ret = rc.postSendSingle(
+          ReliableConnection::RdmaRead,
+          quorum::pack(quorum::LeaderHeartbeat, pid, read_seq), slots[pid],
+          sizeof(uint64_t), rc.remoteBuf() + offset);
 
       if (!post_ret) {
         std::cout << "Post returned " << post_ret << std::endl;
@@ -119,12 +123,13 @@ class LeaderHeartbeat {
     // do {
     entries.resize(outstanding_pids.size());
     // std::vector<struct ibv_wc> entries(outstanding);
-    // std::cout << "I have " << outstanding << " requests to be polled, max_id " << max_id << std::endl;
+    // std::cout << "I have " << outstanding << " requests to be polled, max_id
+    // " << max_id << std::endl;
 
     if (heartbeat_poller(ctx->cc.cq, entries)) {
       // std::cout << "Polled " << entries.size() << " entries" << std::endl;
 
-      for(auto const& entry: entries) {
+      for (auto const &entry : entries) {
         auto [k, pid, seq] = quorum::unpackAll<int, uint64_t>(entry.wr_id);
         IGNORE(k);
         IGNORE(seq);
@@ -132,31 +137,37 @@ class LeaderHeartbeat {
         outstanding_pids.erase(pid);
         auto proc_post_id = post_ids[pid];
 
-        volatile uint64_t *val = reinterpret_cast<uint64_t*>(slots[pid]);
+        volatile uint64_t *val = reinterpret_cast<uint64_t *>(slots[pid]);
         if (pid == my_id) {
-          val = reinterpret_cast<uint64_t*>(loopback->remoteBuf() + offset);
+          val = reinterpret_cast<uint64_t *>(loopback->remoteBuf() + offset);
         }
 
-        // std::cout << "Polling PID: " << pid << ", PostID: " << proc_post_id << ", Value: " << *val << std::endl;
+        // std::cout << "Polling PID: " << pid << ", PostID: " << proc_post_id
+        // << ", Value: " << *val << std::endl;
 
         if (status[pid].value == *val) {
           // status[pid].same_value += 1;
           // std::cout << "Same value" << std::endl;
 
           // if (status[pid].same_value == )
-          status[pid].consecutive_updates = std::max(status[pid].consecutive_updates, 1) - 1;
+          status[pid].consecutive_updates =
+              std::max(status[pid].consecutive_updates, 1) - 1;
         } else {
-          if (post_id < proc_post_id + 3 ) {
-            status[pid].consecutive_updates = std::min(status[pid].consecutive_updates, history_length-3) + 3;
+          if (post_id < proc_post_id + 3) {
+            status[pid].consecutive_updates =
+                std::min(status[pid].consecutive_updates, history_length - 3) +
+                3;
           }
         }
 
         // if (status[pid].value != *val) {
-        //   std::cout << "Polling PID: " << pid << ", PostID: " << proc_post_id << ", Value: " << *val << std::endl;
+        //   std::cout << "Polling PID: " << pid << ", PostID: " << proc_post_id
+        //   << ", Value: " << *val << std::endl;
         // }
 
         status[pid].value = *val;
-        // std::cout << "Received (pid, seq) = (" << pid << ", " << seq << "), value = " << *val << std::endl;
+        // std::cout << "Received (pid, seq) = (" << pid << ", " << seq << "),
+        // value = " << *val << std::endl;
       }
 
       // // Penalize the outstanding that are way behind
@@ -165,7 +176,8 @@ class LeaderHeartbeat {
 
       //   if (post_id > proc_post_id + 3 ) {
       //     // std::cout << "Penalizing " << pid << std::endl;
-      //     status[pid].consecutive_updates = std::max(status[pid].consecutive_updates - 2, 0);
+      //     status[pid].consecutive_updates =
+      //     std::max(status[pid].consecutive_updates - 2, 0);
       //   }
       // }
     }
@@ -174,7 +186,8 @@ class LeaderHeartbeat {
     // for (auto& pid: ids) {
     //   if (status[pid].consecutive_updates < 7) {
     //     ok = true;
-    //     std::cout << "PID:" << pid << ", score: " << status[pid].consecutive_updates << std::endl;
+    //     std::cout << "PID:" << pid << ", score: " <<
+    //     status[pid].consecutive_updates << std::endl;
     //   }
     // }
     // if (ok) {
@@ -205,9 +218,12 @@ class LeaderHeartbeat {
 
  private:
   struct ReadingStatus {
-    ReadingStatus() :
-      value{ 0 }, consecutive_updates{ 0 }, failed_attempts{ 0 }, loop_modulo{ 0 }, freshly_updated{false}
-    {}
+    ReadingStatus()
+        : value{0},
+          consecutive_updates{0},
+          failed_attempts{0},
+          loop_modulo{0},
+          freshly_updated{false} {}
 
     int outstanding;
     uint64_t value;
@@ -218,12 +234,12 @@ class LeaderHeartbeat {
   };
 
  private:
-
   int leader_pid() {
     int leader_id = -1;
 
-    for (auto& pid : ids) {
-      // std::cout << pid << " " << status[pid].consecutive_updates << std::endl;
+    for (auto &pid : ids) {
+      // std::cout << pid << " " << status[pid].consecutive_updates <<
+      // std::endl;
       if (status[pid].consecutive_updates > 2) {
         leader_id = pid;
         break;
@@ -243,7 +259,6 @@ class LeaderHeartbeat {
   uint64_t post_id;
   std::vector<uint64_t> post_ids;
   std::set<int> outstanding_pids;
-
 
   PollingContext heartbeat_poller;
   std::vector<ReadingStatus> status;
@@ -331,7 +346,7 @@ class LeaderPermissionAsker {
     while (true) {
       entries.resize(expected_nr);
       if (give_perm_poller(c_ctx->cq, entries)) {
-      // if (c_ctx->cb.pollCqIsOK(c_ctx->cq, entries)) {
+        // if (c_ctx->cb.pollCqIsOK(c_ctx->cq, entries)) {
         for (auto const &entry : entries) {
           auto [reply_k, reply_pid, reply_seq] =
               quorum::unpackAll<uint64_t, uint64_t>(entry.wr_id);
@@ -357,7 +372,8 @@ class LeaderPermissionAsker {
     return std::make_unique<NoError>();
   }
 
-  bool waitForApprovalStep1(Leader current_leader, std::atomic<Leader> &leader) {
+  bool waitForApprovalStep1(Leader current_leader,
+                            std::atomic<Leader> &leader) {
     auto &slots = scratchpad->readLeaderChangeSlots();
     auto ids = c_ctx->remote_ids;
     auto constexpr shift = 8 * sizeof(uintptr_t) - 1;
@@ -404,7 +420,8 @@ class LeaderPermissionAsker {
     }
   }
 
-  bool waitForApprovalStep2(Leader current_leader, std::atomic<Leader> &leader) {
+  bool waitForApprovalStep2(Leader current_leader,
+                            std::atomic<Leader> &leader) {
     auto &slots = scratchpad->readLeaderChangeSlots();
     auto ids = c_ctx->remote_ids;
     auto constexpr shift = 8 * sizeof(uintptr_t) - 1;
@@ -462,14 +479,15 @@ class LeaderPermissionAsker {
 
     // std::cout << "AskForPermissions_Write" << std::endl;
     // Wait for the request to reach all followers
-    auto err = leaderWriter.write(temp, sizeof(req_nr), remote_mem_locations, ask_perm_poller);
+    auto err = leaderWriter.write(temp, sizeof(req_nr), remote_mem_locations,
+                                  ask_perm_poller);
     // std::cout << "AskForPermissions_WriteDone" << std::endl;
 
     if (!err->ok()) {
       return err;
     }
 
-    req_nr += 2*modulo;
+    req_nr += 2 * modulo;
 
     return std::make_unique<NoError>();
   }
@@ -511,9 +529,7 @@ class LeaderSwitcher {
     prepareScanner();
   }
 
-  void startPoller() {
-    permission_asker.startPoller();
-  }
+  void startPoller() { permission_asker.startPoller(); }
 
   void scanPermissions() {
     // Scan the memory for new messages
@@ -554,7 +570,8 @@ class LeaderSwitcher {
           dory::Leader desired(c_ctx->my_id, permission_asker.requestNr());
           auto ret = leader.compare_exchange_strong(expected, desired);
           if (ret) {
-            // std::cout << "Process " << c_ctx->my_id << " wants to become leader"
+            // std::cout << "Process " << c_ctx->my_id << " wants to become
+            // leader"
             // << std::endl;
             want_leader->store(false);
           }
@@ -564,13 +581,15 @@ class LeaderSwitcher {
   }
 
   bool checkAndApplyPermissions(
-      std::map<int, ReliableConnection> *replicator_rcs,
-      Follower& follower, std::atomic<bool> &leader_mode, bool &force_permission_request) {
+      std::map<int, ReliableConnection> *replicator_rcs, Follower &follower,
+      std::atomic<bool> &leader_mode, bool &force_permission_request) {
     Leader current_leader = leader.load();
     if (current_leader != prev_leader || force_permission_request) {
       // std::cout << "Adjusting connections to leader ("
       //           << int(current_leader.requester) << " "
-      //           << current_leader.requester_value << ") " << (current_leader != prev_leader) << " " << force_permission_request << std::endl;
+      //           << current_leader.requester_value << ") " << (current_leader
+      //           != prev_leader) << " " << force_permission_request <<
+      //           std::endl;
 
       auto orig_leader = prev_leader;
       prev_leader = current_leader;
@@ -580,7 +599,6 @@ class LeaderSwitcher {
       if (current_leader.requester == c_ctx->my_id) {
         // std::cout << "A" << std::endl;
         if (!leader_mode.load()) {
-
           // TIMESTAMP_T ts_start, ts_mid, ts_end;
 
           // GET_TIMESTAMP(ts_start);
@@ -609,9 +627,10 @@ class LeaderSwitcher {
 
           // auto elapsed_ask =  ELAPSED_NSEC(ts_start, ts_mid);
           // auto elapsed_wait = ELAPSED_NSEC(ts_mid, ts_end);
-          // std::cout << "AskForPermissions: " << elapsed_ask / 1000 << "(us)" << std::endl;
-          // std::cout << "WaitForApproval: " << elapsed_wait / 1000 << "(us)" << std::endl;
-          // std::cout << "Total: " << (elapsed_ask + elapsed_wait) / 1000 << "(us)" << std::endl;
+          // std::cout << "AskForPermissions: " << elapsed_ask / 1000 << "(us)"
+          // << std::endl; std::cout << "WaitForApproval: " << elapsed_wait /
+          // 1000 << "(us)" << std::endl; std::cout << "Total: " << (elapsed_ask
+          // + elapsed_wait) / 1000 << "(us)" << std::endl;
 
           // std::cout << "Asking for permissions: " << hard_reset << std::endl;
 
@@ -633,12 +652,13 @@ class LeaderSwitcher {
               rc.reconnect();
             }
           } else if (orig_leader.requester != c_ctx->my_id) {
-            // If I am going from follower to leader, then I need to revoke write
-            // permissions to old leader. Otherwise, I do nothing.
+            // If I am going from follower to leader, then I need to revoke
+            // write permissions to old leader. Otherwise, I do nothing.
             auto old_leader = replicator_rcs->find(orig_leader.requester);
             if (old_leader != replicator_rcs->end()) {
               auto &rc = old_leader->second;
-              auto rights = ControlBlock::LOCAL_READ | ControlBlock::LOCAL_WRITE;
+              auto rights =
+                  ControlBlock::LOCAL_READ | ControlBlock::LOCAL_WRITE;
 
               if (!rc.changeRights(rights)) {
                 rc.reset();
@@ -657,7 +677,8 @@ class LeaderSwitcher {
 
           // GET_TIMESTAMP(ts_end);
           // auto elapsed_switch = ELAPSED_NSEC(ts_start, ts_end);
-          // std::cout << "Switching permissions: " << elapsed_switch / 1000 << "(us)" << std::endl;
+          // std::cout << "Switching permissions: " << elapsed_switch / 1000 <<
+          // "(us)" << std::endl;
 
           // GET_TIMESTAMP(ts_start);
           // std::cout << "Blocking the follower" << std::endl;
@@ -666,7 +687,8 @@ class LeaderSwitcher {
 
           // GET_TIMESTAMP(ts_end);
           // auto elapsed_block = ELAPSED_NSEC(ts_start, ts_end);
-          // std::cout << "Blocking the follower: " << elapsed_block / 1000 << "(us)" << std::endl;
+          // std::cout << "Blocking the follower: " << elapsed_block / 1000 <<
+          // "(us)" << std::endl;
 
           // std::cout << "Permissions granted" << std::endl;
         } else {
@@ -698,7 +720,7 @@ class LeaderSwitcher {
         } else {
           // Notify the remote party
           permission_asker.givePermissionStep1(current_leader.requester,
-                                          current_leader.requester_value);
+                                               current_leader.requester_value);
 
           // First revoke from old leader
           auto old_leader = replicator_rcs->find(orig_leader.requester);
@@ -718,7 +740,8 @@ class LeaderSwitcher {
           if (new_leader != replicator_rcs->end()) {
             auto &rc = new_leader->second;
             auto rights = ControlBlock::LOCAL_READ | ControlBlock::LOCAL_WRITE |
-                          ControlBlock::REMOTE_READ | ControlBlock::REMOTE_WRITE;
+                          ControlBlock::REMOTE_READ |
+                          ControlBlock::REMOTE_WRITE;
 
             if (!rc.changeRights(rights)) {
               rc.reset();
@@ -729,12 +752,13 @@ class LeaderSwitcher {
         }
 
         permission_asker.givePermissionStep2(current_leader.requester,
-                                        current_leader.requester_value);
+                                             current_leader.requester_value);
 
         follower.unblock();
         // std::cout << "Permissions given" << std::endl;
 
-        // std::cout << "Giving permissions to " << int(current_leader.requester)
+        // std::cout << "Giving permissions to " <<
+        // int(current_leader.requester)
         //           << std::endl;
         auto expected = current_leader;
         auto desired = expected;
@@ -807,8 +831,12 @@ class LeaderSwitcher {
 namespace dory {
 class LeaderElection {
  public:
-  LeaderElection(ConnectionContext &cc, ScratchpadMemory &scratchpad, ConsensusConfig::ThreadConfig threadConfig)
-      : ctx{cc, scratchpad}, threadConfig{threadConfig}, hb_started{false}, switcher_started{false} {
+  LeaderElection(ConnectionContext &cc, ScratchpadMemory &scratchpad,
+                 ConsensusConfig::ThreadConfig threadConfig)
+      : ctx{cc, scratchpad},
+        threadConfig{threadConfig},
+        hb_started{false},
+        switcher_started{false} {
     startHeartbeat();
     startLeaderSwitcher();
   }
@@ -826,7 +854,8 @@ class LeaderElection {
   }
 
   inline bool checkAndApplyConnectionPermissionsOK(
-      Follower& follower, std::atomic<bool> &leader_mode, bool &force_permission_request) {
+      Follower &follower, std::atomic<bool> &leader_mode,
+      bool &force_permission_request) {
     return leader_switcher.checkAndApplyPermissions(
         replicator_conns, follower, leader_mode, force_permission_request);
   }
@@ -851,19 +880,19 @@ class LeaderElection {
       if (unlink(fifo.c_str())) {
         if (errno != ENOENT) {
           throw std::runtime_error("Could not delete the fifo: " +
-                                  std::string(std::strerror(errno)));
+                                   std::string(std::strerror(errno)));
         }
       }
 
       if (mkfifo(fifo.c_str(), 0666)) {
         throw std::runtime_error("Could not create the fifo: " +
-                                std::string(std::strerror(errno)));
+                                 std::string(std::strerror(errno)));
       }
 
       int fd = open(fifo.c_str(), O_RDWR);
       if (fd == -1) {
         throw std::runtime_error("Could not open the fifo: " +
-                                std::string(std::strerror(errno)));
+                                 std::string(std::strerror(errno)));
       }
 
       // int flags = fcntl(fd, F_GETFL, 0);
@@ -877,7 +906,7 @@ class LeaderElection {
       //                           std::string(std::strerror(errno)));
       // }
 
-      std::atomic<char> command{'c'}; // 'p' for pause, 'c' for continue
+      std::atomic<char> command{'c'};  // 'p' for pause, 'c' for continue
       char prev_command = 'c';
 
       auto file_watcher_thd = std::thread([&command, &fd]() {
@@ -887,7 +916,7 @@ class LeaderElection {
           if (ret == -1) {
             // if (errno != EAGAIN) {
             throw std::runtime_error("Could not read from the fifo: " +
-                              std::string(std::strerror(errno)));
+                                     std::string(std::strerror(errno)));
             // }
           } else if (ret == 1) {
             command.store(tmp);

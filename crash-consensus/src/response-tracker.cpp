@@ -135,8 +135,9 @@ bool WaitQuorumResponse::canContinueWith(uint64_t expected) const {
 
 int WaitQuorumResponse::maximumResponses() const {
   // The number of processes that can go to the next round:
-  return static_cast<int>(std::count_if(scoreboard.begin(), scoreboard.end(),
-                       [this](uint64_t i) { return i == next_id - 1; }));
+  return static_cast<int>(
+      std::count_if(scoreboard.begin(), scoreboard.end(),
+                    [this](uint64_t i) { return i == next_id - 1; }));
 }
 }  // namespace dory
 
@@ -198,7 +199,8 @@ bool WaitModuloQuorumResponse::consume(std::vector<struct ibv_wc>& entries) {
       auto [k, pid, seq] = quorum::unpackAll<int64_t, int64_t>(entry.wr_id);
 
       if (k != kind) {
-        std::cout << "Mismatched message kind: (" << quorum::type_str(k) << " vs " << quorum::type_str(kind)
+        std::cout << "Mismatched message kind: (" << quorum::type_str(k)
+                  << " vs " << quorum::type_str(kind)
                   << "). Received unexpected/old message response from the "
                      "completion queue"
                   << std::endl;
@@ -268,8 +270,9 @@ bool WaitModuloQuorumResponse::canContinueWith(int64_t expected) const {
 
 int WaitModuloQuorumResponse::maximumResponses() const {
   // The number of processes that can go to the next round:
-  return static_cast<int>(std::count_if(scoreboard.begin(), scoreboard.end(),
-                       [this](int64_t i) { return i == next_id - modulo; }));
+  return static_cast<int>(
+      std::count_if(scoreboard.begin(), scoreboard.end(),
+                    [this](int64_t i) { return i == next_id - modulo; }));
 }
 
 std::vector<int64_t> const& WaitModuloQuorumResponse::scores() const {

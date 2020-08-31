@@ -16,13 +16,15 @@ class FixedSizeMajorityOperation {
   FixedSizeMajorityOperation(ConnectionContext *context, QuorumWaiter qw,
                              std::vector<int> &remote_ids)
       : ctx{context}, qw{qw}, kind{qw.kindOfOp()} {
-    quorum_size = static_cast<int>(quorum::majority(ctx->remote_ids.size() + 1)) - 1;
+    quorum_size =
+        static_cast<int>(quorum::majority(ctx->remote_ids.size() + 1)) - 1;
     replicas_size = static_cast<int>(ctx->remote_ids.size());
 
     successful_ops.resize(remote_ids.size());
     successful_ops.clear();
 
-    int tolerated_failures = static_cast<int>(quorum::minority(ctx->remote_ids.size() + 1));
+    int tolerated_failures =
+        static_cast<int>(quorum::minority(ctx->remote_ids.size() + 1));
     failed_majority = FailureTracker(kind, ctx->remote_ids, tolerated_failures);
     failed_majority.track(qw.reqID());
 
@@ -42,7 +44,8 @@ class FixedSizeMajorityOperation {
     successful_ops.resize(remote_ids.size());
     successful_ops.clear();
 
-    failed_majority = FailureTracker(kind, ctx->remote_ids, static_cast<int>(tolerated_failures));
+    failed_majority = FailureTracker(kind, ctx->remote_ids,
+                                     static_cast<int>(tolerated_failures));
     failed_majority.track(qw.reqID());
 
     auto &rcs = ctx->ce.connections();
@@ -163,7 +166,8 @@ class FixedSizeMajorityOperation {
     for (auto &c : connections) {
       auto ok = c.rc->postSendSingleCached(
           ReliableConnection::RdmaWrite,
-          QuorumWaiter::packer(kind, c.pid, req_id), from_local_memory, static_cast<uint32_t>(size),
+          QuorumWaiter::packer(kind, c.pid, req_id), from_local_memory,
+          static_cast<uint32_t>(size),
           c.rc->remoteBuf() + to_remote_memories[c.pid] + offset);
 
       if (!ok) {
@@ -229,14 +233,16 @@ class FixedSizeMajorityOperation {
       if constexpr (std::is_same_v<T, std::vector<void *>>) {
         auto ok = rc.postSendSingle(
             rdma_req, QuorumWaiter::packer(kind, pid, req_id),
-            local_memory[pid], static_cast<uint32_t>(size[pid]), rc.remoteBuf() + remote_memory[pid]);
+            local_memory[pid], static_cast<uint32_t>(size[pid]),
+            rc.remoteBuf() + remote_memory[pid]);
         if (!ok) {
           return std::make_unique<ErrorType>(req_id);
         }
       } else {
-        auto ok = rc.postSendSingle(
-            rdma_req, QuorumWaiter::packer(kind, pid, req_id), local_memory,
-            static_cast<uint32_t>(size[pid]), rc.remoteBuf() + remote_memory[pid]);
+        auto ok =
+            rc.postSendSingle(rdma_req, QuorumWaiter::packer(kind, pid, req_id),
+                              local_memory, static_cast<uint32_t>(size[pid]),
+                              rc.remoteBuf() + remote_memory[pid]);
         if (!ok) {
           return std::make_unique<ErrorType>(req_id);
         }
@@ -288,10 +294,10 @@ class FixedSizeMajorityOperation {
       auto pid = c.pid;
       auto &rc = *(c.rc);
       if constexpr (std::is_same_v<T, std::vector<void *>>) {
-        auto ok = rc.postSendSingle(ReliableConnection::RdmaRead,
-                                    QuorumWaiter::packer(kind, pid, req_id),
-                                    local_memory[pid], static_cast<uint32_t>(size),
-                                    rc.remoteBuf() + remote_memory[pid]);
+        auto ok = rc.postSendSingle(
+            ReliableConnection::RdmaRead,
+            QuorumWaiter::packer(kind, pid, req_id), local_memory[pid],
+            static_cast<uint32_t>(size), rc.remoteBuf() + remote_memory[pid]);
         if (!ok) {
           return std::make_unique<ErrorType>(req_id);
         }

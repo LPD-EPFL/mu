@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstdlib>
 #include <cstdint>
+#include <cstdlib>
 void mkrndstr_ipa(int length, uint8_t* randomString);
 
 void mkrndstr_ipa(int length, uint8_t* randomString) {

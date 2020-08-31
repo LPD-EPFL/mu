@@ -1,8 +1,8 @@
 #pragma once
 
-#include <thread>
 #include <cassert>
 #include <condition_variable>
+#include <thread>
 
 class Barrier {
  public:

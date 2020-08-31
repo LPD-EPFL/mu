@@ -94,11 +94,9 @@ class MaybeError {
         {ErrorType::CatchProposalRetryError,
          "ErrorType::CatchProposalRetryError"},
 
-        {ErrorType::ReadFUOMajorityError,
-         "ErrorType::ReadFUOMajorityError"},
+        {ErrorType::ReadFUOMajorityError, "ErrorType::ReadFUOMajorityError"},
         {ErrorType::WriteFUODiffMajorityError,
          "ErrorType::WriteFUODiffMajorityError"},
-
 
         {ErrorType::LeaderSwitchRequestError,
          "ErrorType::LeaderSwitchRequestError"},
@@ -240,13 +238,10 @@ class ReadFUOMajorityError : public MaybeError {
   ReadFUOMajorityError(uint64_t req_id) : req_id{req_id} {}
 
   inline bool ok() override { return false; }
-  inline ErrorType type() override {
-    return MaybeError::ReadFUOMajorityError;
-  }
+  inline ErrorType type() override { return MaybeError::ReadFUOMajorityError; }
   inline uint64_t req() { return req_id; }
 
-  static const MaybeError::ErrorType value =
-      MaybeError::ReadFUOMajorityError;
+  static const MaybeError::ErrorType value = MaybeError::ReadFUOMajorityError;
 
  private:
   uint64_t req_id;

@@ -1,29 +1,34 @@
 #pragma once
 
-#include <thread>
 #include <atomic>
 #include <mutex>
 #include <stdexcept>
+#include <thread>
 
-#include "context.hpp"
-#include "log.hpp"
 #include "config.hpp"
+#include "context.hpp"
 #include "log-recycling.hpp"
+#include "log.hpp"
 
 namespace dory {
 class Follower {
-  public:
+ public:
   Follower() {}
 
-  Follower(ReplicationContext *ctx, LeaderContext *le_ctx, BlockingIterator *iter, LiveIterator *commit_iter, ConsensusConfig::ThreadConfig threadConfig)
-    : ctx{ ctx }, le_ctx{le_ctx}, iter{ iter }, commit_iter{ commit_iter }, block_thread_req{false}, blocked_thread{false}, blocked_state{false}, threadConfig{threadConfig}
-    {
-    }
+  Follower(ReplicationContext *ctx, LeaderContext *le_ctx,
+           BlockingIterator *iter, LiveIterator *commit_iter,
+           ConsensusConfig::ThreadConfig threadConfig)
+      : ctx{ctx},
+        le_ctx{le_ctx},
+        iter{iter},
+        commit_iter{commit_iter},
+        block_thread_req{false},
+        blocked_thread{false},
+        blocked_state{false},
+        threadConfig{threadConfig} {}
 
   void spawn() {
-    follower_thd = std::thread([this]{
-      run();
-    });
+    follower_thd = std::thread([this] { run(); });
 
     if (threadConfig.pinThreads) {
       pinThreadToCore(follower_thd, threadConfig.followerThreadCoreID);
@@ -34,7 +39,8 @@ class Follower {
     }
   }
 
-  void attach(std::unique_ptr<LogSlotReader> *lsreader, ScratchpadMemory *scratchpad_memory) {
+  void attach(std::unique_ptr<LogSlotReader> *lsreader,
+              ScratchpadMemory *scratchpad_memory) {
     lsr = lsreader;
     scratchpad = scratchpad_memory;
   }
@@ -54,7 +60,7 @@ class Follower {
     }
   }
 
-  template<typename Func>
+  template <typename Func>
   void commitHandler(Func f) {
     commit = std::move(f);
   }
@@ -69,9 +75,7 @@ class Follower {
     }
   }
 
-  inline std::mutex &lock() {
-    return log_mutex;
-  }
+  inline std::mutex &lock() { return log_mutex; }
 
   // Move assignment operator
   Follower &operator=(Follower &&o) {
@@ -90,7 +94,7 @@ class Follower {
     return *this;
   }
 
-  private:
+ private:
   void run() {
     int loops = 0;
     constexpr unsigned mask = (1 << 14) - 1;  // Must be power of 2 minus 1
@@ -120,8 +124,9 @@ class Follower {
       }
 
       ParsedSlot pslot(iter->location());
-      // std::cout << "Discovered element on position " << uintptr_t(iter->location()) << std::endl;
-      // std::cout << "Accepted proposal " << pslot.acceptedProposal()
+      // std::cout << "Discovered element on position " <<
+      // uintptr_t(iter->location()) << std::endl; std::cout << "Accepted
+      // proposal " << pslot.acceptedProposal()
       //           << std::endl;
       // std::cout << "First undecided offset " << pslot.firstUndecidedOffset()
       //           << std::endl;
@@ -139,10 +144,11 @@ class Follower {
 
         if (len != sizeof(LogRecyclingRequest)) {
           throw std::runtime_error(
-          "Coding bug: A fuo of 0 indicates a recycling request. The payload "
-          "indicates the point up to which the follower has to commit");
+              "Coding bug: A fuo of 0 indicates a recycling request. The "
+              "payload "
+              "indicates the point up to which the follower has to commit");
         }
-        recycling_req = *reinterpret_cast<LogRecyclingRequest*>(buf);
+        recycling_req = *reinterpret_cast<LogRecyclingRequest *>(buf);
         fuo = recycling_req.commit_up_to;
         recycling_requested = true;
 
@@ -156,10 +162,12 @@ class Follower {
 
         ParsedSlot pslot(commit_iter->location());
         auto [buf, len] = pslot.payload();
-        // std::cout << "Committing element on position " << uintptr_t(commit_iter->location()) << std::endl;
-        // std::cout << "Accepted proposal " << pslot.acceptedProposal()
+        // std::cout << "Committing element on position " <<
+        // uintptr_t(commit_iter->location()) << std::endl; std::cout <<
+        // "Accepted proposal " << pslot.acceptedProposal()
         //           << std::endl;
-        // std::cout << "First undecided offset " << pslot.firstUndecidedOffset()
+        // std::cout << "First undecided offset " <<
+        // pslot.firstUndecidedOffset()
         //           << std::endl;
         // auto bbuf = reinterpret_cast<uint64_t*>(buf);
         // std::cout << "Payload (len=" << len << ") `" << *bbuf << "`" <<
@@ -177,10 +185,10 @@ class Follower {
         ctx->log.resetFUO();
         ctx->log.rebuildLog();
 
-        *iter =  ctx->log.blockingIterator();
+        *iter = ctx->log.blockingIterator();
         *commit_iter = ctx->log.liveIterator();
-        *lsr = std::make_unique<LogSlotReader>(ctx, *scratchpad,
-                                        ctx->log.headerFirstUndecidedOffset());
+        *lsr = std::make_unique<LogSlotReader>(
+            ctx, *scratchpad, ctx->log.headerFirstUndecidedOffset());
         ctx->log.bzero();
 
         // Notify that recycling occurred
@@ -209,9 +217,10 @@ class Follower {
     *temp = recycling_done_id;
 
     auto &rc = rc_it->second;
-    rc.postSendSingle(ReliableConnection::RdmaWrite,
-                      quorum::pack(quorum::RecyclingDone, pid, recycling_done_id),
-                      temp, sizeof(temp), rc.remoteBuf() + offset);
+    rc.postSendSingle(
+        ReliableConnection::RdmaWrite,
+        quorum::pack(quorum::RecyclingDone, pid, recycling_done_id), temp,
+        sizeof(temp), rc.remoteBuf() + offset);
 
     int expected_nr = 1;
 
@@ -242,25 +251,25 @@ class Follower {
     return std::make_unique<NoError>();
   }
 
-  private:
-    ReplicationContext *ctx;
-    LeaderContext * le_ctx;
-    BlockingIterator *iter;
-    LiveIterator *commit_iter;
-    std::unique_ptr<LogSlotReader> *lsr;
-    ScratchpadMemory *scratchpad;
-    std::function<void(bool, uint8_t*, size_t)> commit;
+ private:
+  ReplicationContext *ctx;
+  LeaderContext *le_ctx;
+  BlockingIterator *iter;
+  LiveIterator *commit_iter;
+  std::unique_ptr<LogSlotReader> *lsr;
+  ScratchpadMemory *scratchpad;
+  std::function<void(bool, uint8_t *, size_t)> commit;
 
-    std::thread follower_thd;
+  std::thread follower_thd;
 
-    alignas(64) std::atomic<bool> block_thread_req;
-    alignas(64) std::atomic<bool> blocked_thread;
-    alignas(64) std::mutex log_mutex;
+  alignas(64) std::atomic<bool> block_thread_req;
+  alignas(64) std::atomic<bool> blocked_thread;
+  alignas(64) std::mutex log_mutex;
 
-    bool blocked_state;
-    ConsensusConfig::ThreadConfig threadConfig;
-    PollingContext recycling_req_poller;
-    LogRecyclingRequest recycling_req;
-    std::vector<struct ibv_wc> entries;
+  bool blocked_state;
+  ConsensusConfig::ThreadConfig threadConfig;
+  PollingContext recycling_req_poller;
+  LogRecyclingRequest recycling_req;
+  std::vector<struct ibv_wc> entries;
 };
-}
+}  // namespace dory
