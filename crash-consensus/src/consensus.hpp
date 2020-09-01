@@ -189,5 +189,8 @@ class RdmaConsensus {
  private:
   MemoryStore store;
   LOGGER_DECL(logger);
+
+ public:
+  std::atomic<bool> *response_blocked;
 };
 }  // namespace dory

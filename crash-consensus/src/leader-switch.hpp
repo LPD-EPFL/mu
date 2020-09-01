@@ -836,7 +836,8 @@ class LeaderElection {
       : ctx{cc, scratchpad},
         threadConfig{threadConfig},
         hb_started{false},
-        switcher_started{false} {
+        switcher_started{false},
+        response_blocked{true}	{
     startHeartbeat();
     startLeaderSwitcher();
   }
@@ -935,8 +936,10 @@ class LeaderElection {
       for (unsigned long long i = 0;; i = (i + 1) & iterations_ftr_check) {
         char current_command = command.load();
         if (current_command == 'c') {
+          response_blocked.store(false);
           leader_heartbeat.scanHeartbeats();
         } else if (prev_command == 'c') {
+	  response_blocked.store(true);
           leader_heartbeat.retract();
         }
 
@@ -1030,5 +1033,8 @@ class LeaderElection {
   std::thread switcher_thd;
   bool switcher_started;
   std::promise<void> switcher_exit_signal;
+
+ public:
+  std::atomic<bool> response_blocked;
 };
 }  // namespace dory

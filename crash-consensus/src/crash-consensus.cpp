@@ -40,6 +40,7 @@ ProposeError Consensus::propose(uint8_t *buf, size_t len) {
 }
 
 int Consensus::potentialLeader() { return impl->potentialLeader(); }
+bool Consensus::blockedResponse() { return impl->response_blocked->load(); }
 
 std::pair<uint64_t, uint64_t> Consensus::proposedReplicatedRange() {
   return impl->proposedReplicatedRange();

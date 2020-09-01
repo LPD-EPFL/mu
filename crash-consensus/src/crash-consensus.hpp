@@ -37,6 +37,7 @@ class Consensus {
 
   ProposeError propose(uint8_t *buf, size_t len);
   int potentialLeader();
+  bool blockedResponse();
   std::pair<uint64_t, uint64_t> proposedReplicatedRange();
 
  private:

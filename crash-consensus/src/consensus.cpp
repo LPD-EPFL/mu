@@ -184,6 +184,7 @@ void RdmaConsensus::run() {
   leader_election = std::make_unique<LeaderElection>(
       *le_conn_ctx.get(), *scratchpad.get(), threadConfig);
   leader_election->attachReplicatorContext(re_ctx.get());
+  response_blocked = &(leader_election->response_blocked);
 
   // Initialize replication
   auto quorum_size = quorum::majority(remote_ids.size() + 1) - 1;
