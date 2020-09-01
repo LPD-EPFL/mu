@@ -4,6 +4,8 @@ set -e
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 cd $DIR
 
+rm -rf eRPC
+
 ./package_orig_liquibook.sh
 
 git clone https://github.com/erpc-io/eRPC
