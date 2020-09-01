@@ -1,0 +1,74 @@
+diff --git a/src/rpc.h b/src/rpc.h
+index 8f418732..4dfbfac0 100644
+--- a/src/rpc.h
++++ b/src/rpc.h
+@@ -277,6 +277,11 @@ class Rpc {
+     run_event_loop_timeout_st(timeout_ms);
+   }
+ 
++  /// Run the event loop for some microseconds
++  inline void run_event_loop_us(size_t timeout_us) {
++    run_event_loop_timeout_us_st(timeout_us);
++  }
++
+   /// Run the event loop once
+   inline void run_event_loop_once() { run_event_loop_do_one_st(); }
+ 
+@@ -619,6 +624,7 @@ class Rpc {
+ 
+   /// Implementation of the run_event_loop(timeout) API function
+   void run_event_loop_timeout_st(size_t timeout_ms);
++  void run_event_loop_timeout_us_st(size_t timeout_us);
+ 
+   /// Actually run one iteration of the event loop
+   void run_event_loop_do_one_st();
+diff --git a/src/rpc_impl/rpc.cc b/src/rpc_impl/rpc.cc
+index 54228338..7b78bed5 100644
+--- a/src/rpc_impl/rpc.cc
++++ b/src/rpc_impl/rpc.cc
+@@ -25,7 +25,7 @@ Rpc<TTr>::Rpc(Nexus *nexus, void *context, uint8_t rpc_id,
+       rpc_rto_cycles(us_to_cycles(kRpcRTOUs, freq_ghz)),
+       rpc_pkt_loss_scan_cycles(rpc_rto_cycles / 10),
+       req_func_arr(nexus->req_func_arr) {
+-  rt_assert(!getuid(), "You need to be root to use eRPC");
++  // rt_assert(!getuid(), "You need to be root to use eRPC");
+   rt_assert(rpc_id != kInvalidRpcId, "Invalid Rpc ID");
+   rt_assert(!nexus->rpc_id_exists(rpc_id), "Rpc ID already exists");
+   rt_assert(phy_port < kMaxPhyPorts, "Invalid physical port");
+diff --git a/src/rpc_impl/rpc_ev_loop.cc b/src/rpc_impl/rpc_ev_loop.cc
+index 336d1a62..6fa8a012 100644
+--- a/src/rpc_impl/rpc_ev_loop.cc
++++ b/src/rpc_impl/rpc_ev_loop.cc
+@@ -48,6 +48,19 @@ void Rpc<TTr>::run_event_loop_timeout_st(size_t timeout_ms) {
+   }
+ }
+ 
++template <class TTr>
++void Rpc<TTr>::run_event_loop_timeout_us_st(size_t timeout_us) {
++  assert(in_dispatch());
++
++  size_t timeout_tsc = us_to_cycles(timeout_us, freq_ghz);
++  size_t start_tsc = rdtsc();  // For counting timeout_ms
++
++  while (true) {
++    run_event_loop_do_one_st();  // Run at least once even if timeout_ms is 0
++    if (unlikely(ev_loop_tsc - start_tsc > timeout_tsc)) break;
++  }
++}
++
+ FORCE_COMPILE_TRANSPORTS
+ 
+ }  // namespace erpc
+diff --git a/src/util/test_printf.h b/src/util/test_printf.h
+index b539f3c2..b4d5e040 100644
+--- a/src/util/test_printf.h
++++ b/src/util/test_printf.h
+@@ -5,7 +5,7 @@
+ 
+ namespace testing {
+ namespace internal {
+-enum GTestColor { COLOR_DEFAULT, COLOR_RED, COLOR_GREEN, COLOR_YELLOW };
++// enum GTestColor { COLOR_DEFAULT, COLOR_RED, COLOR_GREEN, COLOR_YELLOW };
+ 
+ extern void ColoredPrintf(GTestColor color, const char *fmt, ...);
+ }  // namespace internal

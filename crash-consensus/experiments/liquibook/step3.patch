@@ -1,0 +1,25 @@
+diff -u a/simple/simple_order_book.h b/simple/simple_order_book.h
+--- a/simple/simple_order_book.h	2020-09-01 12:48:16.026399116 +0200
++++ b/simple/simple_order_book.h	2020-09-01 12:48:57.070849587 +0200
+@@ -4,7 +4,7 @@
+ #pragma once
+
+ #include "simple_order.h"
+-#include <book/depth_order_book.h>
++#include "../book/depth_order_book.h"
+ #include <iostream>
+
+ namespace liquibook { namespace simple {
+diff -u a/simple/simple_order.h b/simple/simple_order.h
+--- a/simple/simple_order.h	2020-09-01 12:48:16.026399116 +0200
++++ b/simple/simple_order.h	2020-09-01 12:48:57.070849587 +0200
+@@ -4,8 +4,8 @@
+ #pragma once
+
+ #define LIQUIBOOK_ORDER_KNOWS_CONDITIONS
+-#include <book/order.h>
+-#include <book/types.h>
++#include "../book/order.h"
++#include "../book/types.h"
+
+ namespace liquibook { namespace simple {

@@ -1,0 +1,74 @@
+--- a/CMakeLists.txt	2020-09-01 12:59:28.941810551 +0200
++++ b/CMakeLists.txt	2020-09-01 12:59:46.186007933 +0200
+@@ -8,8 +8,11 @@
+ set(CMAKE_CXX_COMPILER g++)
+ 
+ add_definitions(-std=c++11 -march=native -g)
+-add_definitions(-Wall -Wextra -Werror -pedantic -Wsign-conversion -Wold-style-cast)
+-add_definitions(-Wno-unused-function -Wno-nested-anon-types -Wno-keyword-macro)
++#add_definitions(-Wall -Wextra -Werror -pedantic -Wsign-conversion -Wold-style-cast)
++#add_definitions(-Wno-unused-function -Wno-nested-anon-types -Wno-keyword-macro)
++add_definitions(-Wall -Wextra -Werror -Wsign-conversion -Wold-style-cast)
++add_definitions(-Wno-unused-function -Wno-format-zero-length -Wno-old-style-cast -Wno-sign-conversion -Wno-unused-parameter -Wno-unused-variable)
++
+ 
+ set(LIBRARIES ${LIBRARIES} rt numa pthread gflags)
+ 
+@@ -36,7 +39,7 @@
+ option(ROCE "Use RoCE if TRANSPORT is infiniband" OFF)
+ option(PERF "Compile for performance" ON)
+ set(PGO "none" CACHE STRING "Profile-guided optimization (generate/use/none)")
+-set(LOG_LEVEL "warn" CACHE STRING "Logging level (none/error/warn/info/reorder/trace/cc)") 
++set(LOG_LEVEL "warn" CACHE STRING "Logging level (none/error/warn/info/reorder/trace/cc)")
+ cmake_dependent_option(LTO "Use link time optimization" ON "PERF" OFF)
+ 
+ # Parse the user-exposed options
+@@ -313,6 +316,28 @@
+   set(LIBRARIES ${LIBRARIES} ${PMEM} cityhash)
+ elseif(APP STREQUAL "log")
+   set(LIBRARIES ${LIBRARIES} ${PMEM})
++elseif(APP STREQUAL "liquibook")
++  find_library(MEMCACHED_LIB memcached)
++  if(NOT MEMCACHED_LIB)
++      message(FATAL_ERROR "memcached library not found")
++  endif()
++
++  if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/apps/liquibook/dory-export)
++    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/apps/liquibook/dory-export)
++    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/apps/liquibook/dory-export/include)
++
++    set(LIBRARIES crashconsensus ${LIBRARIES} ${MEMCACHED_LIB})
++  else()
++    set(LIBRARIES ${LIBRARIES} ${MEMCACHED_LIB})
++  endif()
++
++  set(LIQUIBOOK_SOURCES
++    apps/liquibook/simple/simple_order.cpp
++    apps/liquibook/market/Market.cpp
++    apps/liquibook/market/Order.cpp)
++
++  set(APP_ADDITIONAL_SOURCES ${LIQUIBOOK_SOURCES})
++
+ endif()
+ 
+ if(DPDK_NEEDED STREQUAL "true")
+--- a/scripts/utils.sh	2020-09-01 12:59:28.961810780 +0200
++++ b/scripts/utils.sh	2020-09-01 12:59:46.882015895 +0200
+@@ -1,5 +1,6 @@
+ #!/usr/bin/env bash
+ # Utilities for other scripts
++set -x
+ 
+ # Echo in blue color. Actually, is yellow.
+ function blue() {
+--- a/scripts/autorun_parse.sh	2020-09-01 12:59:28.961810780 +0200
++++ b/scripts/autorun_parse.sh	2020-09-01 12:59:46.886015941 +0200
+@@ -22,7 +22,7 @@
+ }
+ 
+ # Variables set by the human user
+-autorun_erpc_home="$HOME/eRPC"
++autorun_erpc_home="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"/..
+ 
+ # Check autorun_app
+ assert_file_exists $autorun_erpc_home/scripts/autorun_app_file
