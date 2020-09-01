@@ -265,7 +265,7 @@ bool ReliableConnection::changeRightsIfNeeded(
     return false;
   }
 
-  if (attr.qp_access_flags == converted_rights) {
+  if (static_cast<unsigned>(attr.qp_access_flags) == converted_rights) {
     return true;
   }
 
