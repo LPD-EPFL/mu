@@ -30,7 +30,7 @@ class LeaderHeartbeat {
  private:
   // static constexpr std::chrono::nanoseconds heartbeatRefreshRate =
   // std::chrono::nanoseconds(500);
-  static constexpr int history_length = 7;
+  static constexpr int history_length = 50;
 
  public:
   LeaderHeartbeat() {}
@@ -58,6 +58,8 @@ class LeaderHeartbeat {
 
     max_id = *(std::minmax_element(ids.begin(), ids.end()).second);
     status = std::vector<ReadingStatus>(max_id + 1);
+
+    status[ids[0]].consecutive_updates = history_length;
 
     ctx->poller.registerContext(quorum::LeaderHeartbeat);
     ctx->poller.endRegistrations(4);
@@ -197,7 +199,7 @@ class LeaderHeartbeat {
     if (leader_pid() == ctx->cc.my_id) {
       want_leader.store(true);
     } else {
-      std::this_thread::sleep_for(std::chrono::microseconds(3));
+      std::this_thread::sleep_for(std::chrono::microseconds(50));
       // std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
   }
