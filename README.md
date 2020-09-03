@@ -168,7 +168,7 @@ $ ./crash-consensus/experiments/redis/bin/redis-puts-only 16 32 osdi-node-1 6379
 
 Notes:
 * Syntax: `./redis-puts-only <key_size> <value_size> <redis_leader_server_host> <redis_leader_server_port>`
-* After execution of `redis-puts-only` finishes, a file named `redis-cli.txt` appears in node4. This files contains end2end latency from client's perspective. You can get the latency that the leader (server) spend in replicating the request by ssh-ing into node1, and sending the command `kill -SIGUSR1 <pid>`. The `<pid>` corresponds to the PID of the redis process and it gets printed when `redis-server-replicated` starts. A file name `redis-1.txt` will appear in the filesystem after sending the signal.
+* After execution of `redis-puts-only` finishes, a file named `redis-cli.txt` appears in node4. This files contains end2end latency from client's perspective. You can get the latency that the leader (server) spend in replicating the request by ssh-ing into node1, and sending the command `kill -SIGUSR1 <pid>`. The `<pid>` corresponds to the PID of the redis process and it gets printed when `redis-server-replicated` starts. A file name `dump-1.txt` will appear in the filesystem after sending the signal.
 * Apart from `redis-puts-only`, the client can also run `redis-gets-only` or `redis-puts-gets`.
 * To get the baseline measurements (original redis without replication), you can run `numactl --membind 0 -- ./crash-consensus/experiments/redis/bin/redis-server --port 6379` on `node1`, don't run anything on `node2`, `node3` and execute the previously shown command on `node4`.
 
