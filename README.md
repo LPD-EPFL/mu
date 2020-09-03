@@ -229,7 +229,7 @@ $ export TRADERS_NUM=1
 On `node{1,2,3}` run:
 ```sh
 $ export DORY_REGISTRY_IP=osdi-memc:9999
-$ export export MODE=server
+$ export MODE=server
 ```
 
 On `node1` run:
