@@ -267,5 +267,4 @@ $ numactl --physcpubind 0 --membind 0 ./crash-consensus/experiments/liquibook/eR
 ```
 
 ## Running without docker
-The execution without docker is straightforward. First, install the system-wide packages mentioned in the Dockerfile in 4 `hosts` of a cluster connected using RDMA. Then
-
+The execution without docker is straightforward. First, install the system-wide packages mentioned in the Dockerfile in 4 `hosts` of a cluster connected using RDMA. The auxiliary process running memcached (with hostname `osdi-memc`) can run everywhere, even outside the cluster, as long as it's accesible by the 4 hosts. The rest of the steps remain unchanged.
