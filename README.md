@@ -266,5 +266,15 @@ $ export TRADER_ID=0
 $ numactl --physcpubind 0 --membind 0 ./crash-consensus/experiments/liquibook/eRPC/build/liquibook --test_ms 120000 --sm_verbose 0 --num_processes 4 --numa_0_ports 0 --process_id 3 --numa_node 0
 ```
 
+## Starting over
+In case you want recompile and execute the software stack in a system with all the system-wide dependencies installed, the do the following in `nodes{1,2,3,4}`.
+```sh
+$ # Run `ps aux`, then find all the processes that are related to the software stack and kill them
+$ rm -rf ~/dory
+$ conan remove --force "*"
+```
+Optionally, exit the shell and login again in order to unload the exported environment variables set by the various experiments.
+Subsequently, re-follow the document starting from section *Complication of the sofware stack*
+
 ## Running without docker
 The execution without docker is straightforward. First, install the system-wide packages mentioned in the Dockerfile in 4 `hosts` of a cluster connected using RDMA. The auxiliary process running memcached (with hostname `osdi-memc`) can run everywhere, even outside the cluster, as long as it's accesible by the 4 hosts. The rest of the steps remain unchanged.
