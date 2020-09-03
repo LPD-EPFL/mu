@@ -172,6 +172,52 @@ Notes:
 * Apart from `redis-puts-only`, the client can also run `redis-gets-only` or `redis-puts-gets`.
 * To get the baseline measurements (original redis without replication), you can run `numactl --membind 0 -- ./crash-consensus/experiments/redis/bin/redis-server --port 6379` on `node1`, don't run anything on `node2`, `node3` and execute the previously shown command on `node4`.
 
+#### REDIS (Replicated Redis) --- INTERACTIVE
+On `osdi-memc` start (or restart if already running):
+```sh
+$ memcached -vv -p 9999
+```
+
+On `node{1,2,3}` run:
+```sh
+$ export DORY_REGISTRY_IP=osdi-memc:9999
+$ export IDS=1,2,3
+```
+
+On `node1` run:
+```sh
+$ export SID=1
+$ numactl --membind 0 -- ./crash-consensus/experiments/redis/bin/redis-server-replicated --port 6379
+```
+
+On `node2` run:
+```sh
+$ export SID=2
+$ numactl --membind 0 -- ./crash-consensus/experiments/redis/bin/redis-server-replicated --port 6379
+```
+
+On `node2` run:
+```sh
+$ export SID=3
+$ numactl --membind 0 -- ./crash-consensus/experiments/redis/bin/redis-server-replicated --port 6379
+```
+
+Wait until the message `Reading pump started` appears in nodes 2 and 3. You can now start a Redis client on node 4, issue SET commands to node 1, and verify that these commands are replicated to nodes 2 and 3. For example, on `node4`:
+```sh
+$ # Wait enough time for the pumps to start. You will see the message `Reading pump started` in nodes 2 and 3.
+$ ./crash-consensus/experiments/redis/bin/redis-cli -h osdi-node-1 -p 6379
+osdi-node-1:6379> SET CH Bern
+OK
+osdi-node-1:6379> SET IT Rome
+OK
+$ ./crash-consensus/experiments/redis/bin/redis-cli -h osdi-node-2 -p 6379
+osdi-node-2:6379> GET CH
+"Bern"
+```
+
+Notes:
+
+
 ### MEMCACHED (replicated memcached):
 On `osdi-memc` start (or restart if already running):
 ```sh
