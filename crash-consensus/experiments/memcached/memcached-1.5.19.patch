@@ -164,7 +164,7 @@ diff -u a/memcached.c b/memcached.c
 +
 +void drain_dummy_client(int fd) {
 +    char tmp[1024];
-+    // printf("Reading pump started\n");
++    printf("Reading pump started\n");
 +
 +    while (true) {
 +        int ret = read(fd, tmp, 1024);
