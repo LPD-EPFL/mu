@@ -99,6 +99,8 @@ $ numactl --membind 0 ./crash-consensus/demo/using_conan_fully/build/bin/main-st
 **Notes**:
 * The argument list is `<process_id> <payload_size> <nr_of_outstanding_reqs>`
 * Make sure to spawn all instances of `main-st` at (*almost*) the same time.
+* When the execution of `main-st` finishes on node 1, the terminal will print `Received X in Y ns`, where `X` is the number of commands that were replicated and `Y` is the time it took to replicated those commands, in nanoseconds.
+* After the experiment completes on node 1, make sure to kill (e.g., using `Ctrl-C`) the experiment on nodes 2 and 3.
 
 #### MAIN-ST-LAT (Standalone latency)
 On `osdi-memc` start (or restart if already running):
@@ -129,6 +131,7 @@ $ numactl --membind 0 ./crash-consensus/demo/using_conan_fully/build/bin/main-st
 * The argument list is `<process_id> <payload_size> <nr_of_outstanding_reqs>`
 * Make sure to spawn all instances of `main-st-lat` at (*almost*) the same time.
 * When execution of `main-st-lat` in node1 finishes, a file named `dump-st-4096-1.txt` is created that stores latency measurements in *ns*.
+* After the experiment completes on node 1, make sure to kill (e.g., using `Ctrl-C`) the experiment on nodes 2 and 3.
 
 #### REDIS (Replicated Redis)
 On `osdi-memc` start (or restart if already running):
@@ -171,6 +174,7 @@ Notes:
 * After execution of `redis-puts-only` finishes, a file named `redis-cli.txt` appears in node4. This files contains end2end latency from client's perspective. You can get the latency that the leader (server) spend in replicating the request by ssh-ing into node1, and sending the command `kill -SIGUSR1 <pid>`. The `<pid>` corresponds to the PID of the redis process and it gets printed when `redis-server-replicated` starts. A file name `dump-1.txt` will appear in the filesystem after sending the signal.
 * Apart from `redis-puts-only`, the client can also run `redis-gets-only` or `redis-puts-gets`.
 * To get the baseline measurements (original redis without replication), you can run `numactl --membind 0 -- ./crash-consensus/experiments/redis/bin/redis-server --port 6379` on `node1`, don't run anything on `node2`, `node3` and execute the previously shown command on `node4`.
+* At the end of the experiment, make sure to kill (e.g., using `Ctrl-C`) the `redis-server-replicated` processes on nodes 1, 2, and 3.
 
 #### REDIS (Replicated Redis) --- INTERACTIVE
 On `osdi-memc` start (or restart if already running):
@@ -216,6 +220,8 @@ osdi-node-2:6379> GET CH
 ```
 
 Notes:
+* The last command is replicated but not committed: in the example above, if you run `GET IT` when the client is connected to node 2, it will return `(nil)`. This is because of the piggybacking mechanism; as explained in the paper, the commit indication for a command is transmitted when the next command is replicated. 
+* At the end of the experiment, make sure to kill (e.g., using `Ctrl-C`) the `redis-server-replicated` processes on nodes 1, 2, and 3, as well as the client on node 4.
 
 
 ### MEMCACHED (replicated memcached):
@@ -259,6 +265,7 @@ $ ./crash-consensus/experiments/memcached/bin/memcached-puts-only 16 32 osdi-nod
 * After execution of `memcached-puts-only` finishes, a file named `memcached-cli.txt` appears in node4. This files contains end2end latency from client's perspective. You can get the latency that the leader (server) spend in replicating the request by ssh-ing into node1, and sending the command `kill -SIGUSR1 <pid>`. The `<pid>` corresponds to the PID of the memcached process and it gets printed when `memcached-replicated` starts. A file name `dump-1.txt` will appear in the filesystem after sending the signal.
 * Apart from `memcached-puts-only`, the client can also run `memcached-gets-only` or `memcached-puts-gets`.
 * To get the baseline measurements (original memcached without replication), you can run `numactl --membind 0 -- ./crash-consensus/experiments/memcached/bin/memcached -p 6379` on `node1`, don't run anything on `node2`, `node3` and execute the previously shown command on `node4`.
+* At the end of the experiment, make sure to kill (e.g., using `Ctrl-C`) the `memcached-replicated` processes on nodes 1, 2, and 3.
 
 
 ### LIQUIBOOK (Stock trading application)
@@ -298,12 +305,6 @@ $ numactl --physcpubind 0 --membind 0 ./crash-consensus/experiments/liquibook/eR
 
 Make sure to run `liquibook` on `nodes{1,2,3}` at (*almost*) the same time. Wait for `liquibook` to append the stock **AAPL** at its book and then do the following:
 
-On `node1`, in a separte ssh connection (under directory `~/dory`) run:
-```sh
-$ ./crash-consensus/demo/using_conan_fully/build/bin/fifo /tmp/fifo-1
-```
-This provides a way to cause a hiccup on the first leader and force a leader switch. To do this, type `c` and hit `Enter`. Cause the hiccup only after the client has been connected (see below).
-
 On `node4` run:
 ```sh
 $ export MODE=client
@@ -311,6 +312,14 @@ $ export URI=osdi-node-4:31850
 $ export TRADER_ID=0
 $ numactl --physcpubind 0 --membind 0 ./crash-consensus/experiments/liquibook/eRPC/build/liquibook --test_ms 120000 --sm_verbose 0 --num_processes 4 --numa_0_ports 0 --process_id 3 --numa_node 0
 ```
+
+On `node1`, in a separte ssh connection (under directory `~/dory`) run:
+```sh
+$ ./crash-consensus/demo/using_conan_fully/build/bin/fifo /tmp/fifo-1
+```
+This provides a way to pause the first leader and force a leader switch. To do this, type `p` and hit `Enter`. Cause the hiccup only after the client has been connected.
+
+
 
 ## Starting over
 In case you want recompile and execute the software stack in a system with all the system-wide dependencies installed, the do the following in `nodes{1,2,3,4}`.
