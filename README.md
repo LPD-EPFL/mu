@@ -210,7 +210,7 @@ $ ./crash-consensus/experiments/memcached/bin/memcached-puts-only 16 32 osdi-nod
 
 **Notes**:
 * Syntax: `./memcached-puts-only <key_size> <value_size> <memcached_leader_server_host> <memcacched_leader_server_port>`
-* After execution of `memcached-puts-only` finishes, a file named `memcached-cli.txt` appears in node4. This files contains end2end latency from client's perspective. You can get the latency that the leader (server) spend in replicating the request by ssh-ing into node1, and sending the command `kill -SIGUSR1 <pid>`. The `<pid>` corresponds to the PID of the memcached process and it gets printed when `memcached-replicated` starts. A file name `memcached-1.txt` will appear in the filesystem after sending the signal.
+* After execution of `memcached-puts-only` finishes, a file named `memcached-cli.txt` appears in node4. This files contains end2end latency from client's perspective. You can get the latency that the leader (server) spend in replicating the request by ssh-ing into node1, and sending the command `kill -SIGUSR1 <pid>`. The `<pid>` corresponds to the PID of the memcached process and it gets printed when `memcached-replicated` starts. A file name `dump-1.txt` will appear in the filesystem after sending the signal.
 * Apart from `memcached-puts-only`, the client can also run `memcached-gets-only` or `memcached-puts-gets`.
 * To get the baseline measurements (original memcached without replication), you can run `numactl --membind 0 -- ./crash-consensus/experiments/memcached/bin/memcached -p 6379` on `node1`, don't run anything on `node2`, `node3` and execute the previously shown command on `node4`.
 
