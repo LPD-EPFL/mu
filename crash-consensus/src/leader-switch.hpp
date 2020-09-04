@@ -692,7 +692,7 @@ class LeaderSwitcher {
           // std::cout << "Blocking the follower: " << elapsed_block / 1000 <<
           // "(us)" << std::endl;
 
-          // std::cout << "Permissions granted" << std::endl;
+          std::cout << "Permissions granted" << std::endl;
         } else {
           // std::cout << "C" << std::endl;
         }
@@ -759,9 +759,9 @@ class LeaderSwitcher {
         follower.unblock();
         // std::cout << "Permissions given" << std::endl;
 
-        // std::cout << "Giving permissions to " <<
-        // int(current_leader.requester)
-        //           << std::endl;
+        std::cout << "Giving permissions to " <<
+        int(current_leader.requester)
+                  << std::endl;
         auto expected = current_leader;
         auto desired = expected;
         desired.makeUnused();
@@ -839,7 +839,7 @@ class LeaderElection {
         threadConfig{threadConfig},
         hb_started{false},
         switcher_started{false},
-        response_blocked{true}	{
+        response_blocked{false}	{
     startHeartbeat();
     startLeaderSwitcher();
   }
@@ -949,12 +949,12 @@ class LeaderElection {
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
-        if (i == 0) {
-          if (ftr.wait_for(std::chrono::seconds(0)) !=
-              std::future_status::timeout) {
-            break;
-          }
-        }
+        // if (i == 0) {
+        //   if (ftr.wait_for(std::chrono::seconds(0)) !=
+        //       std::future_status::timeout) {
+        //     break;
+        //   }
+        // }
 
         // std::this_thread::sleep_for(std::chrono::seconds(10));
       }
