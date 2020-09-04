@@ -99,7 +99,7 @@ $ numactl --membind 0 ./crash-consensus/demo/using_conan_fully/build/bin/main-st
 **Notes**:
 * The argument list is `<process_id> <payload_size> <nr_of_outstanding_reqs>`
 * Make sure to spawn all instances of `main-st` at (*almost*) the same time.
-* When the execution of `main-st` finishes on node 1, the terminal will print `Received X in Y ns`, where `X` is the number of commands that were replicated and `Y` is the time it took to replicated those commands, in nanoseconds.
+* When the execution of `main-st` finishes on node 1, the terminal will print `Replicated X commands of size Y bytes in Z ns`.
 * After the experiment completes on node 1, make sure to kill (e.g., using `Ctrl-C`) the experiment on nodes 2 and 3.
 
 #### MAIN-ST-LAT (Standalone latency)

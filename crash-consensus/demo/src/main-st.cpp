@@ -146,7 +146,7 @@ void benchmark(int id, std::vector<int> remote_ids, int times, int payload_size,
       }
     }
     GET_TIMESTAMP(end_meas);
-    std::cout << "Received " << times << " in "
+    std::cout << "Replicated " << times << " commands of size " << payload_size << " bytes in "
               << ELAPSED_NSEC(start_meas, end_meas) << " ns" << std::endl;
 
     exit(0);

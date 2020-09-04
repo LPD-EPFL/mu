@@ -30,10 +30,10 @@ int main(int argc, char *argv[]) {
   }
 
   char c;
-  std::cout << "Type `c` to continue, `p` to pause." << std::endl;
+  std::cout << "Type `p` to pause." << std::endl;
 
   while (std::cin >> c) {
-    if (c != 'c' && c != 'p') {
+    if (c != 'p') {
       continue;
     }
 
