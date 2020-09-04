@@ -199,7 +199,7 @@ class LeaderHeartbeat {
     if (leader_pid() == ctx->cc.my_id) {
       want_leader.store(true);
     } else {
-      std::this_thread::sleep_for(std::chrono::microseconds(50));
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
       // std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
   }
@@ -947,7 +947,7 @@ class LeaderElection {
 
         prev_command = current_command;
 
-        std::this_thread::sleep_for(std::chrono::microseconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
         if (i == 0) {
           if (ftr.wait_for(std::chrono::seconds(0)) !=
