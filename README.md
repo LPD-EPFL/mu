@@ -157,7 +157,7 @@ $ export SID=2
 $ numactl --membind 0 -- ./crash-consensus/experiments/redis/bin/redis-server-replicated --port 6379
 ```
 
-On `node2` run:
+On `node3` run:
 ```sh
 $ export SID=3
 $ numactl --membind 0 -- ./crash-consensus/experiments/redis/bin/redis-server-replicated --port 6379
@@ -200,7 +200,7 @@ $ export SID=2
 $ numactl --membind 0 -- ./crash-consensus/experiments/redis/bin/redis-server-replicated --port 6379
 ```
 
-On `node2` run:
+On `node3` run:
 ```sh
 $ export SID=3
 $ numactl --membind 0 -- ./crash-consensus/experiments/redis/bin/redis-server-replicated --port 6379
@@ -329,7 +329,7 @@ $ rm -rf ~/dory
 $ conan remove --force "*"
 ```
 Optionally, exit the shell and login again in order to unload the exported environment variables set by the various experiments.
-Subsequently, re-follow the document starting from section *Complication of the sofware stack*
+Subsequently, re-follow the document starting from section *Complication of the sofware stack*.
 
 ## Running without docker
 The execution without docker is straightforward. First, install the system-wide packages mentioned in the Dockerfile in 4 `hosts` of a cluster connected using RDMA. The auxiliary process running memcached (with hostname `osdi-memc`) can run everywhere, even outside the cluster, as long as it's accesible by the 4 hosts. The rest of the steps remain unchanged.
