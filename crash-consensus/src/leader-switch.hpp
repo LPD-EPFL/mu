@@ -759,8 +759,7 @@ class LeaderSwitcher {
         follower.unblock();
         // std::cout << "Permissions given" << std::endl;
 
-        std::cout << "Giving permissions to " <<
-        int(current_leader.requester)
+        std::cout << "Giving permissions to " << int(current_leader.requester)
                   << std::endl;
         auto expected = current_leader;
         auto desired = expected;
@@ -839,7 +838,7 @@ class LeaderElection {
         threadConfig{threadConfig},
         hb_started{false},
         switcher_started{false},
-        response_blocked{false}	{
+        response_blocked{false} {
     startHeartbeat();
     startLeaderSwitcher();
   }
@@ -941,7 +940,7 @@ class LeaderElection {
           response_blocked.store(false);
           leader_heartbeat.scanHeartbeats();
         } else if (prev_command == 'c') {
-	  response_blocked.store(true);
+          response_blocked.store(true);
           leader_heartbeat.retract();
         }
 
